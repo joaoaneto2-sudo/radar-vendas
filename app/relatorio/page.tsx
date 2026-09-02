@@ -36,18 +36,18 @@ type EditForm = {
 function saleToForm(s: Sale): EditForm {
   return {
     sale_date: s.sale_date.slice(0, 10),
-    sale_type: s.sale_type,
-    seller: s.seller,
-    product_type: s.product_type,
+    sale_type: s.sale_type || "",
+    seller: s.seller || "",
+    product_type: s.product_type || "",
     manufacturer: s.manufacturer || "",
     supplier: s.supplier || "",
     warranty: s.warranty || "",
     cost: String(s.cost ?? ""),
     sale_value: String(s.sale_value ?? ""),
-    payment_method: s.payment_method,
+    payment_method: s.payment_method || "",
     installments_count: s.installments_count ? String(s.installments_count) : "",
     installments_dates: s.installments_dates || "",
-    client_name: s.client_name,
+    client_name: s.client_name || "",
     client_nickname: s.client_nickname || "",
     client_city: s.client_city || "",
     client_phone: s.client_phone || "",
@@ -120,7 +120,6 @@ function EditModal({
               <label>Data da venda</label>
               <input
                 type="date"
-                required
                 value={form.sale_date}
                 onChange={(e) => set("sale_date", e.target.value)}
               />
@@ -129,7 +128,6 @@ function EditModal({
               <label>Vendedora</label>
               <input
                 type="text"
-                required
                 value={form.seller}
                 onChange={(e) => set("seller", e.target.value)}
               />
@@ -154,7 +152,6 @@ function EditModal({
               <label>Tipo da peça</label>
               <input
                 type="text"
-                required
                 value={form.product_type}
                 onChange={(e) => set("product_type", e.target.value)}
               />
@@ -192,7 +189,6 @@ function EditModal({
                   type="number"
                   step="0.01"
                   min="0"
-                  required
                   value={form.cost}
                   onChange={(e) => set("cost", e.target.value)}
                 />
@@ -206,7 +202,6 @@ function EditModal({
                   type="number"
                   step="0.01"
                   min="0"
-                  required
                   value={form.sale_value}
                   onChange={(e) => set("sale_value", e.target.value)}
                 />
@@ -255,7 +250,6 @@ function EditModal({
               <label>Nome completo</label>
               <input
                 type="text"
-                required
                 value={form.client_name}
                 onChange={(e) => set("client_name", e.target.value)}
               />
@@ -335,7 +329,7 @@ export default function RelatorioPage() {
   }, []);
 
   const sellers = useMemo(() => {
-    const set = new Set(sales.map((s) => s.seller).filter(Boolean));
+    const set = new Set(sales.map((s) => s.seller).filter((s): s is string => !!s));
     return Array.from(set).sort();
   }, [sales]);
 
@@ -476,10 +470,10 @@ export default function RelatorioPage() {
                     return (
                       <tr key={s.id}>
                         <td>{formatDateBR(s.sale_date)}</td>
-                        <td>{s.seller}</td>
-                        <td>{s.client_name}</td>
-                        <td>{s.product_type}</td>
-                        <td>{s.payment_method}</td>
+                        <td>{s.seller || "-"}</td>
+                        <td>{s.client_name || "-"}</td>
+                        <td>{s.product_type || "-"}</td>
+                        <td>{s.payment_method || "-"}</td>
                         <td className="num">{formatBRL(s.cost)}</td>
                         <td className="num">{formatBRL(s.sale_value)}</td>
                         <td className={"num " + (profit >= 0 ? "profit-pos" : "profit-neg")}>

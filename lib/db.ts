@@ -84,6 +84,29 @@ const SCHEMA_STATEMENTS = [
   `ALTER TABLE sales ADD COLUMN IF NOT EXISTS product_id INT REFERENCES products(id) ON DELETE SET NULL`,
   `ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_id INT REFERENCES clients(id) ON DELETE SET NULL`,
   `ALTER TABLE sales ADD COLUMN IF NOT EXISTS seller_id INT REFERENCES sellers(id) ON DELETE SET NULL`,
+  // Nothing should block saving a sale — every business field is fillable later.
+  `ALTER TABLE sales ALTER COLUMN sale_type DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN seller DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN product_type DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN cost DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN sale_value DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN payment_method DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN client_name DROP NOT NULL`,
+  // Same for products — a product can be saved with just a photo and a price, or less.
+  `ALTER TABLE products ALTER COLUMN category DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN subtype DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN jewelry_type DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN name DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN cost DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN cost DROP DEFAULT`,
+  `ALTER TABLE products ALTER COLUMN price DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN price DROP DEFAULT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS material TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS gemstone TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS age_group TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS gender TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS karat TEXT`,
+  `ALTER TABLE clients ALTER COLUMN full_name DROP NOT NULL`,
 ];
 
 let schemaReady: Promise<void> | null = null;

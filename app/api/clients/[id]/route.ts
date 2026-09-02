@@ -13,8 +13,7 @@ export async function PATCH(
   const id = Number(params.id);
   if (!Number.isInteger(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   const body = await req.json().catch(() => ({}));
-  const fullName = String(body.full_name || "").trim();
-  if (!fullName) return NextResponse.json({ error: "missing_full_name" }, { status: 400 });
+  const fullName = String(body.full_name || "").trim() || null;
   try {
     await ensureSchema();
     const { rows } = await db.query(

@@ -111,45 +111,31 @@ export default function NovaVendaPage() {
     setError(null);
     setDbMissing(false);
 
-    if (!form.seller_id) {
-      setError("Selecione a vendedora.");
-      return;
-    }
-    if (!form.product_id) {
-      setError("Selecione o produto vendido.");
-      return;
-    }
-    if (!form.client_id) {
-      setError("Selecione o cliente.");
-      return;
-    }
-
-    const seller = sellers.find((s) => s.id === form.seller_id);
-    const product = products.find((p) => p.id === form.product_id);
-    const client = clients.find((c) => c.id === form.client_id);
-    if (!seller || !product || !client) return;
+    const seller = sellers.find((s) => s.id === form.seller_id) || null;
+    const product = products.find((p) => p.id === form.product_id) || null;
+    const client = clients.find((c) => c.id === form.client_id) || null;
 
     const payload = {
       sale_date: form.sale_date,
-      sale_type: form.sale_type,
-      seller: seller.name,
-      seller_id: seller.id,
-      product_type: product.name,
-      manufacturer: product.manufacturer_name || null,
-      supplier: product.supplier_name || null,
-      warranty: product.warranty || null,
-      product_id: product.id,
-      cost: form.cost,
-      sale_value: form.sale_value,
-      payment_method: form.payment_method,
-      installments_count: form.installments_count,
-      installments_dates: form.installments_dates,
-      client_name: client.full_name,
-      client_nickname: client.nickname || null,
-      client_city: client.city || null,
-      client_phone: client.phone || null,
-      client_birthday: client.birthday || null,
-      client_id: client.id,
+      sale_type: form.sale_type || null,
+      seller: seller?.name || null,
+      seller_id: seller?.id || null,
+      product_type: product?.name || null,
+      manufacturer: product?.manufacturer_name || null,
+      supplier: product?.supplier_name || null,
+      warranty: product?.warranty || null,
+      product_id: product?.id || null,
+      cost: form.cost || null,
+      sale_value: form.sale_value || null,
+      payment_method: form.payment_method || null,
+      installments_count: form.installments_count || null,
+      installments_dates: form.installments_dates || null,
+      client_name: client?.full_name || null,
+      client_nickname: client?.nickname || null,
+      client_city: client?.city || null,
+      client_phone: client?.phone || null,
+      client_birthday: client?.birthday || null,
+      client_id: client?.id || null,
     };
 
     setSubmitting(true);
@@ -166,11 +152,7 @@ export default function NovaVendaPage() {
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(
-          data.error === "missing_fields"
-            ? "Preencha todos os campos obrigatórios antes de enviar."
-            : "Não foi possível registrar a venda. Tente novamente."
-        );
+        setError("Não foi possível registrar a venda. Tente novamente.");
         setSubmitting(false);
         return;
       }
@@ -205,12 +187,18 @@ export default function NovaVendaPage() {
   const sellerOptions: ComboboxOption[] = sellers.map((s) => ({ id: s.id, label: s.name }));
   const productOptions: ComboboxOption[] = products.map((p) => ({
     id: p.id,
-    label: p.name,
-    meta: `${p.category} · ${p.subtype} · ${formatBRL(p.price)} · estoque ${p.stock_qty}`,
+    label: p.name || "(sem nome)",
+    meta: [
+      [p.category, p.subtype].filter(Boolean).join(" · "),
+      formatBRL(p.price),
+      `estoque ${p.stock_qty}`,
+    ]
+      .filter(Boolean)
+      .join(" · "),
   }));
   const clientOptions: ComboboxOption[] = clients.map((c) => ({
     id: c.id,
-    label: c.full_name,
+    label: c.full_name || "(sem nome)",
     meta: [c.nickname, c.city].filter(Boolean).join(" · "),
   }));
 
@@ -350,15 +338,23 @@ export default function NovaVendaPage() {
                 <div className="banner banner-info" style={{ margin: 0 }}>
                   <span>💎</span>
                   <span>
-                    {selectedProduct.category} · {selectedProduct.subtype} ·{" "}
-                    {selectedProduct.jewelry_type}
-                    {selectedProduct.manufacturer_name
-                      ? ` · Fabricante: ${selectedProduct.manufacturer_name}`
-                      : ""}
-                    {selectedProduct.supplier_name
-                      ? ` · Fornecedor: ${selectedProduct.supplier_name}`
-                      : ""}
-                    {selectedProduct.warranty ? ` · Garantia: ${selectedProduct.warranty}` : ""}
+                    {[
+                      selectedProduct.category,
+                      selectedProduct.subtype,
+                      selectedProduct.jewelry_type,
+                      selectedProduct.material,
+                      selectedProduct.karat,
+                      selectedProduct.gemstone,
+                      selectedProduct.manufacturer_name
+                        ? `Fabricante: ${selectedProduct.manufacturer_name}`
+                        : null,
+                      selectedProduct.supplier_name
+                        ? `Fornecedor: ${selectedProduct.supplier_name}`
+                        : null,
+                      selectedProduct.warranty ? `Garantia: ${selectedProduct.warranty}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "Sem detalhes cadastrados ainda"}
                   </span>
                 </div>
               </div>
@@ -381,7 +377,6 @@ export default function NovaVendaPage() {
                   type="number"
                   step="0.01"
                   min="0"
-                  required
                   inputMode="decimal"
                   value={form.cost}
                   onChange={(e) => set("cost", e.target.value)}
@@ -397,7 +392,6 @@ export default function NovaVendaPage() {
                   type="number"
                   step="0.01"
                   min="0"
-                  required
                   inputMode="decimal"
                   value={form.sale_value}
                   onChange={(e) => set("sale_value", e.target.value)}

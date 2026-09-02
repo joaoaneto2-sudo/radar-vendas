@@ -4,6 +4,12 @@ import { getPool, ensureSchema } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function numOrNull(v: unknown): number | null {
+  if (v === undefined || v === null || v === "") return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -14,14 +20,8 @@ export async function PATCH(
   if (!Number.isInteger(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
-  const required = ["category", "subtype", "jewelry_type", "name"];
-  const missing = required.filter((f) => !String(body[f] || "").trim());
-  if (missing.length > 0) {
-    return NextResponse.json({ error: "missing_fields", fields: missing }, { status: 400 });
-  }
-
-  const cost = Number(body.cost) || 0;
-  const price = Number(body.price) || 0;
+  const cost = numOrNull(body.cost);
+  const price = numOrNull(body.price);
   const stockQty = Number.isFinite(Number(body.stock_qty)) ? Number(body.stock_qty) : 0;
 
   try {
@@ -30,14 +30,15 @@ export async function PATCH(
       `UPDATE products SET
         category=$1, subtype=$2, jewelry_type=$3, name=$4, manufacturer_id=$5,
         supplier_id=$6, cost=$7, price=$8, stock_qty=$9, warranty=$10,
-        photo_url=$11, active=$12
-      WHERE id=$13
+        photo_url=$11, active=$12, material=$13, gemstone=$14, age_group=$15, gender=$16,
+        karat=$17
+      WHERE id=$18
       RETURNING *`,
       [
-        body.category,
-        body.subtype,
-        body.jewelry_type,
-        body.name,
+        body.category || null,
+        body.subtype || null,
+        body.jewelry_type || null,
+        body.name || null,
         body.manufacturer_id || null,
         body.supplier_id || null,
         cost,
@@ -46,6 +47,11 @@ export async function PATCH(
         body.warranty || null,
         body.photo_url || null,
         body.active !== false,
+        body.material || null,
+        body.gemstone || null,
+        body.age_group || null,
+        body.gender || null,
+        body.karat || null,
         id,
       ]
     );

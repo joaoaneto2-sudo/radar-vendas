@@ -21,8 +21,7 @@ export async function POST(req: NextRequest) {
   const db = getPool();
   if (!db) return NextResponse.json({ error: "db_not_configured" }, { status: 503 });
   const body = await req.json().catch(() => ({}));
-  const fullName = String(body.full_name || "").trim();
-  if (!fullName) return NextResponse.json({ error: "missing_full_name" }, { status: 400 });
+  const fullName = String(body.full_name || "").trim() || null;
   try {
     await ensureSchema();
     const { rows } = await db.query(

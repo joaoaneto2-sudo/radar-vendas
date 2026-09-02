@@ -8,8 +8,19 @@ import {
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_NAMES,
   JEWELRY_TYPES,
+  MATERIALS,
+  GEMSTONES,
+  AGE_GROUPS,
+  GENDERS,
+  KARATS,
+  buildProductDescription,
 } from "@/lib/format";
 import Combobox, { ComboboxOption } from "@/app/combobox";
+
+const MATERIAL_PRESETS = MATERIALS.slice(0, -1);
+const GEMSTONE_PRESETS = GEMSTONES.slice(0, -1);
+const KARAT_PRESETS = KARATS.slice(0, -1);
+const GOLD_MATERIALS = ["Ouro", "Folheado"];
 
 type ProductForm = {
   category: string;
@@ -23,12 +34,20 @@ type ProductForm = {
   stock_qty: string;
   warranty: string;
   photo_url: string;
+  material: string;
+  materialOther: boolean;
+  karat: string;
+  karatOther: boolean;
+  gemstone: string;
+  gemstoneOther: boolean;
+  age_group: string;
+  gender: string;
 };
 
 const EMPTY: ProductForm = {
   category: PRODUCT_CATEGORY_NAMES[0],
   subtype: PRODUCT_CATEGORIES[PRODUCT_CATEGORY_NAMES[0]][0],
-  jewelry_type: JEWELRY_TYPES[0],
+  jewelry_type: "",
   name: "",
   manufacturer_id: null,
   supplier_id: null,
@@ -37,21 +56,38 @@ const EMPTY: ProductForm = {
   stock_qty: "0",
   warranty: "",
   photo_url: "",
+  material: "",
+  materialOther: false,
+  karat: "",
+  karatOther: false,
+  gemstone: "",
+  gemstoneOther: false,
+  age_group: "",
+  gender: "",
 };
 
 function productToForm(p: Product): ProductForm {
+  const category = p.category || PRODUCT_CATEGORY_NAMES[0];
   return {
-    category: p.category,
-    subtype: p.subtype,
-    jewelry_type: p.jewelry_type,
-    name: p.name,
+    category,
+    subtype: p.subtype || PRODUCT_CATEGORIES[category]?.[0] || "",
+    jewelry_type: p.jewelry_type || "",
+    name: p.name || "",
     manufacturer_id: p.manufacturer_id ?? null,
     supplier_id: p.supplier_id ?? null,
-    cost: String(p.cost ?? ""),
-    price: String(p.price ?? ""),
+    cost: p.cost === null || p.cost === undefined ? "" : String(p.cost),
+    price: p.price === null || p.price === undefined ? "" : String(p.price),
     stock_qty: String(p.stock_qty ?? 0),
     warranty: p.warranty || "",
     photo_url: p.photo_url || "",
+    material: p.material || "",
+    materialOther: !!(p.material && !MATERIAL_PRESETS.includes(p.material)),
+    karat: p.karat || "",
+    karatOther: !!(p.karat && !KARAT_PRESETS.includes(p.karat)),
+    gemstone: p.gemstone || "",
+    gemstoneOther: !!(p.gemstone && !GEMSTONE_PRESETS.includes(p.gemstone)),
+    age_group: p.age_group || "",
+    gender: p.gender || "",
   };
 }
 
@@ -107,6 +143,30 @@ export default function ProdutosTab() {
     setForm((f) => ({ ...f, category, subtype: PRODUCT_CATEGORIES[category][0] }));
   }
 
+  function selectMaterial(m: string) {
+    if (m === "Outro") {
+      setForm((f) => ({ ...f, materialOther: true, material: f.materialOther ? f.material : "" }));
+    } else {
+      setForm((f) => ({ ...f, materialOther: false, material: m }));
+    }
+  }
+
+  function selectGemstone(g: string) {
+    if (g === "Outra") {
+      setForm((f) => ({ ...f, gemstoneOther: true, gemstone: f.gemstoneOther ? f.gemstone : "" }));
+    } else {
+      setForm((f) => ({ ...f, gemstoneOther: false, gemstone: g }));
+    }
+  }
+
+  function selectKarat(k: string) {
+    if (k === "Outro") {
+      setForm((f) => ({ ...f, karatOther: true, karat: f.karatOther ? f.karat : "" }));
+    } else {
+      setForm((f) => ({ ...f, karatOther: false, karat: k }));
+    }
+  }
+
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -150,7 +210,7 @@ export default function ProdutosTab() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || saving) return;
+    if (saving) return;
     setSaving(true);
     try {
       const isNew = editing === "new";
@@ -163,6 +223,8 @@ export default function ProdutosTab() {
       if (res.ok) {
         setEditing(null);
         load();
+      } else {
+        window.alert("Não foi possível salvar. Tente novamente.");
       }
     } finally {
       setSaving(false);
@@ -170,11 +232,13 @@ export default function ProdutosTab() {
   }
 
   async function handleDelete(p: Product) {
-    const ok = window.confirm(`Excluir o produto "${p.name}"?`);
+    const ok = window.confirm(`Excluir o produto "${p.name || "sem nome"}"?`);
     if (!ok) return;
     const res = await fetch(`/api/products/${p.id}`, { method: "DELETE" });
     if (res.ok) setItems((prev) => prev.filter((i) => i.id !== p.id));
   }
+
+  const suggestedName = buildProductDescription(form);
 
   const manufacturerOptions: ComboboxOption[] = manufacturers.map((m) => ({ id: m.id, label: m.name }));
   const supplierOptions: ComboboxOption[] = suppliers.map((s) => ({ id: s.id, label: s.name }));
@@ -213,18 +277,22 @@ export default function ProdutosTab() {
                 <tr key={p.id}>
                   <td>
                     {p.photo_url ? (
-                      <img src={p.photo_url} alt={p.name} className="thumb" />
+                      <img src={p.photo_url} alt={p.name || ""} className="thumb" />
                     ) : (
                       <span className="thumb-placeholder">💎</span>
                     )}
                   </td>
                   <td>
-                    {p.name}
-                    <div className="hint">{p.jewelry_type}</div>
+                    {p.name || <span style={{ color: "var(--ink-faint)" }}>(sem nome)</span>}
+                    <div className="hint">
+                      {[p.jewelry_type, p.material, p.karat, p.gemstone].filter(Boolean).join(" · ") || "-"}
+                    </div>
                   </td>
                   <td>
-                    {p.category}
-                    <div className="hint">{p.subtype}</div>
+                    {p.category || "-"}
+                    <div className="hint">
+                      {[p.subtype, p.age_group, p.gender].filter(Boolean).join(" · ") || "-"}
+                    </div>
                   </td>
                   <td>{p.manufacturer_name || "-"}</td>
                   <td>{p.supplier_name || "-"}</td>
@@ -261,6 +329,15 @@ export default function ProdutosTab() {
                 ✕
               </button>
             </div>
+
+            <div className="banner banner-info">
+              <span>💡</span>
+              <span>
+                Preencha o que souber agora e salve — nada aqui é obrigatório. Você pode
+                voltar e completar depois.
+              </span>
+            </div>
+
             <form onSubmit={handleSubmit}>
               <div className="field field--full" style={{ marginBottom: 18 }}>
                 <label>Foto do produto</label>
@@ -282,11 +359,22 @@ export default function ProdutosTab() {
                   <label>Nome do produto</label>
                   <input
                     type="text"
-                    required
                     placeholder="Ex: Anel Solitário Moissanite 6mm"
                     value={form.name}
                     onChange={(e) => set("name", e.target.value)}
                   />
+                  {suggestedName && suggestedName !== form.name && (
+                    <span className="hint" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                      Sugestão a partir das características: "{suggestedName}"
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => set("name", suggestedName)}
+                      >
+                        Usar
+                      </button>
+                    </span>
+                  )}
                 </div>
 
                 <div className="field">
@@ -318,9 +406,132 @@ export default function ProdutosTab() {
                         type="button"
                         key={t}
                         className={"radio-chip" + (form.jewelry_type === t ? " selected" : "")}
-                        onClick={() => set("jewelry_type", t)}
+                        onClick={() => set("jewelry_type", form.jewelry_type === t ? "" : t)}
                       >
                         {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="field field--full">
+                  <label>Material</label>
+                  <div className="radio-row">
+                    {MATERIALS.map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        className={
+                          "radio-chip" +
+                          ((m === "Outro" ? form.materialOther : form.material === m && !form.materialOther)
+                            ? " selected"
+                            : "")
+                        }
+                        onClick={() => selectMaterial(m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  {form.materialOther && (
+                    <input
+                      type="text"
+                      placeholder="Qual material?"
+                      value={form.material}
+                      onChange={(e) => set("material", e.target.value)}
+                      style={{ marginTop: 8 }}
+                    />
+                  )}
+                </div>
+
+                {GOLD_MATERIALS.includes(form.material) && (
+                  <div className="field field--full">
+                    <label>Quilate</label>
+                    <div className="radio-row">
+                      {KARATS.map((k) => (
+                        <button
+                          type="button"
+                          key={k}
+                          className={
+                            "radio-chip" +
+                            ((k === "Outro" ? form.karatOther : form.karat === k && !form.karatOther)
+                              ? " selected"
+                              : "")
+                          }
+                          onClick={() => selectKarat(k)}
+                        >
+                          {k}
+                        </button>
+                      ))}
+                    </div>
+                    {form.karatOther && (
+                      <input
+                        type="text"
+                        placeholder="Qual quilate?"
+                        value={form.karat}
+                        onChange={(e) => set("karat", e.target.value)}
+                        style={{ marginTop: 8 }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                <div className="field field--full">
+                  <label>Pedra</label>
+                  <div className="radio-row">
+                    {GEMSTONES.map((g) => (
+                      <button
+                        type="button"
+                        key={g}
+                        className={
+                          "radio-chip" +
+                          ((g === "Outra" ? form.gemstoneOther : form.gemstone === g && !form.gemstoneOther)
+                            ? " selected"
+                            : "")
+                        }
+                        onClick={() => selectGemstone(g)}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                  {form.gemstoneOther && (
+                    <input
+                      type="text"
+                      placeholder="Qual pedra?"
+                      value={form.gemstone}
+                      onChange={(e) => set("gemstone", e.target.value)}
+                      style={{ marginTop: 8 }}
+                    />
+                  )}
+                </div>
+
+                <div className="field">
+                  <label>Faixa etária</label>
+                  <div className="radio-row">
+                    {AGE_GROUPS.map((a) => (
+                      <button
+                        type="button"
+                        key={a}
+                        className={"radio-chip" + (form.age_group === a ? " selected" : "")}
+                        onClick={() => set("age_group", form.age_group === a ? "" : a)}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Gênero</label>
+                  <div className="radio-row">
+                    {GENDERS.map((g) => (
+                      <button
+                        type="button"
+                        key={g}
+                        className={"radio-chip" + (form.gender === g ? " selected" : "")}
+                        onClick={() => set("gender", form.gender === g ? "" : g)}
+                      >
+                        {g}
                       </button>
                     ))}
                   </div>
@@ -357,7 +568,6 @@ export default function ProdutosTab() {
                       type="number"
                       step="0.01"
                       min="0"
-                      required
                       value={form.cost}
                       onChange={(e) => set("cost", e.target.value)}
                     />
@@ -371,7 +581,6 @@ export default function ProdutosTab() {
                       type="number"
                       step="0.01"
                       min="0"
-                      required
                       value={form.price}
                       onChange={(e) => set("price", e.target.value)}
                     />

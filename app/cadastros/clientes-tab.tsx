@@ -15,7 +15,7 @@ const EMPTY: ClientForm = { full_name: "", nickname: "", city: "", phone: "", bi
 
 function clientToForm(c: Client): ClientForm {
   return {
-    full_name: c.full_name,
+    full_name: c.full_name || "",
     nickname: c.nickname || "",
     city: c.city || "",
     phone: c.phone || "",
@@ -57,7 +57,7 @@ export default function ClientesTab() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.full_name.trim() || saving) return;
+    if (saving) return;
     setSaving(true);
     try {
       const isNew = editing === "new";
@@ -77,7 +77,7 @@ export default function ClientesTab() {
   }
 
   async function handleDelete(c: Client) {
-    const ok = window.confirm(`Excluir o cliente "${c.full_name}"?`);
+    const ok = window.confirm(`Excluir o cliente "${c.full_name || "sem nome"}"?`);
     if (!ok) return;
     const res = await fetch(`/api/clients/${c.id}`, { method: "DELETE" });
     if (res.ok) setItems((prev) => prev.filter((i) => i.id !== c.id));
@@ -112,7 +112,7 @@ export default function ClientesTab() {
             <tbody>
               {items.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.full_name}</td>
+                  <td>{c.full_name || <span style={{ color: "var(--ink-faint)" }}>(sem nome)</span>}</td>
                   <td>{c.nickname || "-"}</td>
                   <td>{c.city || "-"}</td>
                   <td>{c.phone || "-"}</td>
@@ -151,7 +151,6 @@ export default function ClientesTab() {
                   <label>Nome completo</label>
                   <input
                     type="text"
-                    required
                     value={form.full_name}
                     onChange={(e) => set("full_name", e.target.value)}
                   />

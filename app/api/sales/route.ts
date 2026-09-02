@@ -4,17 +4,6 @@ import { getPool, ensureSchema } from "@/lib/db";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REQUIRED_FIELDS = [
-  "sale_date",
-  "sale_type",
-  "seller",
-  "product_type",
-  "cost",
-  "sale_value",
-  "payment_method",
-  "client_name",
-] as const;
-
 export async function GET(req: NextRequest) {
   const db = getPool();
   if (!db) {
@@ -46,22 +35,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const missing = REQUIRED_FIELDS.filter((f) => {
-    const v = body[f];
-    return v === undefined || v === null || v === "";
-  });
-  if (missing.length > 0) {
-    return NextResponse.json(
-      { error: "missing_fields", fields: missing },
-      { status: 400 }
-    );
+  if (!body.sale_date) {
+    return NextResponse.json({ error: "missing_fields", fields: ["sale_date"] }, { status: 400 });
   }
 
-  const cost = Number(body.cost);
-  const saleValue = Number(body.sale_value);
-  if (Number.isNaN(cost) || Number.isNaN(saleValue)) {
-    return NextResponse.json({ error: "invalid_numbers" }, { status: 400 });
-  }
+  const cost =
+    body.cost === undefined || body.cost === null || body.cost === "" || Number.isNaN(Number(body.cost))
+      ? null
+      : Number(body.cost);
+  const saleValue =
+    body.sale_value === undefined ||
+    body.sale_value === null ||
+    body.sale_value === "" ||
+    Number.isNaN(Number(body.sale_value))
+      ? null
+      : Number(body.sale_value);
 
   const installmentsCount =
     body.installments_count === undefined ||
@@ -86,18 +74,18 @@ export async function POST(req: NextRequest) {
       RETURNING *`,
       [
         body.sale_date,
-        body.sale_type,
-        body.seller,
-        body.product_type,
+        body.sale_type || null,
+        body.seller || null,
+        body.product_type || null,
         body.manufacturer || null,
         body.supplier || null,
         body.warranty || null,
         cost,
         saleValue,
-        body.payment_method,
+        body.payment_method || null,
         installmentsCount,
         body.installments_dates || null,
-        body.client_name,
+        body.client_name || null,
         body.client_nickname || null,
         body.client_city || null,
         body.client_phone || null,
