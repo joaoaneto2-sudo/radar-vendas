@@ -4,7 +4,8 @@ import { useState } from "react";
 import {
   SALE_TYPES,
   PAYMENT_METHODS,
-  INSTALLMENT_METHODS,
+  INSTALLMENT_COUNT_METHODS,
+  INSTALLMENT_DATES_METHODS,
   buildWhatsAppMessage,
   Sale,
 } from "@/lib/format";
@@ -307,7 +308,7 @@ export default function NovaVendaPage() {
                 ))}
               </div>
             </div>
-            {INSTALLMENT_METHODS.includes(form.payment_method) && (
+            {INSTALLMENT_COUNT_METHODS.includes(form.payment_method) && (
               <div className="installments-box">
                 <div className="field">
                   <label htmlFor="installments_count">Nº de parcelas</label>
@@ -320,17 +321,19 @@ export default function NovaVendaPage() {
                     onChange={(e) => set("installments_count", e.target.value)}
                   />
                 </div>
-                <div className="field">
-                  <label htmlFor="installments_dates">Datas das parcelas</label>
-                  <input
-                    id="installments_dates"
-                    type="text"
-                    placeholder="Ex: entrada à vista + 3x nos meses seguintes"
-                    value={form.installments_dates}
-                    onChange={(e) => set("installments_dates", e.target.value)}
-                  />
-                  <span className="hint">Pode descrever livremente, ex: entrada + parcelas em datas diferentes</span>
-                </div>
+                {INSTALLMENT_DATES_METHODS.includes(form.payment_method) && (
+                  <div className="field">
+                    <label htmlFor="installments_dates">Datas das parcelas</label>
+                    <input
+                      id="installments_dates"
+                      type="text"
+                      placeholder="Ex: entrada à vista + 3x nos meses seguintes"
+                      value={form.installments_dates}
+                      onChange={(e) => set("installments_dates", e.target.value)}
+                    />
+                    <span className="hint">Pode descrever livremente, ex: entrada + parcelas em datas diferentes</span>
+                  </div>
+                )}
               </div>
             )}
           </div>

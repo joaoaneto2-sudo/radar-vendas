@@ -29,7 +29,8 @@ export const PAYMENT_METHODS = [
   "Crédito parcelado",
   "Pix a prazo",
 ];
-export const INSTALLMENT_METHODS = ["Crédito parcelado", "Pix a prazo"];
+export const INSTALLMENT_COUNT_METHODS = ["Crédito parcelado", "Pix a prazo"];
+export const INSTALLMENT_DATES_METHODS = ["Pix a prazo"];
 
 export function formatDateBR(iso?: string | null): string {
   if (!iso) return "-";
@@ -65,9 +66,12 @@ export function buildWhatsAppMessage(sale: Sale): string {
   lines.push(`💰 Custo da peça: ${formatBRL(sale.cost)}`);
   lines.push(`💲 Valor da venda: ${formatBRL(sale.sale_value)}`);
   let payment = `💳 Forma de pagamento: ${sale.payment_method}`;
-  if (INSTALLMENT_METHODS.includes(sale.payment_method)) {
-    const count = sale.installments_count ? `${sale.installments_count}x` : "";
-    const dates = sale.installments_dates ? ` — datas: ${sale.installments_dates}` : "";
+  if (INSTALLMENT_COUNT_METHODS.includes(sale.payment_method) && sale.installments_count) {
+    const count = `${sale.installments_count}x`;
+    const dates =
+      INSTALLMENT_DATES_METHODS.includes(sale.payment_method) && sale.installments_dates
+        ? ` — datas: ${sale.installments_dates}`
+        : "";
     payment += ` (${count}${dates})`;
   }
   lines.push(payment);
