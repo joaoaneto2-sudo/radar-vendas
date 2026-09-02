@@ -15,6 +15,12 @@ export default function NavBar() {
           Nova venda
         </a>
         <a
+          href="/cadastros"
+          className={pathname === "/cadastros" ? "active" : ""}
+        >
+          Cadastros
+        </a>
+        <a
           href="/relatorio"
           className={pathname === "/relatorio" ? "active" : ""}
         >

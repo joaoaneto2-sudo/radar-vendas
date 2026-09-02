@@ -1,14 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   SALE_TYPES,
   PAYMENT_METHODS,
   INSTALLMENT_COUNT_METHODS,
   INSTALLMENT_DATES_METHODS,
   buildWhatsAppMessage,
+  formatBRL,
   Sale,
+  Product,
+  Client,
+  SimpleEntity,
 } from "@/lib/format";
+import Combobox, { ComboboxOption } from "@/app/combobox";
 
 function todayISO(): string {
   const d = new Date();
@@ -20,21 +25,14 @@ function todayISO(): string {
 const EMPTY_FORM = {
   sale_date: todayISO(),
   sale_type: SALE_TYPES[0],
-  seller: "",
-  product_type: "",
-  manufacturer: "",
-  supplier: "",
-  warranty: "",
+  seller_id: null as number | null,
+  product_id: null as number | null,
   cost: "",
   sale_value: "",
   payment_method: PAYMENT_METHODS[0],
   installments_count: "",
   installments_dates: "",
-  client_name: "",
-  client_nickname: "",
-  client_city: "",
-  client_phone: "",
-  client_birthday: "",
+  client_id: null as number | null,
 };
 
 type FormState = typeof EMPTY_FORM;
@@ -47,20 +45,119 @@ export default function NovaVendaPage() {
   const [confirmedSale, setConfirmedSale] = useState<Sale | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [sellers, setSellers] = useState<SimpleEntity[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+
+  function loadCatalog() {
+    Promise.all([
+      fetch("/api/sellers").then((r) => r.json()),
+      fetch("/api/products").then((r) => r.json()),
+      fetch("/api/clients").then((r) => r.json()),
+    ])
+      .then(([se, pr, cl]) => {
+        setSellers(se.items || []);
+        setProducts(pr.items || []);
+        setClients(cl.items || []);
+      })
+      .finally(() => setCatalogLoading(false));
+  }
+
+  useEffect(() => {
+    loadCatalog();
+  }, []);
+
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  const selectedProduct = products.find((p) => p.id === form.product_id) || null;
+  const selectedClient = clients.find((c) => c.id === form.client_id) || null;
+
+  function handleSelectProduct(id: number | null) {
+    set("product_id", id);
+    const p = products.find((x) => x.id === id);
+    if (p) {
+      set("cost", String(p.cost ?? ""));
+      set("sale_value", String(p.price ?? ""));
+    }
+  }
+
+  async function createSeller(name: string): Promise<ComboboxOption> {
+    const res = await fetch("/api/sellers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    setSellers((prev) => [...prev, data.item]);
+    return { id: data.item.id, label: data.item.name };
+  }
+
+  async function createClient(name: string): Promise<ComboboxOption> {
+    const res = await fetch("/api/clients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name: name }),
+    });
+    const data = await res.json();
+    setClients((prev) => [...prev, data.item]);
+    return { id: data.item.id, label: data.item.full_name };
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setDbMissing(false);
+
+    if (!form.seller_id) {
+      setError("Selecione a vendedora.");
+      return;
+    }
+    if (!form.product_id) {
+      setError("Selecione o produto vendido.");
+      return;
+    }
+    if (!form.client_id) {
+      setError("Selecione o cliente.");
+      return;
+    }
+
+    const seller = sellers.find((s) => s.id === form.seller_id);
+    const product = products.find((p) => p.id === form.product_id);
+    const client = clients.find((c) => c.id === form.client_id);
+    if (!seller || !product || !client) return;
+
+    const payload = {
+      sale_date: form.sale_date,
+      sale_type: form.sale_type,
+      seller: seller.name,
+      seller_id: seller.id,
+      product_type: product.name,
+      manufacturer: product.manufacturer_name || null,
+      supplier: product.supplier_name || null,
+      warranty: product.warranty || null,
+      product_id: product.id,
+      cost: form.cost,
+      sale_value: form.sale_value,
+      payment_method: form.payment_method,
+      installments_count: form.installments_count,
+      installments_dates: form.installments_dates,
+      client_name: client.full_name,
+      client_nickname: client.nickname || null,
+      client_city: client.city || null,
+      client_phone: client.phone || null,
+      client_birthday: client.birthday || null,
+      client_id: client.id,
+    };
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/sales", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (res.status === 503) {
         setDbMissing(true);
@@ -79,6 +176,7 @@ export default function NovaVendaPage() {
       }
       const data = await res.json();
       setConfirmedSale(data.sale as Sale);
+      loadCatalog();
     } catch {
       setError("Falha de conexão. Verifique a internet e tente novamente.");
     } finally {
@@ -89,7 +187,7 @@ export default function NovaVendaPage() {
   function handleNewSale() {
     setConfirmedSale(null);
     setCopied(false);
-    setForm({ ...EMPTY_FORM, sale_date: todayISO(), seller: form.seller });
+    setForm({ ...EMPTY_FORM, sale_date: todayISO(), seller_id: form.seller_id });
   }
 
   async function handleCopy() {
@@ -103,6 +201,18 @@ export default function NovaVendaPage() {
       setError("Não foi possível copiar automaticamente. Selecione o texto manualmente.");
     }
   }
+
+  const sellerOptions: ComboboxOption[] = sellers.map((s) => ({ id: s.id, label: s.name }));
+  const productOptions: ComboboxOption[] = products.map((p) => ({
+    id: p.id,
+    label: p.name,
+    meta: `${p.category} · ${p.subtype} · ${formatBRL(p.price)} · estoque ${p.stock_qty}`,
+  }));
+  const clientOptions: ComboboxOption[] = clients.map((c) => ({
+    id: c.id,
+    label: c.full_name,
+    meta: [c.nickname, c.city].filter(Boolean).join(" · "),
+  }));
 
   if (confirmedSale) {
     const message = buildWhatsAppMessage(confirmedSale);
@@ -138,8 +248,8 @@ export default function NovaVendaPage() {
         <p className="eyebrow">Nova venda</p>
         <h1>Registrar uma venda</h1>
         <p>
-          Preencha os campos abaixo. Ao salvar, o texto pronto pra colar no grupo
-          é gerado automaticamente.
+          Selecione o produto e o cliente já cadastrados. Ao salvar, o texto pronto
+          pra colar no grupo é gerado automaticamente.
         </p>
       </div>
 
@@ -148,8 +258,7 @@ export default function NovaVendaPage() {
           <span>⚠️</span>
           <span>
             O banco de dados ainda não foi conectado a este projeto. Peça pro João
-            concluir a configuração no painel do Vercel — assim que ele conectar,
-            os envios passam a ser salvos normalmente.
+            concluir a configuração no painel do Vercel.
           </span>
         </div>
       )}
@@ -158,6 +267,19 @@ export default function NovaVendaPage() {
         <div className="banner banner-error" role="alert">
           <span>✕</span>
           <span>{error}</span>
+        </div>
+      )}
+
+      {!catalogLoading && products.length === 0 && (
+        <div className="banner banner-warning" role="status">
+          <span>💎</span>
+          <span>
+            Nenhum produto cadastrado ainda. Vá em{" "}
+            <a href="/cadastros" style={{ textDecoration: "underline" }}>
+              Cadastros
+            </a>{" "}
+            e cadastre os produtos antes de registrar uma venda.
+          </span>
         </div>
       )}
 
@@ -179,14 +301,14 @@ export default function NovaVendaPage() {
               />
             </div>
             <div className="field">
-              <label htmlFor="seller">Vendedora</label>
-              <input
-                id="seller"
-                type="text"
-                required
-                placeholder="Fernanda"
-                value={form.seller}
-                onChange={(e) => set("seller", e.target.value)}
+              <label>Vendedora</label>
+              <Combobox
+                options={sellerOptions}
+                value={form.seller_id}
+                onChange={(id) => set("seller_id", id)}
+                placeholder="Buscar vendedora..."
+                onCreate={createSeller}
+                createLabel="+ Cadastrar"
               />
             </div>
             <div className="field field--full">
@@ -210,48 +332,37 @@ export default function NovaVendaPage() {
         <div className="section">
           <h2 className="section-title">
             <span className="dot" />
-            Descrição do produto
+            Produto
           </h2>
           <div className="form-grid">
             <div className="field field--full">
-              <label htmlFor="product_type">Tipo da peça</label>
-              <input
-                id="product_type"
-                type="text"
-                required
-                placeholder="Anel, colar, brinco..."
-                value={form.product_type}
-                onChange={(e) => set("product_type", e.target.value)}
+              <label>Produto</label>
+              <Combobox
+                options={productOptions}
+                value={form.product_id}
+                onChange={handleSelectProduct}
+                placeholder="Buscar produto..."
+                emptyText="Nenhum produto encontrado — cadastre em Cadastros"
               />
             </div>
-            <div className="field">
-              <label htmlFor="manufacturer">Fabricante</label>
-              <input
-                id="manufacturer"
-                type="text"
-                value={form.manufacturer}
-                onChange={(e) => set("manufacturer", e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="supplier">Fornecedor</label>
-              <input
-                id="supplier"
-                type="text"
-                value={form.supplier}
-                onChange={(e) => set("supplier", e.target.value)}
-              />
-            </div>
-            <div className="field field--full">
-              <label htmlFor="warranty">Garantia</label>
-              <input
-                id="warranty"
-                type="text"
-                placeholder="Ex: 90 dias"
-                value={form.warranty}
-                onChange={(e) => set("warranty", e.target.value)}
-              />
-            </div>
+            {selectedProduct && (
+              <div className="field field--full">
+                <div className="banner banner-info" style={{ margin: 0 }}>
+                  <span>💎</span>
+                  <span>
+                    {selectedProduct.category} · {selectedProduct.subtype} ·{" "}
+                    {selectedProduct.jewelry_type}
+                    {selectedProduct.manufacturer_name
+                      ? ` · Fabricante: ${selectedProduct.manufacturer_name}`
+                      : ""}
+                    {selectedProduct.supplier_name
+                      ? ` · Fornecedor: ${selectedProduct.supplier_name}`
+                      : ""}
+                    {selectedProduct.warranty ? ` · Garantia: ${selectedProduct.warranty}` : ""}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -331,7 +442,6 @@ export default function NovaVendaPage() {
                       value={form.installments_dates}
                       onChange={(e) => set("installments_dates", e.target.value)}
                     />
-                    <span className="hint">Pode descrever livremente, ex: entrada + parcelas em datas diferentes</span>
                   </div>
                 )}
               </div>
@@ -342,56 +452,36 @@ export default function NovaVendaPage() {
         <div className="section">
           <h2 className="section-title">
             <span className="dot" style={{ background: "var(--accent)" }} />
-            Dados do cliente
+            Cliente
           </h2>
           <div className="form-grid">
             <div className="field field--full">
-              <label htmlFor="client_name">Nome completo</label>
-              <input
-                id="client_name"
-                type="text"
-                required
-                value={form.client_name}
-                onChange={(e) => set("client_name", e.target.value)}
+              <label>Cliente</label>
+              <Combobox
+                options={clientOptions}
+                value={form.client_id}
+                onChange={(id) => set("client_id", id)}
+                placeholder="Buscar cliente..."
+                onCreate={createClient}
+                createLabel="+ Cadastrar"
               />
+              <span className="hint">
+                Cliente novo? Digite o nome e clique em "+ Cadastrar". Depois complete os
+                outros dados em Cadastros → Clientes.
+              </span>
             </div>
-            <div className="field">
-              <label htmlFor="client_nickname">Apelido</label>
-              <input
-                id="client_nickname"
-                type="text"
-                value={form.client_nickname}
-                onChange={(e) => set("client_nickname", e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="client_city">Praça (cidade/bairro)</label>
-              <input
-                id="client_city"
-                type="text"
-                value={form.client_city}
-                onChange={(e) => set("client_city", e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="client_phone">Telefone/WhatsApp</label>
-              <input
-                id="client_phone"
-                type="tel"
-                placeholder="(00) 00000-0000"
-                value={form.client_phone}
-                onChange={(e) => set("client_phone", e.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="client_birthday">Aniversário</label>
-              <input
-                id="client_birthday"
-                type="date"
-                value={form.client_birthday}
-                onChange={(e) => set("client_birthday", e.target.value)}
-              />
-            </div>
+            {selectedClient && (selectedClient.phone || selectedClient.city) && (
+              <div className="field field--full">
+                <div className="banner banner-info" style={{ margin: 0 }}>
+                  <span>📓</span>
+                  <span>
+                    {[selectedClient.nickname, selectedClient.city, selectedClient.phone]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

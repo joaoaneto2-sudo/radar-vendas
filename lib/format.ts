@@ -18,7 +18,55 @@ export type Sale = {
   client_phone?: string | null;
   client_birthday?: string | null;
   created_at?: string;
+  product_id?: number | null;
+  client_id?: number | null;
+  seller_id?: number | null;
 };
+
+export type SimpleEntity = {
+  id: number;
+  name: string;
+};
+
+export type Client = {
+  id: number;
+  full_name: string;
+  nickname?: string | null;
+  city?: string | null;
+  phone?: string | null;
+  birthday?: string | null;
+};
+
+export type Product = {
+  id: number;
+  category: string;
+  subtype: string;
+  jewelry_type: string;
+  name: string;
+  manufacturer_id?: number | null;
+  manufacturer_name?: string | null;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  cost: number | string;
+  price: number | string;
+  stock_qty: number;
+  warranty?: string | null;
+  photo_url?: string | null;
+  active: boolean;
+};
+
+export const PRODUCT_CATEGORIES: Record<string, string[]> = {
+  "Anéis": ["Aliança", "Solitário", "Meia Aliança", "Chevalier", "Formatura", "Infantil", "Outro"],
+  "Pulseiras": ["Riviera", "Elo Cubano", "Elo Português", "Berloque", "Infantil", "Outro"],
+  "Colares e Correntes": ["Corrente", "Choker", "Ponto de Luz", "Gargantilha", "Outro"],
+  "Brincos": ["Argola", "Ponto de Luz", "Brinco de Pressão", "Ear Cuff", "Cascata", "Infantil", "Outro"],
+  "Pingentes": ["Outro"],
+  "Conjuntos": ["Outro"],
+  "Relógios": ["Outro"],
+  "Outros": ["Outro"],
+};
+export const PRODUCT_CATEGORY_NAMES = Object.keys(PRODUCT_CATEGORIES);
+export const JEWELRY_TYPES = ["Joia", "Semijoia"];
 
 export const SALE_TYPES = ["Física", "Online", "Feira", "Catálogo", "Página de vendas"];
 export const PAYMENT_METHODS = [
