@@ -32,10 +32,11 @@ export const PAYMENT_METHODS = [
 export const INSTALLMENT_COUNT_METHODS = ["Crédito parcelado", "Pix a prazo"];
 export const INSTALLMENT_DATES_METHODS = ["Pix a prazo"];
 
-export function formatDateBR(iso?: string | null): string {
-  if (!iso) return "-";
+export function formatDateBR(value?: string | Date | null): string {
+  if (!value) return "-";
+  const iso = value instanceof Date ? value.toISOString() : value;
   const [y, m, d] = iso.slice(0, 10).split("-");
-  if (!y || !m || !d) return iso;
+  if (!y || !m || !d) return String(value);
   return `${d}/${m}/${y}`;
 }
 

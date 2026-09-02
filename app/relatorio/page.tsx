@@ -448,7 +448,7 @@ export default function RelatorioPage() {
               </div>
             </div>
             <a className="btn btn-ghost" href="/api/sales/export">
-              Exportar CSV
+              Exportar Excel
             </a>
           </div>
 

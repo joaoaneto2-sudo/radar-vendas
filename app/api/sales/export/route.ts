@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as XLSX from "xlsx";
 import { getPool, ensureSchema } from "@/lib/db";
 import { formatDateBR } from "@/lib/format";
 
@@ -15,6 +16,7 @@ const HEADERS = [
   "Garantia",
   "Custo (R$)",
   "Valor da venda (R$)",
+  "Lucro (R$)",
   "Forma de pagamento",
   "Parcelas",
   "Datas das parcelas",
@@ -24,14 +26,6 @@ const HEADERS = [
   "Telefone/WhatsApp",
   "Aniversário",
 ];
-
-function csvEscape(value: unknown): string {
-  const s = value === null || value === undefined ? "" : String(value);
-  if (/[",;\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
 
 export async function GET(req: NextRequest) {
   const db = getPool();
@@ -45,39 +39,45 @@ export async function GET(req: NextRequest) {
       "SELECT * FROM sales ORDER BY sale_date DESC, id DESC"
     );
 
-    const lines = [HEADERS.join(";")];
-    for (const r of rows) {
-      lines.push(
-        [
-          formatDateBR(r.sale_date),
-          r.sale_type,
-          r.seller,
-          r.product_type,
-          r.manufacturer,
-          r.supplier,
-          r.warranty,
-          r.cost,
-          r.sale_value,
-          r.payment_method,
-          r.installments_count,
-          r.installments_dates,
-          r.client_name,
-          r.client_nickname,
-          r.client_city,
-          r.client_phone,
-          r.client_birthday ? formatDateBR(r.client_birthday) : "",
-        ]
-          .map(csvEscape)
-          .join(";")
-      );
-    }
-    const csv = "﻿" + lines.join("\n");
+    const data = rows.map((r) => {
+      const cost = Number(r.cost) || 0;
+      const saleValue = Number(r.sale_value) || 0;
+      return [
+        formatDateBR(r.sale_date),
+        r.sale_type,
+        r.seller,
+        r.product_type,
+        r.manufacturer || "",
+        r.supplier || "",
+        r.warranty || "",
+        cost,
+        saleValue,
+        saleValue - cost,
+        r.payment_method,
+        r.installments_count || "",
+        r.installments_dates || "",
+        r.client_name,
+        r.client_nickname || "",
+        r.client_city || "",
+        r.client_phone || "",
+        r.client_birthday ? formatDateBR(r.client_birthday) : "",
+      ];
+    });
 
-    return new NextResponse(csv, {
+    const worksheet = XLSX.utils.aoa_to_sheet([HEADERS, ...data]);
+    worksheet["!cols"] = HEADERS.map((h) => ({ wch: Math.max(h.length + 2, 14) }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Vendas");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    return new NextResponse(buffer, {
       status: 200,
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="vendas.csv"`,
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="vendas.xlsx"`,
       },
     });
   } catch (err) {
