@@ -6,6 +6,7 @@ import {
   type CascadeResult,
   type ExpenseInput,
   type JoaoPaymentInput,
+  type ReceiptInput,
   type SaleInput,
   type Settings,
   type Warning,
@@ -34,7 +35,8 @@ import {
 export interface FinanceInputs {
   settings: Settings;
   sales: SaleInput[];
-  joaoPayments: JoaoPaymentInput[];
+  joaoPayments: JoaoPaymentInput[]; // aportes do João (derivados dos recebimentos)
+  receipts: ReceiptInput[];
   expenses: ExpenseInput[];
   purchases: PurchaseInput[];
   fundPayments: FundPaymentInput[];
@@ -57,7 +59,7 @@ export interface FinanceSummary {
 const DIA = (coluna: string) => `to_char(${coluna}, 'YYYY-MM-DD')`;
 
 export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
-  const [ajustes, vendas, parcelas, pagJoao, despesas, compras, pagFundo, contas, pagContas, faturas, partesFatura] =
+  const [ajustes, vendas, parcelas, recebimentos, despesas, compras, pagFundo, contas, pagContas, faturas, partesFatura] =
     await Promise.all([
       db.query(`SELECT * FROM agreement_settings WHERE id = 1`),
       db.query(
@@ -74,7 +76,14 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
                 ${DIA("received_date")} AS received_date
            FROM sale_payments ORDER BY id`
       ),
-      db.query(`SELECT id, ${DIA("paid_date")} AS paid_date, amount FROM joao_payments ORDER BY paid_date, id`),
+      db.query(
+        `SELECT r.id, r.kind, r.status, ${DIA("r.received_date")} AS received_date,
+                ${DIA("r.expected_date")} AS expected_date, r.amount, r.partner, r.manufacturer_id,
+                m.name AS manufacturer_name, r.from_name, r.reason
+           FROM receipts r
+           LEFT JOIN manufacturers m ON m.id = r.manufacturer_id
+          ORDER BY r.received_date NULLS LAST, r.id`
+      ),
       db.query(`SELECT id, ${DIA("expense_date")} AS expense_date, description, amount FROM expenses ORDER BY expense_date, id`),
       db.query(
         `SELECT id, kind, amount, ${DIA("purchase_date")} AS purchase_date, description
@@ -138,10 +147,28 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
     stockReceivedDate: v.stock_received_date,
   }));
 
+  const receipts: ReceiptInput[] = recebimentos.rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    status: r.status,
+    receivedDate: r.received_date,
+    expectedDate: r.expected_date,
+    amountCents: toCents(r.amount),
+    partner: r.partner,
+    manufacturerId: r.manufacturer_id,
+    manufacturerName: r.manufacturer_name,
+    fromName: r.from_name,
+    reason: r.reason,
+  }));
+
   return {
     settings,
     sales,
-    joaoPayments: pagJoao.rows.map((p) => ({ id: p.id, date: p.paid_date, amountCents: toCents(p.amount) })),
+    // O que o João coloca como aporte abate a dívida dele do estoque inicial.
+    joaoPayments: receipts
+      .filter((r) => r.kind === "aporte_socio" && r.partner === "joao" && r.status === "recebida" && r.receivedDate)
+      .map((r) => ({ id: r.id, date: r.receivedDate as string, amountCents: r.amountCents })),
+    receipts,
     expenses: despesas.rows.map((d) => ({
       id: d.id,
       date: d.expense_date,
@@ -193,10 +220,10 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
 
 export function summarize(inputs: FinanceInputs, opcoes: { today?: string } = {}): FinanceSummary {
   const hoje = opcoes.today ?? todayBR();
-  const cascade = computeCascade(inputs.settings, inputs.sales, inputs.joaoPayments, inputs.expenses);
+  const cascade = computeCascade(inputs.settings, inputs.sales, inputs.joaoPayments, inputs.expenses, inputs.receipts);
   const fund = computeFund(cascade.totals.replenishCents, inputs.purchases, inputs.fundPayments);
   const liabilities = computeLiabilities(inputs.liabilities, inputs.liabilityPayments);
-  const wholesale = computeWholesale(inputs.sales, hoje);
+  const wholesale = computeWholesale(inputs.sales, hoje, inputs.receipts);
   const invoices = inputs.invoices.map((f) => computeCardInvoice(f, inputs.invoiceParts));
   return {
     settings: inputs.settings,
@@ -207,6 +234,15 @@ export function summarize(inputs: FinanceInputs, opcoes: { today?: string } = {}
     invoices,
     warnings: [
       ...cascade.warnings,
+      ...(wholesale.excessCents > 0
+        ? [
+            {
+              code: "comissao_recebida_alem_do_previsto",
+              message:
+                "Foi recebida comissão de fabricante acima do que as vendas de atacado lançadas indicam. Confira se falta lançar alguma venda.",
+            },
+          ]
+        : []),
       ...fund.warnings,
       ...liabilities.warnings,
       ...invoices.flatMap((f) => f.warnings),

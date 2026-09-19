@@ -74,7 +74,20 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
   const tudoBate = cascade.check.fernandaPlusJoaoEqualsDistributable;
   const totalDaParteDoJoao = cascade.events.reduce((s, e) => s + e.joaoShareCents, 0);
 
+  const recebimentoPorId = new Map(entradas.receipts.map((r) => [r.id, r]));
+  const aporteDe = (quem: "joao" | "fernanda") =>
+    entradas.receipts
+      .filter((r) => r.kind === "aporte_socio" && r.partner === quem && r.status === "recebida")
+      .reduce((soma, r) => soma + r.amountCents, 0);
+
   function origem(e: (typeof cascade.events)[number]) {
+    if (e.kind === "receita") {
+      const r = recebimentoPorId.get(e.receiptId ?? 0);
+      const quem = r?.fromName || r?.manufacturerName || "recebimento";
+      return e.tier === "atacado"
+        ? { titulo: `Comissão: ${quem}`, dica: `comissão de ${r?.manufacturerName ?? "fabricante"}, entra na data em que foi recebida` }
+        : { titulo: `Receita: ${quem}`, dica: r?.reason || "outra receita, entra na data em que foi recebida" };
+    }
     if (e.kind === "despesa") {
       const d = despesaPorId.get(e.expenseId ?? 0);
       return { titulo: `Despesa: ${d?.description || "da empresa"}`, dica: "sai do lucro antes da divisão" };
@@ -169,9 +182,22 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
                 <h3 className="fin-sub">
                   {f.name}
                   <span className="fin-sub-note">
-                    {`${String(f.commissionPct).replace(".", ",")}% de comissão, paga ${f.commissionDays} dias depois de receber o estoque`}
+                    {`${String(f.commissionPct).replace(".", ",")}% de comissão, lembrete de ${f.commissionDays} dias depois de receber o estoque`}
                   </span>
                 </h3>
+                {f.reminders.length > 0 && (
+                  <p className="fin-help">
+                    {`Recebimentos previstos lançados: ${f.reminders
+                      .map(
+                        (l) =>
+                          `${reais(l.amountCents)} ${l.expectedDate ? `em ${formatDateBR(l.expectedDate)}` : "sem data"}${l.fromName ? ` (${l.fromName})` : ""}`
+                      )
+                      .join("; ")}`}
+                  </p>
+                )}
+                {f.excessCents > 0 && (
+                  <p className="fin-help">{`Recebido acima das vendas lançadas: ${reais(f.excessCents)}`}</p>
+                )}
                 <div className="table-wrap">
                   <table style={{ minWidth: 900 }}>
                     <thead>
@@ -182,7 +208,7 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
                         <th>Comissão</th>
                         <th>Recebida</th>
                         <th>Estoque recebido em</th>
-                        <th>Comissão prevista para</th>
+                        <th>Lembrete de data</th>
                         <th>Situação</th>
                       </tr>
                     </thead>
@@ -210,6 +236,21 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
         )}
       </Bloco>
 
+      <Bloco
+        titulo="Recebimentos fora das vendas"
+        ajuda="Aportes dos sócios, comissões de fabricantes e receitas de outros ramos. O aporte do João abate a dívida dele. Aportes não entram no lucro dividido. Comissões e outras receitas entram na divisão na data em que foram recebidas."
+      >
+        <div className="stat-grid auto">
+          <Tile label="Comissões de fabricantes na divisão" value={reais(cascade.totals.wholesaleCommissionCountedCents)} tom="accent" />
+          <Tile label="Outras receitas na divisão" value={reais(cascade.totals.otherIncomeCountedCents)} tom="accent" />
+          <Tile label="Aportes do João" value={reais(aporteDe("joao"))} nota="Abatem a dívida do estoque inicial" />
+          <Tile label="Aportes da Fernanda" value={reais(aporteDe("fernanda"))} nota="Só registro, não é passivo" />
+        </div>
+        <p className="fin-help">
+          <a href="/financeiro/recebimentos">Ver e lançar recebimentos</a>
+        </p>
+      </Bloco>
+
       <Bloco titulo="Fundo de reposição" ajuda="O dinheiro da reposição fica separado para pagar as compras novas de estoque.">
         <div className="stat-grid auto">
           <Tile label="Entrou no fundo" value={reais(fund.enteredCents)} tom="accent" />
@@ -231,7 +272,7 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
       >
         <div className="stat-grid auto">
           <Tile label="Total da dívida" value={reais(cascade.debt.totalCents)} nota="Metade do estoque inicial" />
-          <Tile label="Pago direto à Fernanda" value={reais(cascade.debt.paidDirectCents)} />
+          <Tile label="Aportes do João (pago direto à Fernanda)" value={reais(cascade.debt.paidDirectCents)} />
           <Tile label="Abatido pelas vendas" value={reais(cascade.debt.abatedCents)} tom="accent" />
           <Tile label="Saldo devedor" value={reais(cascade.debt.balanceCents)} tom="gold" />
         </div>

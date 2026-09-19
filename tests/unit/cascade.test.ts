@@ -3,6 +3,7 @@ import {
   computeCascade,
   type ExpenseInput,
   type JoaoPaymentInput,
+  type ReceiptInput,
   type SaleInput,
   type Settings,
 } from "../../lib/finance/cascade";
@@ -40,6 +41,26 @@ const pagamentoJoao = (id: number, date: string, amountCents: number): JoaoPayme
 });
 
 const despesa = (id: number, date: string, amountCents: number): ExpenseInput => ({ id, date, amountCents });
+
+// Comissão paga pela Bia Belutti (recebimento lançado por fabricante) e receita de outros ramos.
+const comissaoRecebida = (id: number, receivedDate: string, amountCents: number): ReceiptInput => ({
+  id,
+  kind: "comissao_fabricante",
+  status: "recebida",
+  receivedDate,
+  expectedDate: null,
+  amountCents,
+  manufacturerId: 1,
+  manufacturerName: "Bia Belutti",
+});
+const outraReceita = (id: number, receivedDate: string, amountCents: number): ReceiptInput => ({
+  id,
+  kind: "outra_receita",
+  status: "recebida",
+  receivedDate,
+  expectedDate: null,
+  amountCents,
+});
 
 const PAGAMENTO_INICIAL: JoaoPaymentInput[] = [pagamentoJoao(1, "2026-09-01", 100000)]; // R$ 1.000
 
@@ -241,56 +262,118 @@ describe("atacado: a receita é a comissão do fabricante", () => {
     expect(r.totals.soldCents).toBe(0);
   });
 
-  it("modo 'recebimento': a comissão entra na data em que o fabricante pagou", () => {
+  it("modo 'recebimento': a comissão entra na data em que o fabricante pagou (recebimento lançado)", () => {
     const r = computeCascade(
       { ...SETTINGS_ACORDO, mode: "recebimento" },
-      [
-        atacado({
-          id: 1,
-          amountCents: 100000,
-          date: "2026-09-12",
-          stockReceivedDate: "2026-09-14",
-          payments: [
-            { id: 7, dueDate: "2026-09-29", amountCents: 20000, status: "recebida", receivedDate: "2026-09-30" },
-          ],
-        }),
-      ],
-      []
+      [atacado({ id: 1, amountCents: 100000, date: "2026-09-12", stockReceivedDate: "2026-09-14" })],
+      [],
+      [],
+      [comissaoRecebida(7, "2026-09-30", 20000)]
     );
     expect(r.events).toHaveLength(1);
-    expect(r.events[0]).toMatchObject({ kind: "parcela", tier: "atacado", date: "2026-09-30", baseCents: 20000 });
+    expect(r.events[0]).toMatchObject({
+      kind: "receita",
+      tier: "atacado",
+      date: "2026-09-30",
+      baseCents: 20000,
+      receiptId: 7,
+      replenishCents: 0,
+    });
     expect(r.totals.wholesaleCommissionCountedCents).toBe(20000);
+    expect(r.totals.soldCents).toBe(0);
+    expect(r.totals.countedCents).toBe(0);
+    expect(r.totals.abatedCents).toBe(10000); // a parte do João abate a dívida
   });
 
-  it("parcela de comissão ainda prevista (sem data) não conta e não dá erro", () => {
+  it("recebimento de comissão parcial e em datas diferentes: cada um entra na sua data", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, mode: "recebimento" },
+      [atacado({ id: 1, amountCents: 100000 })],
+      [],
+      [],
+      [comissaoRecebida(2, "2026-10-05", 5000), comissaoRecebida(1, "2026-09-20", 8000)]
+    );
+    expect(r.events.map((e) => [e.date, e.baseCents])).toEqual([
+      ["2026-09-20", 8000],
+      ["2026-10-05", 5000],
+    ]);
+  });
+
+  it("comissão só prevista (lembrete) não conta e não dá erro", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, mode: "recebimento" },
+      [atacado({ id: 1, amountCents: 100000 })],
+      [],
+      [],
+      [{ ...comissaoRecebida(7, "2026-09-30", 20000), status: "prevista", receivedDate: null, expectedDate: "2026-10-10" }]
+    );
+    expect(r.events).toHaveLength(0);
+    expect(r.totals.profitCents).toBe(0);
+  });
+
+  it("parcelas antigas de uma venda de atacado são ignoradas (não contam em dobro com o recebimento)", () => {
     const r = computeCascade(
       { ...SETTINGS_ACORDO, mode: "recebimento" },
       [
         atacado({
           id: 1,
           amountCents: 100000,
-          payments: [{ id: 7, dueDate: null, amountCents: 20000, status: "prevista", receivedDate: null }],
+          payments: [{ id: 7, dueDate: "2026-09-29", amountCents: 20000, status: "recebida", receivedDate: "2026-09-30" }],
         }),
       ],
-      []
+      [],
+      [],
+      [comissaoRecebida(1, "2026-09-30", 20000)]
     );
-    expect(r.events).toHaveLength(0);
+    expect(r.events).toHaveLength(1);
+    expect(r.events[0].kind).toBe("receita");
     expect(r.warnings.some((w) => w.code === "parcelas_diferem_da_venda")).toBe(false);
   });
 
-  it("avisa se as parcelas de comissão não somam a comissão", () => {
+  it("modo 'venda': a comissão já foi contada na data da venda, então o recebimento não conta de novo", () => {
     const r = computeCascade(
-      { ...SETTINGS_ACORDO, mode: "recebimento" },
-      [
-        atacado({
-          id: 3,
-          amountCents: 100000,
-          payments: [{ id: 7, dueDate: "2026-09-29", amountCents: 15000, status: "prevista", receivedDate: null }],
-        }),
-      ],
-      []
+      SETTINGS_ACORDO,
+      [atacado({ id: 1, amountCents: 100000 })],
+      [],
+      [],
+      [comissaoRecebida(1, "2026-09-30", 20000)]
     );
-    expect(r.warnings.find((w) => w.code === "parcelas_diferem_da_venda")?.saleIds).toEqual([3]);
+    expect(r.events).toHaveLength(1);
+    expect(r.events[0]).toMatchObject({ kind: "venda", baseCents: 20000 });
+    expect(r.totals.wholesaleCommissionCountedCents).toBe(20000);
+  });
+
+  it("outra receita (outros ramos da empresa) entra na divisão, sem reposição, e não vira vendido", () => {
+    for (const modo of ["recebimento", "venda"] as const) {
+      const r = computeCascade({ ...SETTINGS_ACORDO, mode: modo }, [], [], [], [outraReceita(3, "2026-09-10", 50000)]);
+      expect(r.events).toHaveLength(1);
+      expect(r.events[0]).toMatchObject({ kind: "receita", tier: null, baseCents: 50000, replenishCents: 0, profitCents: 50000 });
+      expect(r.totals.otherIncomeCountedCents).toBe(50000);
+      expect(r.totals.soldCents).toBe(0);
+      expect(r.totals.countedCents).toBe(0);
+      expect(r.totals.wholesaleCommissionCountedCents).toBe(0);
+      expect(r.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
+    }
+  });
+
+  it("a reposição de comissões e outras receitas segue o percentual do atacado, se for configurado", () => {
+    const r = computeCascade({ ...SETTINGS_ACORDO, wholesalePct: 10 }, [], [], [], [outraReceita(3, "2026-09-10", 50000)]);
+    expect(r.events[0].replenishCents).toBe(5000);
+  });
+
+  it("aporte de sócio não entra na divisão do lucro (nem o do João, nem o da Fernanda)", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [],
+      [],
+      [],
+      [
+        { ...outraReceita(1, "2026-09-01", 100000), kind: "aporte_socio", partner: "joao" },
+        { ...outraReceita(2, "2026-09-02", 300000), kind: "aporte_socio", partner: "fernanda" },
+      ]
+    );
+    expect(r.events).toHaveLength(0);
+    expect(r.totals.distributableCents).toBe(0);
   });
 
   it("atacado sem fabricante representado fica fora das contas e avisa", () => {
@@ -556,7 +639,25 @@ describe("propriedades (cenários aleatórios, sempre os mesmos)", () => {
         despesas.push(despesa(d, `2026-09-${String(1 + Math.floor(rnd() * 28)).padStart(2, "0")}`, 1 + Math.floor(rnd() * 200000)));
       }
 
-      const r = computeCascade(acordo, vendas, pagJoao, despesas);
+      const recibos: ReceiptInput[] = [];
+      const nRecibos = Math.floor(rnd() * 4);
+      for (let k = 1; k <= nRecibos; k++) {
+        const tipo = rnd();
+        const recebida = rnd() < 0.8;
+        const dia = `2026-09-${String(1 + Math.floor(rnd() * 28)).padStart(2, "0")}`;
+        recibos.push({
+          id: k,
+          kind: tipo < 0.4 ? "comissao_fabricante" : tipo < 0.8 ? "outra_receita" : "aporte_socio",
+          status: recebida ? "recebida" : "prevista",
+          receivedDate: recebida ? dia : null,
+          expectedDate: recebida ? null : dia,
+          amountCents: 1 + Math.floor(rnd() * 300000),
+          partner: "joao",
+          manufacturerId: 1,
+        });
+      }
+
+      const r = computeCascade(acordo, vendas, pagJoao, despesas, recibos);
 
       expect(r.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
       expect(r.debt.balanceCents).toBeGreaterThanOrEqual(0);

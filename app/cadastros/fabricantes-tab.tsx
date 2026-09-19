@@ -97,7 +97,12 @@ export default function FabricantesTab() {
     const ok = window.confirm(`Remover o fabricante "${m.name}"? Produtos que já usam ele não são afetados.`);
     if (!ok) return;
     const res = await fetch(`/api/manufacturers/${m.id}`, { method: "DELETE" });
-    if (res.ok) setItems((prev) => prev.filter((i) => i.id !== m.id));
+    if (res.ok) {
+      setItems((prev) => prev.filter((i) => i.id !== m.id));
+    } else {
+      const dados = await res.json().catch(() => ({}));
+      window.alert(dados.message || "Não foi possível remover.");
+    }
   }
 
   return (

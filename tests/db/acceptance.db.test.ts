@@ -28,7 +28,10 @@ describe.skipIf(!disponivel)("teste de aceitação com banco (briefing, seção 
         [data, cliente, valor]
       );
     }
-    await pool.query(`INSERT INTO joao_payments (paid_date, amount, notes) VALUES ('2026-09-01', 1000, 'Pagamento inicial')`);
+    await pool.query(
+      `INSERT INTO receipts (kind, status, received_date, amount, partner, reason)
+       VALUES ('aporte_socio', 'recebida', '2026-09-01', 1000, 'joao', 'Pagamento inicial')`
+    );
     await pool.query(
       `INSERT INTO stock_purchases (description, kind, amount, purchase_date, payment_method) VALUES
          ('Estoque inicial', 'inicial', 15000, NULL, 'Cartão da empresa'),
@@ -142,10 +145,21 @@ describe.skipIf(!disponivel)("teste de aceitação com banco (briefing, seção 
       expect(atrasada.wholesale.overdueCents).toBe(20000);
       expect(atrasada.wholesale.manufacturers[0].items[0].status).toBe("atrasada");
 
+      // Lembrete lançado à mão: a comissão deve entrar em 10/10. Vale mais que a data automática.
+      await pool.query(
+        `INSERT INTO receipts (kind, status, expected_date, amount, manufacturer_id, reason)
+         VALUES ('comissao_fabricante', 'prevista', '2026-10-10', 200, 1, 'Combinado com a Bia')`
+      );
+      const comLembrete = await getFinanceSummary(pool, { today: "2026-10-05" });
+      expect(comLembrete.wholesale.overdueCents).toBe(0);
+      expect(comLembrete.wholesale.manufacturers[0].items[0]).toMatchObject({ dueDate: "2026-10-10", status: "prevista" });
+      expect(comLembrete.wholesale.manufacturers[0].reminders).toHaveLength(1);
+      expect(comLembrete.cascade.totals.profitCents).toBe(ESPERADO.lucro); // lembrete não entra na conta
+
       // O fabricante paga a comissão: agora entra na divisão, sem virar "venda".
       await pool.query(
-        `INSERT INTO sale_payments (sale_id, due_date, amount, status, received_date)
-         VALUES (10, '2026-09-29', 200, 'recebida', '2026-09-30')`
+        `INSERT INTO receipts (kind, status, received_date, amount, manufacturer_id, from_name, from_nickname, reason)
+         VALUES ('comissao_fabricante', 'recebida', '2026-09-30', 200, 1, 'Bia Belutti', 'Bia', 'Comissão da Ana')`
       );
       const depois = await getFinanceSummary(pool, { today: "2026-10-01" });
       expect(depois.wholesale.receivedCents).toBe(20000);
@@ -156,6 +170,7 @@ describe.skipIf(!disponivel)("teste de aceitação com banco (briefing, seção 
       expect(depois.cascade.totals.replenishCents).toBe(ESPERADO.reposicao); // sem reposição sobre a comissão
       expect(depois.cascade.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
     } finally {
+      await pool.query(`DELETE FROM receipts WHERE kind = 'comissao_fabricante'`);
       await pool.query(`DELETE FROM sales WHERE id = 10`);
       await pool.query(`DELETE FROM manufacturers WHERE name = 'Bia Belutti'`);
     }
@@ -176,6 +191,44 @@ describe.skipIf(!disponivel)("teste de aceitação com banco (briefing, seção 
     } finally {
       await pool.query(`DELETE FROM sales WHERE client_name = 'Revendedora Bia'`);
       await pool.query(`DELETE FROM manufacturers WHERE name = 'Fabricante comum'`);
+    }
+  });
+
+  it("aportes: o do João abate a dívida, o da Fernanda só fica registrado, e nenhum entra no lucro dividido", async () => {
+    try {
+      const antes = await getFinanceSummary(pool);
+      expect(antes.cascade.debt.paidDirectCents).toBe(100000); // o aporte de R$ 1.000 de 01/09
+
+      await pool.query(
+        `INSERT INTO receipts (kind, status, received_date, amount, partner, reason) VALUES
+           ('aporte_socio', 'recebida', '2026-09-10', 500, 'joao', 'Mais um pagamento'),
+           ('aporte_socio', 'recebida', '2026-09-11', 3000, 'fernanda', 'Compra de ativo novo')`
+      );
+      const r = await getFinanceSummary(pool);
+      expect(r.cascade.debt.paidDirectCents).toBe(150000); // só o do João
+      expect(r.cascade.totals.profitCents).toBe(ESPERADO.lucro);
+      expect(r.cascade.totals.distributableCents).toBe(ESPERADO.lucro);
+      expect(r.liabilities.totalCents).toBe(3000000); // o aporte da Fernanda não vira passivo
+      expect(r.cascade.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
+    } finally {
+      await pool.query(`DELETE FROM receipts WHERE reason IN ('Mais um pagamento', 'Compra de ativo novo')`);
+    }
+  });
+
+  it("outra receita (outros ramos da empresa) entra na divisão na data em que foi recebida", async () => {
+    try {
+      await pool.query(
+        `INSERT INTO receipts (kind, status, received_date, amount, from_name, reason)
+         VALUES ('outra_receita', 'recebida', '2026-09-15', 400, 'Revendedora Lu', 'Comissão de outro ramo')`
+      );
+      const r = await getFinanceSummary(pool);
+      expect(r.cascade.totals.soldCents).toBe(ESPERADO.vendido); // não é venda
+      expect(r.cascade.totals.otherIncomeCountedCents).toBe(40000);
+      expect(r.cascade.totals.profitCents).toBe(ESPERADO.lucro + 40000);
+      expect(r.cascade.totals.replenishCents).toBe(ESPERADO.reposicao); // sem reposição
+      expect(r.cascade.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
+    } finally {
+      await pool.query(`DELETE FROM receipts WHERE reason = 'Comissão de outro ramo'`);
     }
   });
 

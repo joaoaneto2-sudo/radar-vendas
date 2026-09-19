@@ -29,7 +29,7 @@ try {
   await client.query("BEGIN");
   // Limpa só os dados de negócio do banco de teste. Os usuários de login ficam.
   await client.query(
-    "TRUNCATE sales, joao_payments, stock_purchases, liabilities, expenses, card_invoices RESTART IDENTITY CASCADE"
+    "TRUNCATE sales, receipts, stock_purchases, liabilities, expenses, card_invoices RESTART IDENTITY CASCADE"
   );
 
   const vendas = [
@@ -52,8 +52,9 @@ try {
   }
 
   await client.query(
-    `INSERT INTO joao_payments (paid_date, amount, notes)
-     VALUES ('2026-09-01', 1000.00, 'Pagamento inicial da compra do estoque (briefing)')`
+    `INSERT INTO receipts (kind, status, received_date, amount, partner, from_name, from_nickname, reason, payment_method)
+     VALUES ('aporte_socio', 'recebida', '2026-09-01', 1000.00, 'joao', 'João', 'João',
+             'Pagamento inicial da compra do estoque (briefing)', 'Pix')`
   );
 
   await client.query(

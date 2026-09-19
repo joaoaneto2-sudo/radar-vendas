@@ -41,7 +41,7 @@ describe.skipIf(!disponivel)("migrações do banco", () => {
       "sales", "clients", "products", "manufacturers", "suppliers", "sellers",
       "agreement_settings", "sale_payments", "consignments", "consignment_items",
       "stock_purchases", "fund_payments", "liabilities", "liability_payments",
-      "joao_payments", "users", "login_attempts", "expenses", "card_invoices",
+      "receipts", "users", "login_attempts", "expenses", "card_invoices",
       "card_invoice_parts", "schema_migrations",
     ]) {
       expect(tabelas).toContain(esperada);
@@ -137,7 +137,10 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     await expect(pool.query(`UPDATE sales SET status = 'apagada' WHERE id = 1`)).rejects.toThrow();
     await expect(pool.query(`UPDATE sales SET sale_costs = -1 WHERE id = 1`)).rejects.toThrow();
     await expect(
-      pool.query(`INSERT INTO joao_payments (paid_date, amount) VALUES ('2026-09-01', 0)`)
+      pool.query(
+        `INSERT INTO receipts (kind, status, received_date, amount, partner)
+         VALUES ('aporte_socio', 'recebida', '2026-09-01', 0, 'joao')`
+      )
     ).rejects.toThrow();
     await expect(
       pool.query(`INSERT INTO stock_purchases (description, kind, amount) VALUES ('x', 'outra', 10)`)
@@ -210,6 +213,69 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     await expect(
       pool.query(`INSERT INTO manufacturers (name, wholesale_mode) VALUES ('Errada', 'consignado')`)
     ).rejects.toThrow();
+  });
+
+  it("recebimentos: regras de proteção (data, sócio, fabricante e valor)", async () => {
+    const pool = await bancoPronto();
+    await pool.query(`INSERT INTO manufacturers (name, represented, commission_pct) VALUES ('Bia', true, 20)`);
+
+    // Recebida precisa da data do recebimento; prevista pode ficar sem data.
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, amount) VALUES ('outra_receita', 'recebida', 10)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, amount) VALUES ('outra_receita', 'prevista', 10)`)
+    ).resolves.toBeDefined();
+
+    // Aporte precisa de sócio e não pode ser só previsto; sócio só João ou Fernanda.
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount) VALUES ('aporte_socio', 'recebida', '2026-09-01', 10)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, amount, partner) VALUES ('aporte_socio', 'prevista', 10, 'joao')`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount, partner) VALUES ('aporte_socio', 'recebida', '2026-09-01', 10, 'outro')`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount, partner) VALUES ('aporte_socio', 'recebida', '2026-09-01', 1000, 'fernanda')`)
+    ).resolves.toBeDefined();
+
+    // Comissão precisa do fabricante; tipo e valor inválidos são recusados.
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount) VALUES ('comissao_fabricante', 'recebida', '2026-09-01', 10)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount, manufacturer_id) VALUES ('comissao_fabricante', 'recebida', '2026-09-01', 10, 1)`)
+    ).resolves.toBeDefined();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount) VALUES ('venda', 'recebida', '2026-09-01', 10)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO receipts (kind, status, received_date, amount) VALUES ('outra_receita', 'recebida', '2026-09-01', 0)`)
+    ).rejects.toThrow();
+
+    // Não dá para apagar um fabricante que já pagou comissão (o histórico não some).
+    await expect(pool.query(`DELETE FROM manufacturers WHERE name = 'Bia'`)).rejects.toThrow();
+  });
+
+  it("os pagamentos do João que já existiam viram aportes dele, sem perder nada", async () => {
+    const { pool } = await novoBanco();
+    await runMigrations(pool, { ate: "007" });
+    await pool.query(
+      `INSERT INTO joao_payments (paid_date, amount, notes) VALUES ('2026-09-01', 1000, 'Pagamento inicial'), ('2026-09-15', 250.50, NULL)`
+    );
+
+    expect(await runMigrations(pool)).toEqual(["008"]);
+
+    const { rows } = await pool.query(
+      `SELECT kind, status, to_char(received_date, 'YYYY-MM-DD') AS d, amount, partner, reason FROM receipts ORDER BY received_date`
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ kind: "aporte_socio", status: "recebida", d: "2026-09-01", amount: "1000.00", partner: "joao", reason: "Pagamento inicial" });
+    expect(rows[1]).toMatchObject({ d: "2026-09-15", amount: "250.50", partner: "joao" });
+    const antiga = await pool.query(`SELECT to_regclass('public.joao_payments') AS t`);
+    expect(antiga.rows[0].t).toBeNull();
   });
 
   it("parcela pode ficar sem data enquanto o estoque do fabricante não chega", async () => {

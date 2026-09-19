@@ -373,6 +373,42 @@ export const MIGRATIONS: Migration[] = [
        END $$`,
     ],
   },
+  {
+    id: "008",
+    name: "recebimentos (aportes, comissoes de fabricantes e outras receitas) no lugar de joao_payments",
+    statements: [
+      // Um livro so para o dinheiro que entra fora das vendas. "recebida" tem data do recebimento;
+      // "prevista" e um lembrete, com data prevista opcional.
+      `CREATE TABLE IF NOT EXISTS receipts (
+        id SERIAL PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('aporte_socio', 'comissao_fabricante', 'outra_receita')),
+        status TEXT NOT NULL DEFAULT 'recebida' CHECK (status IN ('prevista', 'recebida')),
+        received_date DATE,
+        expected_date DATE,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        partner TEXT CHECK (partner IS NULL OR partner IN ('joao', 'fernanda')),
+        manufacturer_id INT REFERENCES manufacturers(id),
+        sale_id INT REFERENCES sales(id) ON DELETE SET NULL,
+        from_name TEXT,
+        from_nickname TEXT,
+        reason TEXT,
+        payment_method TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CHECK (status <> 'recebida' OR received_date IS NOT NULL),
+        CHECK (kind <> 'aporte_socio' OR (partner IS NOT NULL AND status = 'recebida')),
+        CHECK (kind <> 'comissao_fabricante' OR manufacturer_id IS NOT NULL)
+      )`,
+      `CREATE INDEX IF NOT EXISTS receipts_status_date_idx ON receipts (status, received_date)`,
+      `CREATE INDEX IF NOT EXISTS receipts_manufacturer_idx ON receipts (manufacturer_id)`,
+      // Os pagamentos do Joao viram aportes dele e a tabela antiga sai (dados copiados antes).
+      `INSERT INTO receipts (kind, status, received_date, amount, partner, reason)
+         SELECT 'aporte_socio', 'recebida', paid_date, amount, 'joao',
+                COALESCE(notes, 'Pagamento da divida do estoque inicial')
+           FROM joao_payments
+          ORDER BY paid_date, id`,
+      `DROP TABLE joao_payments`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
@@ -383,7 +419,7 @@ const LOCK_ID = 727274;
  * Aplica as migrações que ainda não rodaram. Tudo ou nada: se uma falhar,
  * nenhuma fica pela metade. Devolve os ids que foram aplicados agora.
  */
-export async function runMigrations(pool: Pool): Promise<string[]> {
+export async function runMigrations(pool: Pool, opcoes: { ate?: string } = {}): Promise<string[]> {
   const aplicadas: string[] = [];
   const client = await pool.connect();
   try {
@@ -401,6 +437,7 @@ export async function runMigrations(pool: Pool): Promise<string[]> {
 
     for (const migracao of MIGRATIONS) {
       if (jaFeitas.has(migracao.id)) continue;
+      if (opcoes.ate && migracao.id > opcoes.ate) break; // só usado nos testes, para simular um banco mais antigo
       for (const comando of migracao.statements) {
         await client.query(comando);
       }

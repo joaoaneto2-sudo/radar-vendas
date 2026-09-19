@@ -65,14 +65,36 @@ export interface ExpenseInput {
   description?: string | null;
 }
 
+// Dinheiro que entra fora das vendas (livro de recebimentos):
+// - aporte_socio: dinheiro que um sócio coloca; o do João abate a dívida, o da Fernanda só fica registrado;
+// - comissao_fabricante: comissão paga por um fabricante representado (entra na divisão);
+// - outra_receita: receita de outros ramos da empresa (entra na divisão).
+// "prevista" é só lembrete: não entra em conta nenhuma.
+export type ReceiptKind = "aporte_socio" | "comissao_fabricante" | "outra_receita";
+
+export interface ReceiptInput {
+  id: number;
+  kind: ReceiptKind;
+  status: "prevista" | "recebida";
+  receivedDate: string | null;
+  expectedDate: string | null;
+  amountCents: Cents;
+  partner?: "joao" | "fernanda" | null;
+  manufacturerId?: number | null;
+  manufacturerName?: string | null;
+  fromName?: string | null;
+  reason?: string | null;
+}
+
 export interface CascadeEvent {
-  key: string; // "venda-12", "parcela-34" ou "despesa-5"
-  kind: "venda" | "parcela" | "despesa";
+  key: string; // "venda-12", "parcela-34", "despesa-5" ou "receita-7"
+  kind: "venda" | "parcela" | "despesa" | "receita";
   tier: Tier | null;
   date: string;
-  saleId: number; // 0 nas despesas
+  saleId: number; // 0 nas despesas e receitas
   paymentId: number | null;
   expenseId: number | null;
+  receiptId: number | null;
   implicit: boolean; // true: não há parcela cadastrada, contamos como recebido na data da venda
   baseCents: Cents; // o que entrou (no atacado, a comissão)
   replenishCents: Cents;
@@ -105,6 +127,7 @@ export interface CascadeResult {
     countedCents: Cents; // parte dessas vendas que já entrou na cascata
     pendingCents: Cents; // vendido que ainda não entrou (só no modo "recebimento")
     wholesaleCommissionCountedCents: Cents; // comissões do atacado que já entraram na cascata
+    otherIncomeCountedCents: Cents; // outras receitas (outros ramos) que já entraram na cascata
     replenishCents: Cents;
     costsCents: Cents;
     expensesCents: Cents; // despesas da empresa lançadas
@@ -130,11 +153,12 @@ export interface CascadeResult {
 
 interface RawEvent {
   key: string;
-  kind: "venda" | "parcela" | "despesa";
+  kind: "venda" | "parcela" | "despesa" | "receita";
   date: string;
   saleId: number;
   paymentId: number | null;
   expenseId: number | null;
+  receiptId: number | null;
   implicit: boolean;
   tier: Tier | null;
   baseCents: Cents;
@@ -146,7 +170,8 @@ export function computeCascade(
   settings: Settings,
   sales: SaleInput[],
   joaoPayments: JoaoPaymentInput[],
-  expenses: ExpenseInput[] = []
+  expenses: ExpenseInput[] = [],
+  receipts: ReceiptInput[] = []
 ): CascadeResult {
   const warnings: Warning[] = [];
   const joaoBp = Math.round(settings.joaoSharePct * 100);
@@ -194,6 +219,7 @@ export function computeCascade(
         saleId: sale.id,
         paymentId: null,
         expenseId: null,
+        receiptId: null,
         implicit: false,
         tier: sale.tier,
         baseCents: base,
@@ -204,24 +230,26 @@ export function computeCascade(
     }
 
     // Modo "recebimento".
+    // Atacado: a comissão só entra quando o fabricante paga, e isso vem dos recebimentos
+    // lançados por fabricante (mais abaixo), não da venda.
+    if (ehAtacado) continue;
+
     if (semParcelas) {
       // Varejo e consignado sem parcelas: contamos como recebido na data da venda.
-      // Atacado sem parcelas: a comissão ainda não entrou, então não conta.
-      if (!ehAtacado) {
-        raw.push({
-          key: `venda-${sale.id}`,
-          kind: "venda",
-          date: sale.date,
-          saleId: sale.id,
-          paymentId: null,
-          expenseId: null,
-          implicit: true,
-          tier: sale.tier,
-          baseCents: base,
-          costsCents: sale.costsCents,
-          expenseCents: 0,
-        });
-      }
+      raw.push({
+        key: `venda-${sale.id}`,
+        kind: "venda",
+        date: sale.date,
+        saleId: sale.id,
+        paymentId: null,
+        expenseId: null,
+        receiptId: null,
+        implicit: true,
+        tier: sale.tier,
+        baseCents: base,
+        costsCents: sale.costsCents,
+        expenseCents: 0,
+      });
       continue;
     }
 
@@ -252,6 +280,7 @@ export function computeCascade(
         saleId: sale.id,
         paymentId: parcela.id,
         expenseId: null,
+        receiptId: null,
         implicit: false,
         tier: sale.tier,
         baseCents: parcela.amountCents,
@@ -270,6 +299,7 @@ export function computeCascade(
       saleId: 0,
       paymentId: null,
       expenseId: despesa.id,
+      receiptId: null,
       implicit: false,
       tier: null,
       baseCents: 0,
@@ -278,15 +308,39 @@ export function computeCascade(
     });
   }
 
+  // Recebimentos que entram na divisão: comissão de fabricante e outras receitas, na data
+  // em que o dinheiro entrou. Só os já recebidos. No modo "venda" a comissão já foi contada
+  // na data da venda, então os recebimentos de comissão não entram de novo.
+  for (const r of receipts) {
+    if (r.status !== "recebida" || !r.receivedDate || r.amountCents <= 0) continue;
+    if (r.kind === "aporte_socio") continue;
+    if (r.kind === "comissao_fabricante" && settings.mode === "venda") continue;
+    raw.push({
+      key: `receita-${r.id}`,
+      kind: "receita",
+      date: r.receivedDate,
+      saleId: 0,
+      paymentId: null,
+      expenseId: null,
+      receiptId: r.id,
+      implicit: false,
+      tier: r.kind === "comissao_fabricante" ? "atacado" : null,
+      baseCents: r.amountCents,
+      costsCents: 0,
+      expenseCents: 0,
+    });
+  }
+
   // Ordem do tempo: data, depois despesas (para descontarem do lucro do mesmo dia),
-  // depois venda e parcela. Sempre a mesma ordem.
+  // depois venda, parcela e receita. Sempre a mesma ordem.
   raw.sort(
     (a, b) =>
       a.date.localeCompare(b.date) ||
       (a.kind === "despesa" ? 0 : 1) - (b.kind === "despesa" ? 0 : 1) ||
       a.saleId - b.saleId ||
       (a.paymentId ?? 0) - (b.paymentId ?? 0) ||
-      (a.expenseId ?? 0) - (b.expenseId ?? 0)
+      (a.expenseId ?? 0) - (b.expenseId ?? 0) ||
+      (a.receiptId ?? 0) - (b.receiptId ?? 0)
   );
 
   const pagamentosDoJoao = [...joaoPayments].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
@@ -311,8 +365,9 @@ export function computeCascade(
     if (e.kind === "despesa") {
       acompensar += e.expenseCents;
     } else {
+      // Comissões e outras receitas usam o percentual de reposição do atacado (0% por padrão).
       const percentual =
-        e.tier === "atacado"
+        e.kind === "receita" || e.tier === "atacado"
           ? settings.wholesalePct
           : e.tier === "consignado"
             ? settings.consignmentPct
@@ -343,6 +398,7 @@ export function computeCascade(
       saleId: e.saleId,
       paymentId: e.paymentId,
       expenseId: e.expenseId,
+      receiptId: e.receiptId,
       implicit: e.implicit,
       baseCents: e.baseCents,
       replenishCents: reposicao,
@@ -368,9 +424,13 @@ export function computeCascade(
 
   const totals = {
     soldCents,
-    countedCents: soma((e) => e.baseCents, (e) => e.kind !== "despesa" && e.tier !== "atacado"),
+    countedCents: soma(
+      (e) => e.baseCents,
+      (e) => e.kind !== "despesa" && e.kind !== "receita" && e.tier !== "atacado"
+    ),
     pendingCents: 0,
     wholesaleCommissionCountedCents: soma((e) => e.baseCents, (e) => e.tier === "atacado"),
+    otherIncomeCountedCents: soma((e) => e.baseCents, (e) => e.kind === "receita" && e.tier === null),
     replenishCents: soma((e) => e.replenishCents),
     costsCents: soma((e) => e.costsCents),
     expensesCents: soma((e) => e.expenseCents),
@@ -421,7 +481,7 @@ export function computeCascade(
   if (parcelasDiferentes.length) {
     warnings.push({
       code: "parcelas_diferem_da_venda",
-      message: "A soma das parcelas é diferente do valor da venda (ou da comissão, no atacado).",
+      message: "A soma das parcelas é diferente do valor da venda.",
       saleIds: parcelasDiferentes,
     });
   }

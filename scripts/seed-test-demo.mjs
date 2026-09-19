@@ -54,10 +54,24 @@ try {
        ('2026-09-15', 'DEMO Revendedora Dani (estoque ainda não chegou)', 1200.00, 'atacado', $1, NULL, 'Pix direto ao fabricante')`,
     [fabId]
   );
-  // A comissão da Carla (20% de 800 = 160) já foi paga pelo fabricante em 19/09.
+  // A Bia Belutti (DEMO) já pagou R$ 160,00 de comissão em 19/09. O recebimento é lançado por
+  // fabricante (não por venda) e abate as vendas mais antigas primeiro.
   await client.query(
-    `INSERT INTO sale_payments (sale_id, due_date, amount, status, received_date)
-     SELECT id, '2026-09-19', 160.00, 'recebida', '2026-09-19' FROM sales WHERE client_name LIKE 'DEMO Revendedora Carla%'`
+    `INSERT INTO receipts (kind, status, received_date, amount, manufacturer_id, from_name, from_nickname, reason, payment_method)
+     VALUES ('comissao_fabricante', 'recebida', '2026-09-19', 160.00, $1, 'DEMO Revendedora Carla', 'Carla',
+             'DEMO comissão paga pela Bia Belutti', 'Pix')`,
+    [fabId]
+  );
+
+  // Outras receitas: uma já recebida (entra na divisão), uma só lembrete (não entra), e um aporte da Fernanda.
+  await client.query(
+    `INSERT INTO receipts (kind, status, received_date, expected_date, amount, from_name, from_nickname, reason, payment_method) VALUES
+       ('outra_receita', 'recebida', '2026-09-16', NULL, 300.00, 'DEMO Revendedora Lu', 'Lu', 'DEMO comissão de outro ramo', 'Pix'),
+       ('outra_receita', 'prevista', NULL, NULL, 250.00, 'DEMO Revendedora Lu', 'Lu', 'DEMO ainda vai pagar, sem data', NULL)`
+  );
+  await client.query(
+    `INSERT INTO receipts (kind, status, received_date, amount, partner, from_name, from_nickname, reason, payment_method)
+     VALUES ('aporte_socio', 'recebida', '2026-09-10', 2000.00, 'fernanda', 'Fernanda', 'Fernanda', 'DEMO aporte para um ativo novo', 'Pix')`
   );
 
   // Consignado: peça que saiu com uma revendedora e foi acertada como venda.
@@ -88,7 +102,7 @@ try {
   );
 
   await client.query("COMMIT");
-  console.log("Exemplos de DEMONSTRAÇÃO carregados no banco de TESTE: atacado (4 vendas), consignado, despesa e fatura do cartão.");
+  console.log("Exemplos de DEMONSTRAÇÃO carregados no banco de TESTE: atacado (4 vendas), recebimentos, consignado, despesa e fatura do cartão.");
 } catch (erro) {
   await client.query("ROLLBACK").catch(() => undefined);
   console.error("Falhou e nada foi alterado:", erro.message);

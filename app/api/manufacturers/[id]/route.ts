@@ -54,6 +54,15 @@ export async function DELETE(
     await db.query("DELETE FROM manufacturers WHERE id = $1", [id]);
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if ((err as { code?: string })?.code === "23503") {
+      return NextResponse.json(
+        {
+          error: "in_use",
+          message: "Este fabricante já tem comissões recebidas lançadas e não pode ser removido.",
+        },
+        { status: 409 }
+      );
+    }
     console.error(err);
     return NextResponse.json({ error: "delete_failed" }, { status: 500 });
   }
