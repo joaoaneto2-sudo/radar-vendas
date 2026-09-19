@@ -238,6 +238,33 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "005",
+    name: "usuarios e tentativas de login",
+    statements: [
+      // A senha nunca é guardada: só o "resumo" criptografado dela (password_hash).
+      `CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_login_at TIMESTAMPTZ
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users (lower(email))`,
+      // Registro das tentativas, para bloquear quem fica chutando senha ou código de convite.
+      `CREATE TABLE IF NOT EXISTS login_attempts (
+        id SERIAL PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('login', 'register')),
+        identifier TEXT NOT NULL,
+        ip TEXT,
+        success BOOLEAN NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS login_attempts_lookup_idx ON login_attempts (kind, identifier, created_at)`,
+      `CREATE INDEX IF NOT EXISTS login_attempts_ip_idx ON login_attempts (kind, ip, created_at)`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

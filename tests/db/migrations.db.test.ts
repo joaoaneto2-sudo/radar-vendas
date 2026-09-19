@@ -41,7 +41,7 @@ describe.skipIf(!disponivel)("migrações do banco", () => {
       "sales", "clients", "products", "manufacturers", "suppliers", "sellers",
       "agreement_settings", "sale_payments", "consignments", "consignment_items",
       "stock_purchases", "fund_payments", "liabilities", "liability_payments",
-      "joao_payments", "schema_migrations",
+      "joao_payments", "users", "login_attempts", "schema_migrations",
     ]) {
       expect(tabelas).toContain(esperada);
     }

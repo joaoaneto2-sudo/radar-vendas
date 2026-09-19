@@ -898,3 +898,38 @@ td.profit-neg {
     transition: none !important;
   }
 }
+
+/* Login e primeiro acesso */
+
+.auth-shell {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 8px 20px 64px;
+}
+
+.auth-links {
+  margin-top: 18px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.auth-links a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
