@@ -339,6 +339,35 @@ input[type="date"] {
   margin-top: 2px;
 }
 
+/* Parcelas do Pix a prazo */
+
+.pix-plan {
+  grid-template-columns: 1fr;
+}
+
+.pay-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  align-items: end;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.check-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  min-height: 42px;
+}
+
+.check-inline input {
+  width: 18px;
+  height: 18px;
+}
+
 /* Buttons */
 
 .btn {

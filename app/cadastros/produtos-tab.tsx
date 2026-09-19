@@ -448,7 +448,7 @@ export default function ProdutosTab() {
             <div className="banner banner-info">
               <span>💡</span>
               <span>
-                Preencha o que souber agora e salve — nada aqui é obrigatório. Você pode
+                Preencha o que souber agora e salve. Nada aqui é obrigatório. Você pode
                 voltar e completar depois.
               </span>
             </div>

@@ -21,6 +21,22 @@ export type Sale = {
   product_id?: number | null;
   client_id?: number | null;
   seller_id?: number | null;
+  // Financeiro
+  price_tier?: "varejo" | "atacado" | "consignado";
+  sale_costs?: number | string | null;
+  payment_fee?: number | string | null;
+  manufacturer_id?: number | null;
+  manufacturer_ref_name?: string | null;
+  stock_received_date?: string | null;
+  commission_pct?: number | string | null; // só se o fabricante é representado
+  status?: "ativa" | "cancelada";
+  payments?: {
+    id: number;
+    due_date: string | null;
+    amount: number | string;
+    status: "prevista" | "recebida";
+    received_date: string | null;
+  }[];
 };
 
 export type SimpleEntity = {
@@ -151,6 +167,8 @@ export const PAYMENT_METHODS = [
   "Crédito",
   "Crédito parcelado",
   "Pix a prazo",
+  "Link de pagamento",
+  "Não informada",
 ];
 export const INSTALLMENT_COUNT_METHODS = ["Crédito parcelado", "Pix a prazo"];
 export const INSTALLMENT_DATES_METHODS = ["Pix a prazo"];
@@ -199,7 +217,7 @@ export function buildWhatsAppMessage(sale: Sale): string {
     const count = `${sale.installments_count}x`;
     const dates =
       INSTALLMENT_DATES_METHODS.includes(sale.payment_method) && sale.installments_dates
-        ? ` — datas: ${sale.installments_dates}`
+        ? `, datas: ${sale.installments_dates}`
         : "";
     payment += ` (${count}${dates})`;
   }

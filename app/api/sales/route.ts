@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
+import { parseSaleFinance } from "@/lib/sale-finance";
+import { SALE_SELECT, savePayments } from "@/lib/sales-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const db = getPool();
   if (!db) {
     return NextResponse.json({ error: "db_not_configured" }, { status: 503 });
@@ -12,9 +14,7 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureSchema();
-    const { rows } = await db.query(
-      "SELECT * FROM sales ORDER BY sale_date DESC, id DESC LIMIT 2000"
-    );
+    const { rows } = await db.query(`${SALE_SELECT} ORDER BY s.sale_date DESC, s.id DESC LIMIT 2000`);
     return NextResponse.json({ sales: rows });
   } catch (err) {
     console.error(err);
@@ -61,17 +61,22 @@ export async function POST(req: NextRequest) {
   const productId = body.product_id ? Number(body.product_id) : null;
   const clientId = body.client_id ? Number(body.client_id) : null;
   const sellerId = body.seller_id ? Number(body.seller_id) : null;
+  const fin = parseSaleFinance(body);
+  const tier = fin.priceTier ?? "varejo";
 
+  const client = await db.connect();
   try {
     await ensureSchema();
-    const { rows } = await db.query(
+    await client.query("BEGIN");
+    const { rows } = await client.query(
       `INSERT INTO sales (
         sale_date, sale_type, seller, product_type, manufacturer, supplier,
         warranty, cost, sale_value, payment_method, installments_count,
         installments_dates, client_name, client_nickname, client_city,
-        client_phone, client_birthday, product_id, client_id, seller_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-      RETURNING *`,
+        client_phone, client_birthday, product_id, client_id, seller_id,
+        price_tier, sale_costs, payment_fee, manufacturer_id, stock_received_date
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+      RETURNING id`,
       [
         body.sale_date,
         body.sale_type || null,
@@ -93,17 +98,28 @@ export async function POST(req: NextRequest) {
         productId,
         clientId,
         sellerId,
+        tier,
+        fin.saleCosts ?? 0,
+        fin.paymentFee ?? 0,
+        fin.manufacturerId,
+        fin.stockReceivedDate,
       ]
     );
-    if (productId) {
-      await db.query(
-        "UPDATE products SET stock_qty = GREATEST(stock_qty - 1, 0) WHERE id = $1",
-        [productId]
-      );
+    const saleId = rows[0].id as number;
+    if (fin.payments && fin.payments.length > 0) await savePayments(client, saleId, fin.payments);
+    // Peça de atacado é do fabricante: não sai do nosso estoque.
+    if (productId && tier !== "atacado") {
+      await client.query("UPDATE products SET stock_qty = GREATEST(stock_qty - 1, 0) WHERE id = $1", [productId]);
     }
-    return NextResponse.json({ sale: rows[0] }, { status: 201 });
+    await client.query("COMMIT");
+
+    const { rows: completa } = await db.query(`${SALE_SELECT} WHERE s.id = $1`, [saleId]);
+    return NextResponse.json({ sale: completa[0] }, { status: 201 });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
     console.error(err);
     return NextResponse.json({ error: "insert_failed" }, { status: 500 });
+  } finally {
+    client.release();
   }
 }

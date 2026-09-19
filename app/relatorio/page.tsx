@@ -7,9 +7,19 @@ import {
   Sale,
   SALE_TYPES,
   PAYMENT_METHODS,
-  INSTALLMENT_COUNT_METHODS,
-  INSTALLMENT_DATES_METHODS,
+  Manufacturer,
 } from "@/lib/format";
+import {
+  AtacadoFields,
+  CostFields,
+  PixPlan,
+  TierPicker,
+  financeFromSale,
+  financePayload,
+  type FinanceForm,
+} from "@/app/sale-finance-fields";
+import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE, PRICE_TIERS, commissionCents } from "@/lib/sale-finance";
+import { formatCentsBRL } from "@/lib/finance/money";
 
 type LoadState = "loading" | "ready" | "db_missing" | "error";
 
@@ -57,14 +67,21 @@ function saleToForm(s: Sale): EditForm {
 
 function EditModal({
   sale,
+  manufacturers,
   onClose,
   onSaved,
 }: {
   sale: Sale;
+  manufacturers: Manufacturer[];
   onClose: () => void;
   onSaved: (updated: Sale) => void;
 }) {
   const [form, setForm] = useState<EditForm>(saleToForm(sale));
+  const [finance, setFinance] = useState<FinanceForm>(financeFromSale(sale));
+
+  function changeFinance(patch: Partial<FinanceForm>) {
+    setFinance((f) => ({ ...f, ...patch }));
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,10 +94,30 @@ function EditModal({
     setSaving(true);
     setError(null);
     try {
+      const atacado = finance.price_tier === "atacado";
+      const pixAPrazo = !atacado && form.payment_method === PIX_A_PRAZO;
+      const parcelasComValor = finance.payments.filter((p) => Number(p.amount) > 0);
+      const fabricante = manufacturers.find((m) => m.id === finance.manufacturer_id);
+      const corpo = {
+        ...form,
+        ...financePayload(finance, form.payment_method),
+        payment_method: atacado ? PIX_DIRETO_AO_FABRICANTE : form.payment_method,
+        manufacturer: atacado && fabricante ? fabricante.name : form.manufacturer,
+        // No Pix a prazo, o número e as datas para o texto do WhatsApp saem das parcelas.
+        ...(pixAPrazo
+          ? {
+              installments_count: parcelasComValor.length ? String(parcelasComValor.length) : "",
+              installments_dates: parcelasComValor
+                .filter((p) => p.due_date)
+                .map((p) => formatDateBR(p.due_date).slice(0, 5))
+                .join(", "),
+            }
+          : {}),
+      };
       const res = await fetch(`/api/sales/${sale.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(corpo),
       });
       if (!res.ok) {
         setError("Não foi possível salvar as alterações. Tente novamente.");
@@ -133,7 +170,7 @@ function EditModal({
               />
             </div>
             <div className="field field--full">
-              <label>Tipo de venda</label>
+              <label>Onde vendeu (tipo de venda)</label>
               <div className="radio-row">
                 {SALE_TYPES.map((t) => (
                   <button
@@ -147,6 +184,8 @@ function EditModal({
                 ))}
               </div>
             </div>
+
+            <TierPicker form={finance} onChange={changeFinance} />
 
             <div className="field field--full">
               <label>Tipo da peça</label>
@@ -207,22 +246,42 @@ function EditModal({
                 />
               </div>
             </div>
-            <div className="field field--full">
-              <label>Forma de pagamento</label>
-              <div className="radio-row">
-                {PAYMENT_METHODS.map((m) => (
-                  <button
-                    type="button"
-                    key={m}
-                    className={"radio-chip" + (form.payment_method === m ? " selected" : "")}
-                    onClick={() => set("payment_method", m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {INSTALLMENT_COUNT_METHODS.includes(form.payment_method) && (
+            {finance.price_tier === "atacado" ? (
+              <AtacadoFields
+                form={finance}
+                onChange={changeFinance}
+                saleValue={form.sale_value}
+                manufacturers={manufacturers}
+              />
+            ) : (
+              <>
+                <CostFields form={finance} onChange={changeFinance} />
+                <div className="field field--full">
+                  <label>Forma de pagamento</label>
+                  <div className="radio-row">
+                    {PAYMENT_METHODS.map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        className={"radio-chip" + (form.payment_method === m ? " selected" : "")}
+                        onClick={() => set("payment_method", m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {form.payment_method === PIX_A_PRAZO && (
+                  <PixPlan
+                    form={finance}
+                    onChange={changeFinance}
+                    saleValue={form.sale_value}
+                    saleDate={form.sale_date}
+                  />
+                )}
+              </>
+            )}
+            {finance.price_tier !== "atacado" && form.payment_method === "Crédito parcelado" && (
               <div className="installments-box">
                 <div className="field">
                   <label>Nº de parcelas</label>
@@ -233,16 +292,7 @@ function EditModal({
                     onChange={(e) => set("installments_count", e.target.value)}
                   />
                 </div>
-                {INSTALLMENT_DATES_METHODS.includes(form.payment_method) && (
-                  <div className="field">
-                    <label>Datas das parcelas</label>
-                    <input
-                      type="text"
-                      value={form.installments_dates}
-                      onChange={(e) => set("installments_dates", e.target.value)}
-                    />
-                  </div>
-                )}
+
               </div>
             )}
 
@@ -309,6 +359,14 @@ export default function RelatorioPage() {
   const [to, setTo] = useState("");
   const [seller, setSeller] = useState("");
   const [editing, setEditing] = useState<Sale | null>(null);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+
+  useEffect(() => {
+    fetch("/api/manufacturers")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setManufacturers(d.items || []))
+      .catch(() => setManufacturers([]));
+  }, []);
 
   useEffect(() => {
     fetch("/api/sales")
@@ -342,14 +400,24 @@ export default function RelatorioPage() {
     });
   }, [sales, from, to, seller]);
 
+  // Faturamento, custo e lucro contam só varejo e consignado. No atacado o cliente paga ao
+  // fabricante: o que é nosso é a comissão, mostrada à parte.
   const totals = useMemo(() => {
     let value = 0;
     let cost = 0;
+    let commission = 0;
+    let wholesaleCount = 0;
     for (const s of filtered) {
+      if (s.status === "cancelada") continue;
+      if (s.price_tier === "atacado") {
+        wholesaleCount += 1;
+        commission += commissionCents(s.sale_value ?? 0, s.commission_pct === null || s.commission_pct === undefined ? null : Number(s.commission_pct));
+        continue;
+      }
       value += Number(s.sale_value) || 0;
       cost += Number(s.cost) || 0;
     }
-    return { value, cost, profit: value - cost, count: filtered.length };
+    return { value, cost, profit: value - cost, count: filtered.length, commission, wholesaleCount };
   }, [filtered]);
 
   function handleSaved(updated: Sale) {
@@ -414,9 +482,16 @@ export default function RelatorioPage() {
               <div className="value">{formatBRL(totals.cost)}</div>
             </div>
             <div className="stat-tile gold">
-              <div className="label">Lucro</div>
+              <div className="label">Lucro (valor menos custo da peça)</div>
               <div className="value">{formatBRL(totals.profit)}</div>
             </div>
+            {totals.wholesaleCount > 0 && (
+              <div className="stat-tile">
+                <div className="label">Atacado: comissão prevista</div>
+                <div className="value">{formatCentsBRL(totals.commission)}</div>
+                <div className="stat-note">{`${totals.wholesaleCount} venda(s), fora do faturamento`}</div>
+              </div>
+            )}
           </div>
 
           <div className="toolbar">
@@ -455,6 +530,7 @@ export default function RelatorioPage() {
                   <tr>
                     <th>Data</th>
                     <th>Vendedora</th>
+                    <th>Tipo</th>
                     <th>Cliente</th>
                     <th>Peça</th>
                     <th>Pagamento</th>
@@ -466,14 +542,30 @@ export default function RelatorioPage() {
                 </thead>
                 <tbody>
                   {filtered.map((s) => {
-                    const profit = (Number(s.sale_value) || 0) - (Number(s.cost) || 0);
+                    const atacado = s.price_tier === "atacado";
+                    const profit = atacado
+                      ? commissionCents(s.sale_value ?? 0, s.commission_pct === null || s.commission_pct === undefined ? null : Number(s.commission_pct)) / 100
+                      : (Number(s.sale_value) || 0) - (Number(s.cost) || 0);
                     return (
                       <tr key={s.id}>
                         <td>{formatDateBR(s.sale_date)}</td>
                         <td>{s.seller || "-"}</td>
+                        <td>
+                          <span className={`stock-pill ${s.price_tier === "atacado" ? "low" : s.price_tier === "consignado" ? "out" : "ok"}`}>
+                            {PRICE_TIERS.find((t) => t.value === (s.price_tier ?? "varejo"))?.label}
+                          </span>
+                          {s.status === "cancelada" && <div className="hint">cancelada</div>}
+                        </td>
                         <td>{s.client_name || "-"}</td>
                         <td>{s.product_type || "-"}</td>
-                        <td>{s.payment_method || "-"}</td>
+                        <td>
+                          {s.payment_method || NAO_INFORMADA}
+                          {s.payments && s.payments.length > 0 && (
+                            <div className="hint">
+                              {`${s.payments.filter((p) => p.status === "recebida").length} de ${s.payments.length} parcelas recebidas`}
+                            </div>
+                          )}
+                        </td>
                         <td className="num">{formatBRL(s.cost)}</td>
                         <td className="num">{formatBRL(s.sale_value)}</td>
                         <td className={"num " + (profit >= 0 ? "profit-pos" : "profit-neg")}>
@@ -505,6 +597,7 @@ export default function RelatorioPage() {
       {editing && (
         <EditModal
           sale={editing}
+          manufacturers={manufacturers}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />

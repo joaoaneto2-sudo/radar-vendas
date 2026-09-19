@@ -330,7 +330,7 @@ export default function NovaVendaPage() {
                 value={form.product_id}
                 onChange={handleSelectProduct}
                 placeholder="Buscar produto..."
-                emptyText="Nenhum produto encontrado — cadastre em Cadastros"
+                emptyText="Nenhum produto encontrado. Cadastre em Cadastros"
               />
             </div>
             {selectedProduct && (

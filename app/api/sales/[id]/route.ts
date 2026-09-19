@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
+import { parseSaleFinance } from "@/lib/sale-finance";
+import { SALE_SELECT, savePayments } from "@/lib/sales-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,9 +50,15 @@ export async function PATCH(
       ? null
       : Number(body.installments_count);
 
+  const fin = parseSaleFinance(body);
+
+  const client = await db.connect();
   try {
     await ensureSchema();
-    const { rows } = await db.query(
+    await client.query("BEGIN");
+    // Tipo, custos e taxa que não vieram na chamada continuam como estão. Fabricante e data do
+    // estoque só mudam se a chave veio (mesmo vazia, para poder limpar).
+    const { rows } = await client.query(
       `UPDATE sales SET
         sale_date = $1,
         sale_type = $2,
@@ -68,9 +76,14 @@ export async function PATCH(
         client_nickname = $14,
         client_city = $15,
         client_phone = $16,
-        client_birthday = $17
+        client_birthday = $17,
+        price_tier = COALESCE($19, price_tier),
+        sale_costs = COALESCE($20, sale_costs),
+        payment_fee = COALESCE($21, payment_fee),
+        manufacturer_id = CASE WHEN $22::boolean THEN $23::int ELSE manufacturer_id END,
+        stock_received_date = CASE WHEN $24::boolean THEN $25::date ELSE stock_received_date END
       WHERE id = $18
-      RETURNING *`,
+      RETURNING id`,
       [
         body.sale_date,
         body.sale_type || null,
@@ -90,15 +103,30 @@ export async function PATCH(
         body.client_phone || null,
         body.client_birthday || null,
         id,
+        fin.priceTier,
+        fin.saleCosts,
+        fin.paymentFee,
+        fin.hasManufacturer,
+        fin.manufacturerId,
+        fin.hasStockDate,
+        fin.stockReceivedDate,
       ]
     );
     if (rows.length === 0) {
+      await client.query("ROLLBACK");
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
-    return NextResponse.json({ sale: rows[0] });
+    if (fin.payments !== null) await savePayments(client, id, fin.payments);
+    await client.query("COMMIT");
+
+    const { rows: completa } = await db.query(`${SALE_SELECT} WHERE s.id = $1`, [id]);
+    return NextResponse.json({ sale: completa[0] });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
     console.error(err);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
 
