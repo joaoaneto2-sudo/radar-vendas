@@ -1000,3 +1000,36 @@ tfoot td {
   border-top: 1px solid var(--border-strong);
   white-space: nowrap;
 }
+
+.fin-sub {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.fin-sub-note {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+td.status-accent {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+td.status-gold {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+td.status-danger {
+  color: var(--danger);
+  font-weight: 600;
+}

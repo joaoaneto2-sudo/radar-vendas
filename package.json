@@ -9,7 +9,8 @@
     "test": "vitest run tests/unit",
     "test:db": "vitest run tests/db",
     "test:all": "vitest run",
-    "seed:teste": "node --env-file=.env.local scripts/seed-test-briefing.mjs"
+    "seed:teste": "node --env-file=.env.local scripts/seed-test-briefing.mjs",
+    "seed:demo": "node --env-file=.env.local scripts/seed-test-briefing.mjs && node --env-file=.env.local scripts/seed-test-demo.mjs"
   },
   "dependencies": {
     "@vercel/blob": "0.27.0",

@@ -7,6 +7,7 @@ import { toCents } from "../lib/finance/money";
 export const SETTINGS_ACORDO: Settings = {
   retailPct: 30,
   wholesalePct: 0,
+  consignmentPct: 30,
   joaoSharePct: 50,
   initialStockCents: 1500000, // R$ 15.000
   mode: "venda",

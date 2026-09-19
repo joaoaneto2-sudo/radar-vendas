@@ -1,0 +1,86 @@
+// Acrescenta EXEMPLOS DE DEMONSTRAÇÃO ao banco de TESTE (atacado, consignado, despesa e fatura),
+// para você ver como o painel mostra cada regra. Todos os nomes começam com "DEMO" e os
+// valores são inventados. Não são dados reais.
+// Trava de segurança: só roda em banco local (localhost). Nunca toca o banco real.
+// Uso: npm run seed:demo   (já carrega o briefing antes)
+
+import pg from "pg";
+
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error("DATABASE_URL não encontrada. Use: npm run seed:demo");
+  process.exit(1);
+}
+const host = new URL(url).hostname;
+if (host !== "localhost" && host !== "127.0.0.1") {
+  console.error(`RECUSADO: este script só roda em banco local. Endereço encontrado: ${host}`);
+  process.exit(1);
+}
+
+const pool = new pg.Pool({ connectionString: url });
+const client = await pool.connect();
+
+try {
+  await client.query("BEGIN");
+
+  // Fabricante representado: 20% de comissão, paga 15 dias depois de receber o estoque.
+  const { rows: fab } = await client.query(
+    `INSERT INTO manufacturers (name, represented, commission_pct, commission_days)
+     VALUES ('Bia Belutti (DEMO)', true, 20, 15)
+     ON CONFLICT (name) DO UPDATE SET represented = true, commission_pct = 20, commission_days = 15
+     RETURNING id`
+  );
+  const fabId = fab[0].id;
+
+  // Atacado: o cliente paga direto ao fabricante; a sociedade recebe a comissão depois.
+  await client.query(
+    `INSERT INTO sales (sale_date, client_name, sale_value, price_tier, manufacturer_id, stock_received_date, payment_method) VALUES
+       ('2026-09-08', 'DEMO Revendedora Ana (estoque chegou 10/09)', 1500.00, 'atacado', $1, '2026-09-10', 'Pix direto ao fabricante'),
+       ('2026-09-01', 'DEMO Revendedora Bia (estoque chegou 03/09, atrasada)', 2000.00, 'atacado', $1, '2026-09-03', 'Pix direto ao fabricante'),
+       ('2026-09-02', 'DEMO Revendedora Carla (comissão já recebida)', 800.00, 'atacado', $1, '2026-09-04', 'Pix direto ao fabricante'),
+       ('2026-09-15', 'DEMO Revendedora Dani (estoque ainda não chegou)', 1200.00, 'atacado', $1, NULL, 'Pix direto ao fabricante')`,
+    [fabId]
+  );
+  // A comissão da Carla (20% de 800 = 160) já foi paga pelo fabricante em 19/09.
+  await client.query(
+    `INSERT INTO sale_payments (sale_id, due_date, amount, status, received_date)
+     SELECT id, '2026-09-19', 160.00, 'recebida', '2026-09-19' FROM sales WHERE client_name LIKE 'DEMO Revendedora Carla%'`
+  );
+
+  // Consignado: peça que saiu com uma revendedora e foi acertada como venda.
+  await client.query(
+    `INSERT INTO sales (sale_date, client_name, sale_value, price_tier, payment_method)
+     VALUES ('2026-09-14', 'DEMO Revendedora Lu (consignado)', 600.00, 'consignado', 'Não informada')`
+  );
+
+  // Despesa da empresa: sai do lucro antes da divisão.
+  await client.query(
+    `INSERT INTO expenses (expense_date, description, category, amount)
+     VALUES ('2026-09-12', 'DEMO Anúncios', 'Marketing', 150.00)`
+  );
+
+  // Fatura do cartão que vence em 30/09, dividida nas 4 partes (valores inventados).
+  const { rows: fat } = await client.query(
+    `INSERT INTO card_invoices (description, due_date, closing_date, total_amount, status)
+     VALUES ('DEMO Fatura do cartão da empresa (vence 30/09, valores inventados)', '2026-09-30', '2026-09-22', 12000.00, 'fechada')
+     RETURNING id`
+  );
+  await client.query(
+    `INSERT INTO card_invoice_parts (invoice_id, nature, amount, description) VALUES
+       ($1, 'pessoal_fernanda', 1500.00, 'DEMO compras pessoais'),
+       ($1, 'estoque_inicial', 6000.00, 'DEMO joias compradas antes de 01/09'),
+       ($1, 'reposicao', 4000.00, 'DEMO reposição depois de 01/09'),
+       ($1, 'despesa_empresa', 500.00, 'DEMO despesas da empresa')`,
+    [fat[0].id]
+  );
+
+  await client.query("COMMIT");
+  console.log("Exemplos de DEMONSTRAÇÃO carregados no banco de TESTE: atacado (4 vendas), consignado, despesa e fatura do cartão.");
+} catch (erro) {
+  await client.query("ROLLBACK").catch(() => undefined);
+  console.error("Falhou e nada foi alterado:", erro.message);
+  process.exitCode = 1;
+} finally {
+  client.release();
+  await pool.end();
+}

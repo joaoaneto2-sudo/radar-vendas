@@ -265,6 +265,84 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS login_attempts_ip_idx ON login_attempts (kind, ip, created_at)`,
     ],
   },
+  {
+    id: "006",
+    name: "consignado, atacado com comissao do fabricante, despesas e fatura do cartao",
+    statements: [
+      // Tipos de venda: varejo, atacado e consignado. Apaga qualquer regra antiga sobre
+      // price_tier (sem depender do nome que o banco deu a ela) e cria a nova.
+      `DO $$
+       DECLARE regra RECORD;
+       BEGIN
+         FOR regra IN
+           SELECT conname FROM pg_constraint
+            WHERE conrelid = 'sales'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) LIKE '%price_tier%'
+         LOOP
+           EXECUTE format('ALTER TABLE sales DROP CONSTRAINT %I', regra.conname);
+         END LOOP;
+       END $$`,
+      `ALTER TABLE sales ADD CONSTRAINT sales_price_tier_check
+         CHECK (price_tier IN ('varejo', 'atacado', 'consignado'))`,
+      `ALTER TABLE agreement_settings ADD COLUMN IF NOT EXISTS consignment_replenish_pct NUMERIC(5,2)
+         NOT NULL DEFAULT 30 CHECK (consignment_replenish_pct BETWEEN 0 AND 100)`,
+
+      // Fabricantes que a sociedade REPRESENTA: quanto fica com a gente (comissao) e em
+      // quantos dias depois de receber o estoque o fabricante paga essa comissao.
+      `ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS represented BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS commission_pct NUMERIC(5,2)
+         CHECK (commission_pct IS NULL OR commission_pct BETWEEN 0 AND 100)`,
+      `ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS commission_days INT NOT NULL DEFAULT 15
+         CHECK (commission_days >= 0)`,
+      `ALTER TABLE manufacturers ADD CONSTRAINT manufacturers_represented_needs_pct
+         CHECK (NOT represented OR commission_pct IS NOT NULL)`,
+
+      // Venda de atacado: de qual fabricante e quando recebemos o estoque dele.
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS manufacturer_id INT REFERENCES manufacturers(id) ON DELETE SET NULL`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS stock_received_date DATE`,
+      // A parcela (comissao) pode ficar sem data enquanto o estoque nao chega.
+      `ALTER TABLE sale_payments ALTER COLUMN due_date DROP NOT NULL`,
+
+      // Despesas da empresa: saem do lucro antes da divisao.
+      `CREATE TABLE IF NOT EXISTS expenses (
+        id SERIAL PRIMARY KEY,
+        expense_date DATE NOT NULL,
+        description TEXT NOT NULL,
+        category TEXT,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS expenses_date_idx ON expenses (expense_date)`,
+
+      // Fatura do cartao: o total e as partes em que ela se divide.
+      `CREATE TABLE IF NOT EXISTS card_invoices (
+        id SERIAL PRIMARY KEY,
+        description TEXT NOT NULL,
+        due_date DATE NOT NULL,
+        closing_date DATE,
+        total_amount NUMERIC(12,2) CHECK (total_amount IS NULL OR total_amount >= 0),
+        status TEXT NOT NULL DEFAULT 'aguardando_fechamento'
+          CHECK (status IN ('aguardando_fechamento', 'fechada', 'paga')),
+        paid_date DATE,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE TABLE IF NOT EXISTS card_invoice_parts (
+        id SERIAL PRIMARY KEY,
+        invoice_id INT NOT NULL REFERENCES card_invoices(id) ON DELETE CASCADE,
+        nature TEXT NOT NULL
+          CHECK (nature IN ('pessoal_fernanda', 'estoque_inicial', 'reposicao', 'despesa_empresa')),
+        description TEXT,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+        stock_purchase_id INT REFERENCES stock_purchases(id) ON DELETE SET NULL,
+        liability_id INT REFERENCES liabilities(id) ON DELETE SET NULL,
+        expense_id INT REFERENCES expenses(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS card_invoice_parts_invoice_idx ON card_invoice_parts (invoice_id)`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

@@ -21,15 +21,15 @@ const client = await pool.connect();
 
 try {
   const { rows: migracoes } = await client.query("SELECT count(*)::int AS n FROM schema_migrations").catch(() => ({ rows: [{ n: 0 }] }));
-  if (migracoes[0].n < 4) {
-    console.error("O banco de teste ainda não tem as tabelas do financeiro. Abra o radar uma vez (npm run dev) e tente de novo.");
+  if (migracoes[0].n < 6) {
+    console.error("O banco de teste ainda não está na versão mais nova. Abra o radar uma vez (npm run dev), entre em qualquer página que use o banco e tente de novo.");
     process.exit(1);
   }
 
   await client.query("BEGIN");
   // Limpa só os dados de negócio do banco de teste. Os usuários de login ficam.
   await client.query(
-    "TRUNCATE sales, joao_payments, stock_purchases, liabilities RESTART IDENTITY CASCADE"
+    "TRUNCATE sales, joao_payments, stock_purchases, liabilities, expenses, card_invoices RESTART IDENTITY CASCADE"
   );
 
   const vendas = [

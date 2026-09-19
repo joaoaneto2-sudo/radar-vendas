@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeCascade,
+  type ExpenseInput,
   type JoaoPaymentInput,
   type SaleInput,
   type Settings,
@@ -19,11 +20,26 @@ function venda(parcial: Partial<SaleInput> & { id: number; amountCents: number }
   };
 }
 
+// Venda de atacado da Bia Belutti: 20% de comissão, 15 dias depois do estoque.
+function atacado(parcial: Partial<SaleInput> & { id: number; amountCents: number }): SaleInput {
+  return venda({
+    tier: "atacado",
+    paymentMethod: null,
+    manufacturerId: 1,
+    manufacturerName: "Bia Belutti",
+    commissionPct: 20,
+    commissionDays: 15,
+    ...parcial,
+  });
+}
+
 const pagamentoJoao = (id: number, date: string, amountCents: number): JoaoPaymentInput => ({
   id,
   date,
   amountCents,
 });
+
+const despesa = (id: number, date: string, amountCents: number): ExpenseInput => ({ id, date, amountCents });
 
 const PAGAMENTO_INICIAL: JoaoPaymentInput[] = [pagamentoJoao(1, "2026-09-01", 100000)]; // R$ 1.000
 
@@ -35,6 +51,7 @@ describe("teste de aceitação do briefing (seção 6)", () => {
     expect(r.totals.replenishCents).toBe(ESPERADO.reposicao);
     expect(r.totals.costsCents).toBe(0);
     expect(r.totals.profitCents).toBe(ESPERADO.lucro);
+    expect(r.totals.distributableCents).toBe(ESPERADO.lucro);
     expect(r.totals.abatedCents).toBe(ESPERADO.abatido);
     expect(r.debt.totalCents).toBe(750000);
     expect(r.debt.paidDirectCents).toBe(100000);
@@ -42,7 +59,7 @@ describe("teste de aceitação do briefing (seção 6)", () => {
     expect(r.debt.paidFraction).toBeCloseTo(0.4268, 4); // 42,7% quitado
     expect(r.totals.fernandaReceivesCents).toBe(ESPERADO.fernandaRecebe);
     expect(r.totals.joaoReceivesCents).toBe(ESPERADO.joaoRecebe);
-    expect(r.check.fernandaPlusJoaoEqualsProfit).toBe(true);
+    expect(r.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
   });
 
   it("modo 'recebimento' com vendas sem parcelas dá os mesmos números (contam como recebidas na data da venda)", () => {
@@ -131,21 +148,6 @@ describe("dívida do João", () => {
 });
 
 describe("regras de cada venda", () => {
-  it("atacado usa o percentual de reposição do atacado (0% por padrão)", () => {
-    const r = computeCascade(SETTINGS_ACORDO, [venda({ id: 1, amountCents: 100000, tier: "atacado" })], []);
-    expect(r.events[0].replenishCents).toBe(0);
-    expect(r.events[0].profitCents).toBe(100000);
-  });
-
-  it("o percentual do atacado é configurável", () => {
-    const r = computeCascade(
-      { ...SETTINGS_ACORDO, wholesalePct: 10 },
-      [venda({ id: 1, amountCents: 100000, tier: "atacado" })],
-      []
-    );
-    expect(r.events[0].replenishCents).toBe(10000);
-  });
-
   it("custos da venda saem do lucro, não da reposição", () => {
     const r = computeCascade(SETTINGS_ACORDO, [venda({ id: 1, amountCents: 10000, costsCents: 1000 })], []);
     expect(r.events[0].replenishCents).toBe(3000);
@@ -168,16 +170,6 @@ describe("regras de cada venda", () => {
     expect(r.warnings.find((w) => w.code === "venda_sem_valor")?.saleIds).toEqual([1]);
   });
 
-  it("prejuízo (custos maiores que o lucro) é dividido igualmente e não abate a dívida", () => {
-    const r = computeCascade(SETTINGS_ACORDO, [venda({ id: 1, amountCents: 100000, costsCents: 80000 })], []);
-    const e = r.events[0];
-    expect(e.profitCents).toBe(-10000);
-    expect(e.joaoShareCents).toBe(-5000);
-    expect(e.fernandaShareCents).toBe(-5000);
-    expect(e.abatementCents).toBe(0);
-    expect(r.check.fernandaPlusJoaoEqualsProfit).toBe(true);
-  });
-
   it("a ordem dos eventos é sempre a do tempo, mesmo com a lista embaralhada", () => {
     const r = computeCascade(
       SETTINGS_ACORDO,
@@ -189,6 +181,238 @@ describe("regras de cada venda", () => {
       []
     );
     expect(r.events.map((e) => e.saleId)).toEqual([9, 2, 5]);
+  });
+});
+
+describe("consignado", () => {
+  it("usa a reposição própria do consignado (30% por padrão, igual ao varejo)", () => {
+    const r = computeCascade(SETTINGS_ACORDO, [venda({ id: 1, amountCents: 100000, tier: "consignado" })], []);
+    expect(r.events[0].tier).toBe("consignado");
+    expect(r.events[0].replenishCents).toBe(30000);
+    expect(r.totals.soldCents).toBe(100000); // conta como venda
+  });
+
+  it("o percentual do consignado é configurável, separado do varejo", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, consignmentPct: 20 },
+      [
+        venda({ id: 1, amountCents: 100000, tier: "consignado" }),
+        venda({ id: 2, amountCents: 100000, tier: "varejo" }),
+      ],
+      []
+    );
+    expect(r.events.find((e) => e.saleId === 1)!.replenishCents).toBe(20000);
+    expect(r.events.find((e) => e.saleId === 2)!.replenishCents).toBe(30000);
+  });
+});
+
+describe("atacado: a receita é a comissão do fabricante", () => {
+  it("modo 'venda': entra só a comissão (20%), sem reposição, e o valor cheio não conta como vendido", () => {
+    const r = computeCascade(SETTINGS_ACORDO, [atacado({ id: 1, amountCents: 100000 })], []);
+    const e = r.events[0];
+    expect(e.baseCents).toBe(20000);
+    expect(e.replenishCents).toBe(0);
+    expect(e.profitCents).toBe(20000);
+    expect(e.joaoShareCents).toBe(10000);
+    expect(e.abatementCents).toBe(10000); // enquanto o João deve, a parte dele abate a dívida
+    expect(r.totals.soldCents).toBe(0);
+    expect(r.totals.wholesaleCommissionCountedCents).toBe(20000);
+  });
+
+  it("a reposição sobre a comissão é configurável (0% por padrão)", () => {
+    const r = computeCascade({ ...SETTINGS_ACORDO, wholesalePct: 10 }, [atacado({ id: 1, amountCents: 100000 })], []);
+    expect(r.events[0].replenishCents).toBe(2000);
+    expect(r.events[0].profitCents).toBe(18000);
+  });
+
+  it("custos da venda saem da comissão", () => {
+    const r = computeCascade(SETTINGS_ACORDO, [atacado({ id: 1, amountCents: 100000, costsCents: 1000 })], []);
+    expect(r.events[0].profitCents).toBe(19000);
+  });
+
+  it("modo 'recebimento': enquanto o fabricante não paga, a comissão não conta", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, mode: "recebimento" },
+      [atacado({ id: 1, amountCents: 100000, stockReceivedDate: "2026-09-14" })],
+      []
+    );
+    expect(r.events).toHaveLength(0);
+    expect(r.totals.profitCents).toBe(0);
+    expect(r.totals.soldCents).toBe(0);
+  });
+
+  it("modo 'recebimento': a comissão entra na data em que o fabricante pagou", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, mode: "recebimento" },
+      [
+        atacado({
+          id: 1,
+          amountCents: 100000,
+          date: "2026-09-12",
+          stockReceivedDate: "2026-09-14",
+          payments: [
+            { id: 7, dueDate: "2026-09-29", amountCents: 20000, status: "recebida", receivedDate: "2026-09-30" },
+          ],
+        }),
+      ],
+      []
+    );
+    expect(r.events).toHaveLength(1);
+    expect(r.events[0]).toMatchObject({ kind: "parcela", tier: "atacado", date: "2026-09-30", baseCents: 20000 });
+    expect(r.totals.wholesaleCommissionCountedCents).toBe(20000);
+  });
+
+  it("parcela de comissão ainda prevista (sem data) não conta e não dá erro", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, mode: "recebimento" },
+      [
+        atacado({
+          id: 1,
+          amountCents: 100000,
+          payments: [{ id: 7, dueDate: null, amountCents: 20000, status: "prevista", receivedDate: null }],
+        }),
+      ],
+      []
+    );
+    expect(r.events).toHaveLength(0);
+    expect(r.warnings.some((w) => w.code === "parcelas_diferem_da_venda")).toBe(false);
+  });
+
+  it("avisa se as parcelas de comissão não somam a comissão", () => {
+    const r = computeCascade(
+      { ...SETTINGS_ACORDO, mode: "recebimento" },
+      [
+        atacado({
+          id: 3,
+          amountCents: 100000,
+          payments: [{ id: 7, dueDate: "2026-09-29", amountCents: 15000, status: "prevista", receivedDate: null }],
+        }),
+      ],
+      []
+    );
+    expect(r.warnings.find((w) => w.code === "parcelas_diferem_da_venda")?.saleIds).toEqual([3]);
+  });
+
+  it("atacado sem fabricante representado fica fora das contas e avisa", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [atacado({ id: 4, amountCents: 100000, commissionPct: null, manufacturerId: null })],
+      []
+    );
+    expect(r.events).toHaveLength(0);
+    expect(r.totals.profitCents).toBe(0);
+    expect(r.warnings.find((w) => w.code === "atacado_sem_fabricante_representado")?.saleIds).toEqual([4]);
+  });
+
+  it("atacado e varejo juntos: 'total vendido' só conta o varejo", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [venda({ id: 1, amountCents: 100000 }), atacado({ id: 2, amountCents: 500000 })],
+      []
+    );
+    expect(r.totals.soldCents).toBe(100000);
+    expect(r.totals.profitCents).toBe(70000 + 100000); // varejo 700 + comissão de 20% sobre 5.000
+  });
+});
+
+describe("despesas da empresa: saem antes da divisão", () => {
+  it("a despesa lançada antes é descontada do lucro da próxima venda", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [venda({ id: 1, amountCents: 100000, date: "2026-09-02" })],
+      [],
+      [despesa(1, "2026-09-01", 10000)]
+    );
+    const [d, v] = r.events;
+    expect(d).toMatchObject({ kind: "despesa", expenseCents: 10000, carryAfterCents: 10000, distributableCents: 0 });
+    expect(v.profitCents).toBe(70000);
+    expect(v.compensatedCents).toBe(10000);
+    expect(v.distributableCents).toBe(60000);
+    expect(v.joaoShareCents).toBe(30000);
+    expect(v.carryAfterCents).toBe(0);
+  });
+
+  it("se um lucro não cobre a despesa, o resto vai sendo descontado dos próximos", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [
+        venda({ id: 1, amountCents: 100000, date: "2026-09-02" }),
+        venda({ id: 2, amountCents: 100000, date: "2026-09-03" }),
+      ],
+      [],
+      [despesa(1, "2026-09-01", 100000)]
+    );
+    const [, v1, v2] = r.events;
+    expect(v1.compensatedCents).toBe(70000);
+    expect(v1.distributableCents).toBe(0);
+    expect(v1.carryAfterCents).toBe(30000);
+    expect(v2.compensatedCents).toBe(30000);
+    expect(v2.distributableCents).toBe(40000);
+    expect(v2.carryAfterCents).toBe(0);
+    expect(r.totals.carryCents).toBe(0);
+  });
+
+  it("despesa depois de lucros já divididos não desfaz o passado: fica a compensar", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [venda({ id: 1, amountCents: 100000, date: "2026-09-01" })],
+      [],
+      [despesa(1, "2026-09-05", 10000)]
+    );
+    expect(r.events[0].distributableCents).toBe(70000);
+    expect(r.totals.expensesCents).toBe(10000);
+    expect(r.totals.carryCents).toBe(10000);
+    expect(r.totals.distributableCents).toBe(70000);
+  });
+
+  it("despesa e venda no mesmo dia: a despesa desconta da venda daquele dia", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [venda({ id: 1, amountCents: 100000, date: "2026-09-01" })],
+      [],
+      [despesa(1, "2026-09-01", 10000)]
+    );
+    expect(r.events.map((e) => e.kind)).toEqual(["despesa", "venda"]);
+    expect(r.events[1].distributableCents).toBe(60000);
+  });
+
+  it("prejuízo de uma venda (custos maiores que o lucro) também vira compensação", () => {
+    const r = computeCascade(
+      SETTINGS_ACORDO,
+      [
+        venda({ id: 1, amountCents: 100000, costsCents: 80000, date: "2026-09-01" }),
+        venda({ id: 2, amountCents: 100000, date: "2026-09-02" }),
+      ],
+      []
+    );
+    const [e1, e2] = r.events;
+    expect(e1.profitCents).toBe(-10000);
+    expect(e1.lossCarriedCents).toBe(10000);
+    expect(e1.distributableCents).toBe(0);
+    expect(e1.joaoShareCents).toBe(0);
+    expect(e1.abatementCents).toBe(0);
+    expect(e2.compensatedCents).toBe(10000);
+    expect(e2.distributableCents).toBe(60000);
+  });
+
+  it("despesa zerada ou negativa é ignorada", () => {
+    const r = computeCascade(SETTINGS_ACORDO, [], [], [despesa(1, "2026-09-01", 0), despesa(2, "2026-09-01", -5)]);
+    expect(r.events).toHaveLength(0);
+  });
+
+  it("com uma despesa de R$ 100 em 05/09, o briefing muda só o que deve mudar", () => {
+    const r = computeCascade(SETTINGS_ACORDO, vendasDoBriefing(), PAGAMENTO_INICIAL, [despesa(1, "2026-09-05", 10000)]);
+
+    expect(r.totals.soldCents).toBe(ESPERADO.vendido);
+    expect(r.totals.profitCents).toBe(ESPERADO.lucro); // lucro das vendas, antes da despesa
+    expect(r.totals.expensesCents).toBe(10000);
+    expect(r.totals.compensatedCents).toBe(10000); // descontada da venda da Elizabete (06/09)
+    expect(r.totals.carryCents).toBe(0);
+    expect(r.totals.distributableCents).toBe(ESPERADO.lucro - 10000); // 4.301,57
+    expect(r.totals.abatedCents).toBe(ESPERADO.abatido - 5000); // o João abate R$ 50 a menos
+    expect(r.debt.balanceCents).toBe(ESPERADO.saldoDevedor + 5000);
+    expect(r.totals.fernandaReceivesCents).toBe(ESPERADO.lucro - 10000);
+    expect(r.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
   });
 });
 
@@ -243,7 +467,7 @@ describe("modo 'recebimento' com parcelas", () => {
     const r = computeCascade(acordoRecebimento, [v], []);
     expect(r.events.map((e) => e.costsCents)).toEqual([334, 334, 333]);
     expect(r.totals.costsCents).toBe(1001);
-    expect(r.check.fernandaPlusJoaoEqualsProfit).toBe(true);
+    expect(r.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
   });
 
   it("avisa quando as parcelas não somam o valor da venda", () => {
@@ -278,13 +502,14 @@ describe("propriedades (cenários aleatórios, sempre os mesmos)", () => {
     };
   }
 
-  it("Fernanda + João sempre igual ao lucro; dívida nunca negativa; abatimento nunca passa da dívida", () => {
+  it("as contas sempre fecham, em qualquer combinação de vendas, atacado, consignado, despesas e pagamentos", () => {
     const rnd = sorteio(2026);
-    for (let cenario = 0; cenario < 300; cenario++) {
+    for (let cenario = 0; cenario < 400; cenario++) {
       const modo = rnd() < 0.5 ? "venda" : "recebimento";
       const acordo: Settings = {
         retailPct: Math.round(rnd() * 5000) / 100,
         wholesalePct: Math.round(rnd() * 3000) / 100,
+        consignmentPct: Math.round(rnd() * 5000) / 100,
         joaoSharePct: Math.round(rnd() * 10000) / 100,
         initialStockCents: Math.round(rnd() * 3000000),
         mode: modo,
@@ -310,30 +535,48 @@ describe("propriedades (cenários aleatórios, sempre os mesmos)", () => {
             receivedDate: recebida ? `2026-10-${String(1 + Math.floor(rnd() * 28)).padStart(2, "0")}` : null,
           });
         }
+        const sorteioTipo = rnd();
         vendas.push({
           id: i,
           date: `2026-09-${String(dia).padStart(2, "0")}`,
           amountCents: valor,
           costsCents: custos,
-          tier: rnd() < 0.7 ? "varejo" : "atacado",
+          tier: sorteioTipo < 0.55 ? "varejo" : sorteioTipo < 0.75 ? "consignado" : "atacado",
           status: rnd() < 0.9 ? "ativa" : "cancelada",
           paymentMethod: null,
           payments: pagamentos,
+          commissionPct: rnd() < 0.8 ? Math.round(rnd() * 3000) / 100 : null,
         });
       }
       const pagJoao: JoaoPaymentInput[] = [];
       if (rnd() < 0.6) pagJoao.push(pagamentoJoao(1, "2026-09-05", Math.floor(rnd() * 800000) + 1));
+      const despesas: ExpenseInput[] = [];
+      const nDespesas = Math.floor(rnd() * 4);
+      for (let d = 1; d <= nDespesas; d++) {
+        despesas.push(despesa(d, `2026-09-${String(1 + Math.floor(rnd() * 28)).padStart(2, "0")}`, 1 + Math.floor(rnd() * 200000)));
+      }
 
-      const r = computeCascade(acordo, vendas, pagJoao);
+      const r = computeCascade(acordo, vendas, pagJoao, despesas);
 
-      expect(r.check.fernandaPlusJoaoEqualsProfit).toBe(true);
+      expect(r.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
       expect(r.debt.balanceCents).toBeGreaterThanOrEqual(0);
       expect(r.totals.abatedCents).toBeLessThanOrEqual(r.debt.totalCents);
+      expect(r.totals.carryCents).toBeGreaterThanOrEqual(0);
+
+      // O que sobra a compensar = despesas + prejuízos - o que já foi compensado.
+      const prejuizos = r.events.reduce((s, e) => s + e.lossCarriedCents, 0);
+      expect(r.totals.carryCents).toBe(r.totals.expensesCents + prejuizos - r.totals.compensatedCents);
+
       for (const e of r.events) {
         expect(e.abatementCents).toBeGreaterThanOrEqual(0);
         expect(e.debtAfterCents).toBeGreaterThanOrEqual(0);
-        expect(e.joaoShareCents + e.fernandaShareCents).toBe(e.profitCents);
-        expect(e.joaoReceivesCents + e.fernandaReceivesCents).toBe(e.profitCents);
+        expect(e.distributableCents).toBeGreaterThanOrEqual(0);
+        expect(e.carryAfterCents).toBeGreaterThanOrEqual(0);
+        expect(e.joaoShareCents + e.fernandaShareCents).toBe(e.distributableCents);
+        expect(e.joaoReceivesCents + e.fernandaReceivesCents).toBe(e.distributableCents);
+        if (e.kind !== "despesa") {
+          expect(e.distributableCents).toBe(Math.max(0, e.profitCents) - e.compensatedCents);
+        }
       }
     }
   });

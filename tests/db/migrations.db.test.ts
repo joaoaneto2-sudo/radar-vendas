@@ -41,7 +41,8 @@ describe.skipIf(!disponivel)("migrações do banco", () => {
       "sales", "clients", "products", "manufacturers", "suppliers", "sellers",
       "agreement_settings", "sale_payments", "consignments", "consignment_items",
       "stock_purchases", "fund_payments", "liabilities", "liability_payments",
-      "joao_payments", "users", "login_attempts", "schema_migrations",
+      "joao_payments", "users", "login_attempts", "expenses", "card_invoices",
+      "card_invoice_parts", "schema_migrations",
     ]) {
       expect(tabelas).toContain(esperada);
     }
@@ -57,6 +58,7 @@ describe.skipIf(!disponivel)("migrações do banco", () => {
     expect(Number(rows[0].wholesale_replenish_pct)).toBe(0);
     expect(Number(rows[0].joao_share_pct)).toBe(50);
     expect(Number(rows[0].initial_stock_value)).toBe(15000);
+    expect(Number(rows[0].consignment_replenish_pct)).toBe(30);
     expect(rows[0].cascade_mode).toBe("recebimento");
   });
 
@@ -85,6 +87,14 @@ describe.skipIf(!disponivel)("migrações do banco", () => {
     expect(rows[0].status).toBe("ativa");
     expect(rows[0].sale_costs).toBe("0.00");
     expect(rows[0].payment_fee).toBe("0.00");
+
+    // A regra antiga de tipos (só varejo e atacado) foi trocada pela nova, com consignado.
+    await expect(
+      pool.query(`INSERT INTO sales (sale_date, price_tier) VALUES ('2026-09-02', 'consignado')`)
+    ).resolves.toBeDefined();
+    await expect(
+      pool.query(`INSERT INTO sales (sale_date, price_tier) VALUES ('2026-09-02', 'outro')`)
+    ).rejects.toThrow();
   });
 
   it("duas cópias do site ligando ao mesmo tempo não brigam", async () => {
@@ -138,6 +148,57 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     await expect(
       pool.query(`INSERT INTO consignment_items (consignment_id, quantity) VALUES (1, 0)`)
     ).rejects.toThrow();
+  });
+
+  it("fabricante representado precisa ter a comissão; percentual entre 0 e 100", async () => {
+    const pool = await bancoPronto();
+    await expect(
+      pool.query(`INSERT INTO manufacturers (name, represented) VALUES ('Sem comissao', true)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO manufacturers (name, represented, commission_pct) VALUES ('Muito', true, 101)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(
+        `INSERT INTO manufacturers (name, represented, commission_pct, commission_days)
+         VALUES ('Bia Belutti', true, 20, 15)`
+      )
+    ).resolves.toBeDefined();
+    // Fabricante que não é representado não precisa de comissão.
+    await expect(pool.query(`INSERT INTO manufacturers (name) VALUES ('Outro fabricante')`)).resolves.toBeDefined();
+    const { rows } = await pool.query(`SELECT commission_days FROM manufacturers WHERE name = 'Outro fabricante'`);
+    expect(rows[0].commission_days).toBe(15); // prazo padrão
+  });
+
+  it("parcela pode ficar sem data enquanto o estoque do fabricante não chega", async () => {
+    const pool = await bancoPronto();
+    await expect(
+      pool.query(`INSERT INTO sale_payments (sale_id, due_date, amount) VALUES (1, NULL, 20)`)
+    ).resolves.toBeDefined();
+  });
+
+  it("despesa precisa de valor maior que zero", async () => {
+    const pool = await bancoPronto();
+    await expect(
+      pool.query(`INSERT INTO expenses (expense_date, description, amount) VALUES ('2026-09-05', 'Anúncios', 0)`)
+    ).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO expenses (expense_date, description, amount) VALUES ('2026-09-05', 'Anúncios', 100)`)
+    ).resolves.toBeDefined();
+  });
+
+  it("fatura do cartão: só as 4 naturezas valem, e apagar a fatura leva as partes", async () => {
+    const pool = await bancoPronto();
+    await pool.query(`INSERT INTO card_invoices (description, due_date) VALUES ('Fatura 30/09', '2026-09-30')`);
+    await expect(
+      pool.query(`INSERT INTO card_invoice_parts (invoice_id, nature, amount) VALUES (1, 'outra', 10)`)
+    ).rejects.toThrow();
+    for (const natureza of ["pessoal_fernanda", "estoque_inicial", "reposicao", "despesa_empresa"]) {
+      await pool.query(`INSERT INTO card_invoice_parts (invoice_id, nature, amount) VALUES (1, $1, 10)`, [natureza]);
+    }
+    await pool.query(`DELETE FROM card_invoices WHERE id = 1`);
+    const { rows } = await pool.query("SELECT count(*)::int AS n FROM card_invoice_parts");
+    expect(rows[0].n).toBe(0);
   });
 
   it("só pode existir uma linha de parâmetros do acordo", async () => {

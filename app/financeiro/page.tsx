@@ -1,6 +1,7 @@
 import { getPool, ensureSchema } from "@/lib/db";
 import { loadFinanceInputs, summarize } from "@/lib/finance/load";
 import { formatCentsBRL } from "@/lib/finance/money";
+import type { WholesaleStatus } from "@/lib/finance/wholesale";
 import { formatDateBR } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,20 @@ function Bloco({ titulo, ajuda, children }: { titulo: string; ajuda?: string; ch
 const reais = formatCentsBRL;
 const tomDoSaldo = (centavos: number): Tom | undefined => (centavos < 0 ? "danger" : undefined);
 
+const SITUACAO: Record<WholesaleStatus, { texto: string; tom?: Tom }> = {
+  aguardando_estoque: { texto: "Aguardando o estoque", tom: "gold" },
+  prevista: { texto: "Prevista" },
+  atrasada: { texto: "Atrasada", tom: "danger" },
+  recebida: { texto: "Recebida", tom: "accent" },
+};
+
+const NATUREZA: Record<string, string> = {
+  pessoal_fernanda: "Pessoal da Fernanda",
+  estoque_inicial: "Estoque inicial",
+  reposicao: "Reposição (depois de 01/09)",
+  despesa_empresa: "Despesa da empresa",
+};
+
 export default async function FinanceiroPage({ searchParams }: { searchParams: { modo?: string } }) {
   const db = getPool();
   if (!db) {
@@ -52,10 +67,24 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
       ? searchParams.modo
       : entradas.settings.mode;
   const resumo = summarize({ ...entradas, settings: { ...entradas.settings, mode: modo } });
-  const { cascade, fund, liabilities } = resumo;
+  const { cascade, fund, liabilities, wholesale, invoices } = resumo;
   const vendaPorId = new Map(entradas.sales.map((v) => [v.id, v]));
+  const despesaPorId = new Map(entradas.expenses.map((d) => [d.id, d]));
   const porcentagemQuitada = (cascade.debt.paidFraction * 100).toFixed(1).replace(".", ",");
-  const tudoBate = cascade.check.fernandaPlusJoaoEqualsProfit;
+  const tudoBate = cascade.check.fernandaPlusJoaoEqualsDistributable;
+  const totalDaParteDoJoao = cascade.events.reduce((s, e) => s + e.joaoShareCents, 0);
+
+  function origem(e: (typeof cascade.events)[number]) {
+    if (e.kind === "despesa") {
+      const d = despesaPorId.get(e.expenseId ?? 0);
+      return { titulo: `Despesa: ${d?.description || "da empresa"}`, dica: "sai do lucro antes da divisão" };
+    }
+    const v = vendaPorId.get(e.saleId);
+    const nome = v?.label || `Venda ${e.saleId}`;
+    if (e.tier === "atacado") return { titulo: nome, dica: `atacado, comissão de ${v?.manufacturerName ?? "fabricante"}` };
+    if (e.tier === "consignado") return { titulo: nome, dica: "consignado" };
+    return { titulo: nome, dica: e.implicit ? "sem forma de pagamento informada" : undefined };
+  }
 
   return (
     <main className="shell shell--wide">
@@ -63,8 +92,8 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
         <p className="eyebrow">Financeiro</p>
         <h1>Painel financeiro</h1>
         <p>
-          Vendas, fundo de reposição, dívida do estoque inicial, quanto cada sócio recebeu e o passivo da
-          empresa. Cada número abaixo pode ser conferido na tabela do final.
+          Vendas, atacado, fundo de reposição, dívida do estoque inicial, quanto cada sócio recebeu, passivo e
+          faturas do cartão. Cada número pode ser conferido na tabela do final.
         </p>
       </div>
 
@@ -94,7 +123,7 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
         </div>
       )}
 
-      <Bloco titulo="Vendas">
+      <Bloco titulo="Vendas (varejo e consignado)">
         <div className="stat-grid auto">
           <Tile label="Total vendido" value={reais(cascade.totals.soldCents)} tom="accent" />
           <Tile
@@ -104,8 +133,81 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
           />
           <Tile label="Reposição separada (fundo)" value={reais(cascade.totals.replenishCents)} nota="30% do varejo" />
           <Tile label="Custos das vendas" value={reais(cascade.totals.costsCents)} />
-          <Tile label="Lucro líquido a dividir" value={reais(cascade.totals.profitCents)} tom="gold" nota="Venda menos reposição menos custos" />
+          <Tile label="Lucro das vendas" value={reais(cascade.totals.profitCents)} tom="gold" nota="Venda menos reposição menos custos" />
+          <Tile label="Despesas da empresa" value={reais(cascade.totals.expensesCents)} nota="Saem do lucro antes da divisão" />
+          {cascade.totals.carryCents > 0 && (
+            <Tile
+              label="Despesas ainda a compensar"
+              value={reais(cascade.totals.carryCents)}
+              tom="danger"
+              nota="Serão descontadas dos próximos lucros"
+            />
+          )}
+          <Tile label="Lucro dividido entre os sócios" value={reais(cascade.totals.distributableCents)} tom="accent" />
         </div>
+      </Bloco>
+
+      <Bloco
+        titulo="Atacado (comissão dos fabricantes que representamos)"
+        ajuda="No atacado o cliente paga direto ao fabricante. A receita da sociedade é a comissão, que o fabricante paga depois de receber o estoque, no prazo dele. A comissão só entra na divisão do lucro quando é recebida."
+      >
+        {wholesale.manufacturers.length === 0 ? (
+          <div className="empty-state">Ainda não há vendas de atacado com fabricante representado.</div>
+        ) : (
+          <>
+            <div className="stat-grid auto">
+              <Tile label="Volume vendido no atacado" value={reais(wholesale.grossCents)} nota="Pago direto ao fabricante" />
+              <Tile label="Comissão total" value={reais(wholesale.commissionCents)} tom="accent" />
+              <Tile label="Comissão já recebida" value={reais(wholesale.receivedCents)} />
+              <Tile label="Comissão a receber" value={reais(wholesale.pendingCents)} tom="gold" />
+              {wholesale.overdueCents > 0 && (
+                <Tile label="Comissão atrasada" value={reais(wholesale.overdueCents)} tom="danger" />
+              )}
+            </div>
+            {wholesale.manufacturers.map((f) => (
+              <div key={f.manufacturerId ?? f.name} style={{ marginTop: 20 }}>
+                <h3 className="fin-sub">
+                  {f.name}
+                  <span className="fin-sub-note">
+                    {`${String(f.commissionPct).replace(".", ",")}% de comissão, paga ${f.commissionDays} dias depois de receber o estoque`}
+                  </span>
+                </h3>
+                <div className="table-wrap">
+                  <table style={{ minWidth: 900 }}>
+                    <thead>
+                      <tr>
+                        <th>Data</th>
+                        <th>Cliente</th>
+                        <th>Valor da venda</th>
+                        <th>Comissão</th>
+                        <th>Recebida</th>
+                        <th>Estoque recebido em</th>
+                        <th>Comissão prevista para</th>
+                        <th>Situação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {f.items.map((item) => (
+                        <tr key={item.saleId}>
+                          <td>{formatDateBR(item.date)}</td>
+                          <td>{item.label || `Venda ${item.saleId}`}</td>
+                          <td className="num">{reais(item.grossCents)}</td>
+                          <td className="num">{reais(item.commissionCents)}</td>
+                          <td className="num">{reais(item.receivedCents)}</td>
+                          <td>{item.stockReceivedDate ? formatDateBR(item.stockReceivedDate) : "-"}</td>
+                          <td>{item.dueDate ? formatDateBR(item.dueDate) : "-"}</td>
+                          <td className={SITUACAO[item.status].tom ? `status-${SITUACAO[item.status].tom}` : undefined}>
+                            {SITUACAO[item.status].texto}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </Bloco>
 
       <Bloco titulo="Fundo de reposição" ajuda="O dinheiro da reposição fica separado para pagar as compras novas de estoque.">
@@ -141,12 +243,12 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
         </div>
       </Bloco>
 
-      <Bloco titulo="Quanto cada um recebeu das vendas" ajuda="A Fernanda usa o que recebe para pagar o passivo da empresa.">
+      <Bloco titulo="Quanto cada um recebeu" ajuda="A Fernanda usa o que recebe para pagar o passivo da empresa.">
         <div className="stat-grid auto">
           <Tile label="Fernanda (a metade dela mais o repasse do João)" value={reais(cascade.totals.fernandaReceivesCents)} tom="accent" />
           <Tile label="João (depois de quitar a dívida)" value={reais(cascade.totals.joaoReceivesCents)} />
           <Tile
-            label="Conferência: soma igual ao lucro líquido"
+            label="Conferência: soma igual ao lucro dividido"
             value={tudoBate ? "OK" : "DIFERENÇA"}
             tom={tudoBate ? "accent" : "danger"}
           />
@@ -161,6 +263,36 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
         </div>
       </Bloco>
 
+      {invoices.length > 0 && (
+        <Bloco
+          titulo="Faturas do cartão"
+          ajuda="Cada fatura se divide em partes: o pessoal da Fernanda e o estoque inicial ela paga com o dinheiro dela, a reposição é paga pelo fundo, e a despesa da empresa sai do lucro. As partes precisam somar o total."
+        >
+          {invoices.map((f) => (
+            <div key={f.invoiceId} style={{ marginBottom: 18 }}>
+              <h3 className="fin-sub">
+                {f.description}
+                <span className="fin-sub-note">
+                  vence em {formatDateBR(f.dueDate)}
+                  {f.totalCents === null ? ", aguardando o fechamento" : `, total ${reais(f.totalCents)}`}
+                </span>
+              </h3>
+              <div className="stat-grid auto">
+                <Tile label={NATUREZA.pessoal_fernanda} value={reais(f.byNature.pessoal_fernanda)} nota="Fernanda paga, fora da empresa" />
+                <Tile label={NATUREZA.estoque_inicial} value={reais(f.byNature.estoque_inicial)} nota="Fernanda paga, é o passivo dela" />
+                <Tile label={NATUREZA.reposicao} value={reais(f.byNature.reposicao)} nota="Pago pelo fundo de reposição" />
+                <Tile label={NATUREZA.despesa_empresa} value={reais(f.byNature.despesa_empresa)} nota="Sai do lucro antes da divisão" />
+                <Tile
+                  label="Conferência com o total"
+                  value={f.totalCents === null ? "Sem total" : f.closes ? "Fecha" : `Diferença ${reais(f.differenceCents ?? 0)}`}
+                  tom={f.closes ? "accent" : "danger"}
+                />
+              </div>
+            </div>
+          ))}
+        </Bloco>
+      )}
+
       <Bloco titulo="Estoque comprado (a custo de compra)" ajuda="Por enquanto em valor. O estoque por peça, com baixa automática, vem numa etapa seguinte.">
         <div className="stat-grid auto">
           <Tile label="Estoque inicial" value={reais(fund.initialStockCents)} />
@@ -169,20 +301,22 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
         </div>
       </Bloco>
 
-      <Bloco titulo="De onde vem cada número" ajuda="Cada linha é uma venda (ou uma parcela recebida) e mostra como ela foi dividida.">
+      <Bloco titulo="De onde vem cada número" ajuda="Cada linha é uma venda, uma parcela recebida ou uma despesa, e mostra como foi dividida.">
         {cascade.events.length === 0 ? (
           <div className="empty-state">Ainda não há vendas contadas.</div>
         ) : (
           <div className="table-wrap">
-            <table style={{ minWidth: 1100 }}>
+            <table style={{ minWidth: 1250 }}>
               <thead>
                 <tr>
                   <th>Entrou em</th>
-                  <th>Venda</th>
-                  <th>Valor</th>
+                  <th>Origem</th>
+                  <th>Valor que entrou</th>
                   <th>Reposição</th>
                   <th>Custos</th>
                   <th>Lucro</th>
+                  <th>Descontado (despesas)</th>
+                  <th>Dividido</th>
                   <th>Parte do João</th>
                   <th>Abatido da dívida</th>
                   <th>Fernanda recebe</th>
@@ -192,18 +326,20 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
               </thead>
               <tbody>
                 {cascade.events.map((e) => {
-                  const venda = vendaPorId.get(e.saleId);
+                  const o = origem(e);
                   return (
                     <tr key={e.key}>
                       <td>{formatDateBR(e.date)}</td>
                       <td>
-                        {venda?.label || `Venda ${e.saleId}`}
-                        {e.implicit && <div className="hint">sem forma de pagamento informada</div>}
+                        {o.titulo}
+                        {o.dica && <div className="hint">{o.dica}</div>}
                       </td>
-                      <td className="num">{reais(e.baseCents)}</td>
+                      <td className="num">{e.kind === "despesa" ? "-" : reais(e.baseCents)}</td>
                       <td className="num">{reais(e.replenishCents)}</td>
                       <td className="num">{reais(e.costsCents)}</td>
-                      <td className="num">{reais(e.profitCents)}</td>
+                      <td className="num">{e.kind === "despesa" ? `-${reais(e.expenseCents)}` : reais(e.profitCents)}</td>
+                      <td className="num">{reais(e.compensatedCents)}</td>
+                      <td className="num">{reais(e.distributableCents)}</td>
                       <td className="num">{reais(e.joaoShareCents)}</td>
                       <td className="num">{reais(e.abatementCents)}</td>
                       <td className="num">{reais(e.fernandaReceivesCents)}</td>
@@ -216,11 +352,13 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
               <tfoot>
                 <tr>
                   <td colSpan={2}>Totais</td>
-                  <td className="num">{reais(cascade.totals.countedCents)}</td>
+                  <td className="num">{reais(cascade.totals.countedCents + cascade.totals.wholesaleCommissionCountedCents)}</td>
                   <td className="num">{reais(cascade.totals.replenishCents)}</td>
                   <td className="num">{reais(cascade.totals.costsCents)}</td>
-                  <td className="num">{reais(cascade.totals.profitCents)}</td>
-                  <td className="num">{reais(cascade.events.reduce((s, e) => s + e.joaoShareCents, 0))}</td>
+                  <td className="num">{reais(cascade.totals.profitCents - cascade.totals.expensesCents)}</td>
+                  <td className="num">{reais(cascade.totals.compensatedCents)}</td>
+                  <td className="num">{reais(cascade.totals.distributableCents)}</td>
+                  <td className="num">{reais(totalDaParteDoJoao)}</td>
                   <td className="num">{reais(cascade.totals.abatedCents)}</td>
                   <td className="num">{reais(cascade.totals.fernandaReceivesCents)}</td>
                   <td className="num">{reais(cascade.totals.joaoReceivesCents)}</td>

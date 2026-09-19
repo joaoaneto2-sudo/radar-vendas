@@ -1,16 +1,26 @@
 import { Cents, pctOf, roundDiv } from "./money";
 
-// A "cascata" é a divisão de cada venda entre o fundo de reposição, a Fernanda
-// e o João, e o abatimento da dívida do João pelo estoque inicial.
+// A "cascata" é a divisão do que entra na sociedade: fundo de reposição, custos,
+// despesas, Fernanda, João e o abatimento da dívida do João pelo estoque inicial.
 // Este arquivo não fala com o banco: recebe os dados e devolve as contas.
 // Assim dá para testar com números conhecidos.
+//
+// Regras (acordadas com o João):
+// - Varejo: reposição de 30% (configurável). Consignado: reposição própria (30% por padrão).
+// - Atacado: o cliente paga direto ao fabricante. A receita da sociedade é só a COMISSÃO
+//   (ex.: 20%), recebida depois. É sobre a comissão que se aplica o resto da cascata.
+// - Custos da venda e despesas da empresa saem ANTES da divisão. Se não houver lucro para
+//   cobrir naquele momento, ficam "a compensar" e são descontados dos próximos lucros.
+// - O que sobra é dividido entre Fernanda e João. Enquanto o João deve o estoque inicial,
+//   a parte dele é repassada à Fernanda e abate a dívida.
 
-export type Tier = "varejo" | "atacado";
+export type Tier = "varejo" | "atacado" | "consignado";
 export type CascadeMode = "recebimento" | "venda";
 
 export interface Settings {
   retailPct: number; // ex.: 30
-  wholesalePct: number; // ex.: 0
+  wholesalePct: number; // reposição sobre a comissão do atacado, ex.: 0
+  consignmentPct: number; // reposição do consignado, ex.: 30
   joaoSharePct: number; // ex.: 50 (participação do João e divisão do lucro)
   initialStockCents: Cents; // ex.: 1500000
   mode: CascadeMode; // "recebimento" conta quando o dinheiro entra
@@ -18,7 +28,7 @@ export interface Settings {
 
 export interface PaymentInput {
   id: number;
-  dueDate: string; // AAAA-MM-DD
+  dueDate: string | null; // AAAA-MM-DD, ou null enquanto não há data prevista
   amountCents: Cents;
   status: "prevista" | "recebida";
   receivedDate: string | null;
@@ -27,13 +37,19 @@ export interface PaymentInput {
 export interface SaleInput {
   id: number;
   date: string; // AAAA-MM-DD
-  amountCents: Cents;
+  amountCents: Cents; // valor da venda ao cliente
   costsCents: Cents; // custos da venda, já somados com a taxa de cartão ou link
   tier: Tier;
   status: "ativa" | "cancelada";
   paymentMethod?: string | null;
   label?: string | null; // nome do cliente, só para mostrar na tela
   payments: PaymentInput[];
+  // Só para atacado:
+  manufacturerId?: number | null;
+  manufacturerName?: string | null;
+  commissionPct?: number | null; // % que fica com a sociedade; null se o fabricante não é representado
+  commissionDays?: number | null; // dias depois de receber o estoque até o fabricante pagar
+  stockReceivedDate?: string | null;
 }
 
 export interface JoaoPaymentInput {
@@ -42,16 +58,31 @@ export interface JoaoPaymentInput {
   amountCents: Cents;
 }
 
-export interface CascadeEvent {
-  key: string; // "venda-12" ou "parcela-34"
+export interface ExpenseInput {
+  id: number;
   date: string;
-  saleId: number;
+  amountCents: Cents;
+  description?: string | null;
+}
+
+export interface CascadeEvent {
+  key: string; // "venda-12", "parcela-34" ou "despesa-5"
+  kind: "venda" | "parcela" | "despesa";
+  tier: Tier | null;
+  date: string;
+  saleId: number; // 0 nas despesas
   paymentId: number | null;
+  expenseId: number | null;
   implicit: boolean; // true: não há parcela cadastrada, contamos como recebido na data da venda
-  baseCents: Cents;
+  baseCents: Cents; // o que entrou (no atacado, a comissão)
   replenishCents: Cents;
   costsCents: Cents;
-  profitCents: Cents;
+  expenseCents: Cents; // despesa da empresa lançada neste evento
+  profitCents: Cents; // base menos reposição menos custos (pode ser negativo)
+  compensatedCents: Cents; // parte do lucro usada para cobrir despesas e prejuízos anteriores
+  lossCarriedCents: Cents; // prejuízo desta venda que passa para os próximos lucros
+  distributableCents: Cents; // o que de fato é dividido entre os sócios
+  carryAfterCents: Cents; // ainda a compensar depois deste evento
   joaoShareCents: Cents;
   fernandaShareCents: Cents;
   debtBeforeCents: Cents;
@@ -70,12 +101,17 @@ export interface Warning {
 export interface CascadeResult {
   events: CascadeEvent[];
   totals: {
-    soldCents: Cents; // total das vendas ativas
-    countedCents: Cents; // parte que entrou na cascata
+    soldCents: Cents; // total das vendas ativas de varejo e consignado (o atacado fica à parte)
+    countedCents: Cents; // parte dessas vendas que já entrou na cascata
     pendingCents: Cents; // vendido que ainda não entrou (só no modo "recebimento")
+    wholesaleCommissionCountedCents: Cents; // comissões do atacado que já entraram na cascata
     replenishCents: Cents;
     costsCents: Cents;
-    profitCents: Cents;
+    expensesCents: Cents; // despesas da empresa lançadas
+    profitCents: Cents; // soma dos lucros das vendas, antes das despesas
+    compensatedCents: Cents;
+    carryCents: Cents; // despesas e prejuízos ainda a compensar
+    distributableCents: Cents; // o que foi dividido entre os sócios
     abatedCents: Cents;
     joaoReceivesCents: Cents;
     fernandaReceivesCents: Cents;
@@ -88,25 +124,29 @@ export interface CascadeResult {
     excessPaidCents: Cents; // pagou além da dívida (a Fernanda ficaria devendo ao João)
     paidFraction: number; // 0 a 1
   };
-  check: { fernandaPlusJoaoEqualsProfit: boolean };
+  check: { fernandaPlusJoaoEqualsDistributable: boolean };
   warnings: Warning[];
 }
 
 interface RawEvent {
   key: string;
+  kind: "venda" | "parcela" | "despesa";
   date: string;
   saleId: number;
   paymentId: number | null;
+  expenseId: number | null;
   implicit: boolean;
+  tier: Tier | null;
   baseCents: Cents;
   costsCents: Cents;
-  tier: Tier;
+  expenseCents: Cents;
 }
 
 export function computeCascade(
   settings: Settings,
   sales: SaleInput[],
-  joaoPayments: JoaoPaymentInput[]
+  joaoPayments: JoaoPaymentInput[],
+  expenses: ExpenseInput[] = []
 ): CascadeResult {
   const warnings: Warning[] = [];
   const joaoBp = Math.round(settings.joaoSharePct * 100);
@@ -114,6 +154,7 @@ export function computeCascade(
 
   const semValor: number[] = [];
   const semForma: number[] = [];
+  const atacadoSemFabricante: number[] = [];
   const parcelasDiferentes: number[] = [];
   const semDataDeRecebimento: number[] = [];
   const raw: RawEvent[] = [];
@@ -125,48 +166,70 @@ export function computeCascade(
       semValor.push(sale.id);
       continue;
     }
-    soldCents += sale.amountCents;
+
+    const ehAtacado = sale.tier === "atacado";
+
+    // No atacado, o que entra para a sociedade é só a comissão do fabricante.
+    let base = sale.amountCents;
+    if (ehAtacado) {
+      if (sale.commissionPct === null || sale.commissionPct === undefined) {
+        atacadoSemFabricante.push(sale.id);
+        continue; // sem fabricante representado não dá para saber a comissão: fica fora das contas
+      }
+      base = pctOf(sale.amountCents, sale.commissionPct);
+    } else {
+      soldCents += sale.amountCents;
+    }
 
     const semParcelas = sale.payments.length === 0;
-    if (semParcelas && (!sale.paymentMethod || sale.paymentMethod === "Não informada")) {
+    if (!ehAtacado && semParcelas && (!sale.paymentMethod || sale.paymentMethod === "Não informada")) {
       semForma.push(sale.id);
     }
 
     if (settings.mode === "venda") {
       raw.push({
         key: `venda-${sale.id}`,
+        kind: "venda",
         date: sale.date,
         saleId: sale.id,
         paymentId: null,
+        expenseId: null,
         implicit: false,
-        baseCents: sale.amountCents,
-        costsCents: sale.costsCents,
         tier: sale.tier,
+        baseCents: base,
+        costsCents: sale.costsCents,
+        expenseCents: 0,
       });
       continue;
     }
 
     // Modo "recebimento".
     if (semParcelas) {
-      // Sem parcelas cadastradas: contamos como recebido na data da venda.
-      raw.push({
-        key: `venda-${sale.id}`,
-        date: sale.date,
-        saleId: sale.id,
-        paymentId: null,
-        implicit: true,
-        baseCents: sale.amountCents,
-        costsCents: sale.costsCents,
-        tier: sale.tier,
-      });
+      // Varejo e consignado sem parcelas: contamos como recebido na data da venda.
+      // Atacado sem parcelas: a comissão ainda não entrou, então não conta.
+      if (!ehAtacado) {
+        raw.push({
+          key: `venda-${sale.id}`,
+          kind: "venda",
+          date: sale.date,
+          saleId: sale.id,
+          paymentId: null,
+          expenseId: null,
+          implicit: true,
+          tier: sale.tier,
+          baseCents: base,
+          costsCents: sale.costsCents,
+          expenseCents: 0,
+        });
+      }
       continue;
     }
 
     const parcelas = [...sale.payments].sort(
-      (a, b) => a.dueDate.localeCompare(b.dueDate) || a.id - b.id
+      (a, b) => (a.dueDate ?? "9999-12-31").localeCompare(b.dueDate ?? "9999-12-31") || a.id - b.id
     );
     const totalParcelas = parcelas.reduce((soma, p) => soma + p.amountCents, 0);
-    if (totalParcelas !== sale.amountCents) parcelasDiferentes.push(sale.id);
+    if (totalParcelas !== base) parcelasDiferentes.push(sale.id);
 
     // Os custos da venda são repartidos entre as parcelas na proporção do valor.
     // A última parcela leva a sobra de centavos, para a soma fechar certinho.
@@ -184,27 +247,53 @@ export function computeCascade(
       if (!parcela.receivedDate) semDataDeRecebimento.push(sale.id);
       raw.push({
         key: `parcela-${parcela.id}`,
-        date: parcela.receivedDate ?? parcela.dueDate,
+        kind: "parcela",
+        date: parcela.receivedDate ?? parcela.dueDate ?? sale.date,
         saleId: sale.id,
         paymentId: parcela.id,
+        expenseId: null,
         implicit: false,
+        tier: sale.tier,
         baseCents: parcela.amountCents,
         costsCents: custo,
-        tier: sale.tier,
+        expenseCents: 0,
       });
     });
   }
 
-  // Ordem do tempo: data, depois venda, depois parcela. Sempre a mesma ordem.
+  for (const despesa of expenses) {
+    if (!despesa.amountCents || despesa.amountCents <= 0) continue;
+    raw.push({
+      key: `despesa-${despesa.id}`,
+      kind: "despesa",
+      date: despesa.date,
+      saleId: 0,
+      paymentId: null,
+      expenseId: despesa.id,
+      implicit: false,
+      tier: null,
+      baseCents: 0,
+      costsCents: 0,
+      expenseCents: despesa.amountCents,
+    });
+  }
+
+  // Ordem do tempo: data, depois despesas (para descontarem do lucro do mesmo dia),
+  // depois venda e parcela. Sempre a mesma ordem.
   raw.sort(
     (a, b) =>
-      a.date.localeCompare(b.date) || a.saleId - b.saleId || (a.paymentId ?? 0) - (b.paymentId ?? 0)
+      a.date.localeCompare(b.date) ||
+      (a.kind === "despesa" ? 0 : 1) - (b.kind === "despesa" ? 0 : 1) ||
+      a.saleId - b.saleId ||
+      (a.paymentId ?? 0) - (b.paymentId ?? 0) ||
+      (a.expenseId ?? 0) - (b.expenseId ?? 0)
   );
 
   const pagamentosDoJoao = [...joaoPayments].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
 
   const events: CascadeEvent[] = [];
   let abatidoAteAgora = 0;
+  let acompensar = 0; // despesas e prejuízos ainda não cobertos por lucro
 
   for (const e of raw) {
     // Pagamento do João vale a partir da sua data, para não reescrever o passado.
@@ -213,25 +302,57 @@ export function computeCascade(
       .reduce((soma, p) => soma + p.amountCents, 0);
     const dividaAntes = Math.max(0, debtTotal - pagoAteAgora - abatidoAteAgora);
 
-    const percentual = e.tier === "atacado" ? settings.wholesalePct : settings.retailPct;
-    const reposicao = pctOf(e.baseCents, percentual);
-    const lucro = e.baseCents - reposicao - e.costsCents;
-    const parteJoao = roundDiv(lucro * joaoBp, 10000);
-    const parteFernanda = lucro - parteJoao; // assim a soma das partes sempre fecha no lucro
-    const abatimento = Math.max(0, Math.min(parteJoao, dividaAntes));
+    let reposicao = 0;
+    let lucro = 0;
+    let compensado = 0;
+    let perdaLevada = 0;
+    let distribuivel = 0;
 
+    if (e.kind === "despesa") {
+      acompensar += e.expenseCents;
+    } else {
+      const percentual =
+        e.tier === "atacado"
+          ? settings.wholesalePct
+          : e.tier === "consignado"
+            ? settings.consignmentPct
+            : settings.retailPct;
+      reposicao = pctOf(e.baseCents, percentual);
+      lucro = e.baseCents - reposicao - e.costsCents;
+
+      if (lucro > 0) {
+        compensado = Math.min(acompensar, lucro);
+        acompensar -= compensado;
+        distribuivel = lucro - compensado;
+      } else if (lucro < 0) {
+        perdaLevada = -lucro;
+        acompensar += perdaLevada;
+      }
+    }
+
+    const parteJoao = roundDiv(distribuivel * joaoBp, 10000);
+    const parteFernanda = distribuivel - parteJoao; // assim a soma das partes sempre fecha
+    const abatimento = Math.max(0, Math.min(parteJoao, dividaAntes));
     abatidoAteAgora += abatimento;
 
     events.push({
       key: e.key,
+      kind: e.kind,
+      tier: e.tier,
       date: e.date,
       saleId: e.saleId,
       paymentId: e.paymentId,
+      expenseId: e.expenseId,
       implicit: e.implicit,
       baseCents: e.baseCents,
       replenishCents: reposicao,
       costsCents: e.costsCents,
+      expenseCents: e.expenseCents,
       profitCents: lucro,
+      compensatedCents: compensado,
+      lossCarriedCents: perdaLevada,
+      distributableCents: distribuivel,
+      carryAfterCents: acompensar,
       joaoShareCents: parteJoao,
       fernandaShareCents: parteFernanda,
       debtBeforeCents: dividaAntes,
@@ -242,16 +363,21 @@ export function computeCascade(
     });
   }
 
-  const soma = (campo: (e: CascadeEvent) => number) =>
-    events.reduce((total, e) => total + campo(e), 0);
+  const soma = (campo: (e: CascadeEvent) => number, filtro: (e: CascadeEvent) => boolean = () => true) =>
+    events.filter(filtro).reduce((total, e) => total + campo(e), 0);
 
   const totals = {
     soldCents,
-    countedCents: soma((e) => e.baseCents),
+    countedCents: soma((e) => e.baseCents, (e) => e.kind !== "despesa" && e.tier !== "atacado"),
     pendingCents: 0,
+    wholesaleCommissionCountedCents: soma((e) => e.baseCents, (e) => e.tier === "atacado"),
     replenishCents: soma((e) => e.replenishCents),
     costsCents: soma((e) => e.costsCents),
+    expensesCents: soma((e) => e.expenseCents),
     profitCents: soma((e) => e.profitCents),
+    compensatedCents: soma((e) => e.compensatedCents),
+    carryCents: acompensar,
+    distributableCents: soma((e) => e.distributableCents),
     abatedCents: soma((e) => e.abatementCents),
     joaoReceivesCents: soma((e) => e.joaoReceivesCents),
     fernandaReceivesCents: soma((e) => e.fernandaReceivesCents),
@@ -284,10 +410,18 @@ export function computeCascade(
       saleIds: semForma,
     });
   }
+  if (atacadoSemFabricante.length) {
+    warnings.push({
+      code: "atacado_sem_fabricante_representado",
+      message:
+        "Vendas de atacado sem fabricante representado. Ficam fora das contas até informar o fabricante e a comissão dele.",
+      saleIds: atacadoSemFabricante,
+    });
+  }
   if (parcelasDiferentes.length) {
     warnings.push({
       code: "parcelas_diferem_da_venda",
-      message: "A soma das parcelas é diferente do valor da venda.",
+      message: "A soma das parcelas é diferente do valor da venda (ou da comissão, no atacado).",
       saleIds: parcelasDiferentes,
     });
   }
@@ -310,8 +444,8 @@ export function computeCascade(
     totals,
     debt,
     check: {
-      fernandaPlusJoaoEqualsProfit:
-        totals.fernandaReceivesCents + totals.joaoReceivesCents === totals.profitCents,
+      fernandaPlusJoaoEqualsDistributable:
+        totals.fernandaReceivesCents + totals.joaoReceivesCents === totals.distributableCents,
     },
     warnings,
   };
