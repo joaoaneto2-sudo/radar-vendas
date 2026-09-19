@@ -27,7 +27,7 @@ export default function NavBar() {
     return (
       <div className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
+          <img className="brand-logo" src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
           <span className="brand-name">Radar de Vendas</span>
         </div>
       </div>
@@ -37,7 +37,7 @@ export default function NavBar() {
   return (
     <div className="topbar">
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true" />
+        <img className="brand-logo" src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
         <span className="brand-name">Radar de Vendas</span>
       </div>
       <div className="topbar-right">

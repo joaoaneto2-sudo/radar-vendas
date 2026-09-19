@@ -108,7 +108,7 @@ button {
 
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
 }
 
@@ -119,6 +119,21 @@ button {
   background: var(--accent);
   display: inline-block;
   transform: translateY(-1px);
+}
+
+.brand-logo {
+  height: 38px;
+  width: auto;
+  border-radius: 6px;
+  display: block;
+}
+
+.auth-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  margin-bottom: 22px;
 }
 
 .brand-name {

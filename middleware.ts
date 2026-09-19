@@ -49,6 +49,6 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Tudo, menos os arquivos internos do Next (estilos, scripts) e o ícone.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Tudo, menos os arquivos internos do Next (estilos, scripts), o ícone e as imagens da marca.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|marca/).*)"],
 };

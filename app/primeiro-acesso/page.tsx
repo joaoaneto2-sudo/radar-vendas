@@ -36,6 +36,7 @@ export default function PrimeiroAcessoPage() {
 
   return (
     <main className="auth-shell">
+      <img className="auth-logo" src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
       <div className="page-head">
         <p className="eyebrow">Primeiro acesso</p>
         <h1>Criar a minha senha</h1>
