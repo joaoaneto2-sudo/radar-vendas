@@ -1,47 +1,38 @@
 :root {
-  --bg: #f2f5f0;
-  --surface: #ffffff;
-  --surface-soft: #eaf0e7;
-  --ink: #1b2119;
-  --ink-soft: #5c6658;
-  --ink-faint: #8b9285;
-  --border: #dde5da;
-  --border-strong: #c7d2c3;
-  --accent: #1f5c43;
-  --accent-strong: #143d2c;
-  --accent-soft: #e2eee6;
-  --gold: #93712f;
-  --gold-soft: #f2ead4;
-  --danger: #a6432e;
-  --danger-soft: #f7e6e0;
+  color-scheme: light;
+
+  /* Paleta Fernanda Brilhante: creme da textura, tons pastel, dourado e couro (só nos itens selecionados). */
+  --bg: #fdf6ed;
+  --surface: #fffcf8;
+  --surface-soft: #f8efe3;
+  --ink: #33190d;
+  --ink-soft: #715a48;
+  --ink-faint: #9b846f;
+  --border: #ecdfcb;
+  --border-strong: #dcc7a8;
+
+  --accent: #5a2f17; /* marrom-couro: textos de destaque e valores */
+  --accent-strong: #3a1a0b;
+  --accent-soft: #f6e9d3; /* champagne */
+  --gold: #a9772a; /* dourado escuro, para texto */
+  --gold-bright: #e8b253; /* dourado da logo, para texto sobre o couro */
+  --gold-soft: #f8ecc8;
+  --rose-soft: #f8e6e2; /* rosé pastel */
+  --sage: #55703f;
+  --sage-soft: #e7eedf; /* verde-sálvia pastel, só para "ok" e "recebido" */
+  --danger: #b04a3a;
+  --danger-soft: #f8e4df;
+
+  --leather: url("/marca/couro.jpg");
+  --fundo: url("/marca/fundo.jpg");
+
   --radius-lg: 18px;
   --radius-md: 12px;
   --radius-sm: 8px;
-  --shadow: 0 1px 2px rgba(20, 26, 19, 0.06), 0 10px 30px rgba(20, 26, 19, 0.06);
+  --shadow: 0 1px 2px rgba(90, 47, 23, 0.06), 0 10px 28px rgba(90, 47, 23, 0.08);
   --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
   --font-body: "Work Sans", "Segoe UI", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #12160f;
-    --surface: #191f16;
-    --surface-soft: #202a1c;
-    --ink: #eef1ea;
-    --ink-soft: #b3bcac;
-    --ink-faint: #7d8676;
-    --border: #2b3526;
-    --border-strong: #3a4633;
-    --accent: #6fbb96;
-    --accent-strong: #8fd0b1;
-    --accent-soft: #1e3229;
-    --gold: #d3b877;
-    --gold-soft: #2c2717;
-    --danger: #e3917d;
-    --danger-soft: #33201b;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 10px 30px rgba(0, 0, 0, 0.35);
-  }
 }
 
 * {
@@ -292,11 +283,6 @@ textarea:focus {
 
 input[type="date"] {
   color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  input[type="date"] {
-    color-scheme: dark;
-  }
 }
 
 .money-input {
@@ -742,7 +728,7 @@ td.profit-neg {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 14, 9, 0.55);
+  background: rgba(51, 25, 13, 0.45);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -1146,4 +1132,536 @@ td.status-gold {
 td.status-danger {
   color: var(--danger);
   font-weight: 600;
+}
+
+
+/* ==========================================================================
+   Tema Fernanda Brilhante
+   Fundo: textura creme com joias em linha dourada. Couro: só para marcar o que está selecionado.
+   ========================================================================== */
+
+body {
+  background: var(--bg);
+  position: relative;
+  min-height: 100vh;
+}
+
+/* A textura fica numa camada fixa atrás de tudo (funciona também no iPhone). */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  /* véu creme por cima da textura, para ela ficar delicada e o texto continuar fácil de ler */
+  background: linear-gradient(rgba(253, 246, 237, 0.62), rgba(253, 246, 237, 0.62)), var(--fundo) center top / cover no-repeat, var(--bg);
+  pointer-events: none;
+}
+
+/* Selecionado = couro com letras douradas */
+.nav a.active,
+.tab-btn.active,
+.radio-chip.selected,
+.toggle-chip.on,
+.btn-primary,
+.bottom-nav a.active,
+.bottom-nav button.active {
+  background-color: #2b1108;
+  background-image: linear-gradient(rgba(32, 10, 2, 0.18), rgba(32, 10, 2, 0.18)), var(--leather);
+  background-size: cover;
+  background-position: center;
+  border-color: #2b1108;
+  color: var(--gold-bright);
+}
+
+.btn-primary {
+  box-shadow: 0 2px 10px rgba(58, 26, 11, 0.25);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.12);
+}
+
+.nav,
+.tabs {
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.topbar {
+  position: relative;
+}
+
+/* Pastéis nos quadros de números e nos selos */
+.stat-tile {
+  background: var(--surface);
+}
+
+.stat-tile.accent {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+}
+
+.stat-tile.gold {
+  background: var(--gold-soft);
+  border-color: #ecd9a4;
+}
+
+.stat-tile.danger {
+  background: var(--rose-soft);
+  border-color: #efc9c1;
+}
+
+.stock-pill.ok {
+  background: var(--sage-soft);
+  color: var(--sage);
+}
+
+.stock-pill.low {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.stock-pill.out {
+  background: var(--rose-soft);
+  color: var(--danger);
+}
+
+.banner-info {
+  background: var(--accent-soft);
+  border-color: var(--border-strong);
+}
+
+.banner-warning {
+  background: var(--gold-soft);
+  border-color: #ecd9a4;
+}
+
+.banner-error {
+  background: var(--rose-soft);
+  border-color: #efc9c1;
+}
+
+.card,
+.table-wrap,
+.modal-panel {
+  border-color: var(--border);
+}
+
+.eyebrow {
+  color: var(--gold);
+}
+
+.page-head h1 {
+  color: var(--accent-strong);
+}
+
+.page-head p {
+  color: var(--ink-soft);
+}
+
+/* Barra de baixo (celular) e menu "Mais": escondidos no computador */
+.bottom-nav,
+.more-sheet {
+  display: none;
+}
+
+.bottom-nav a,
+.bottom-nav button {
+  text-decoration: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+  padding: 7px 4px;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.bottom-nav svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Celular e tablet pequeno: barra de baixo no lugar do menu de cima */
+@media (max-width: 900px) {
+  .topbar .nav {
+    display: none;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    gap: 2px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-strong);
+    box-shadow: 0 -6px 24px rgba(90, 47, 23, 0.1);
+  }
+
+  .more-sheet {
+    display: block;
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index: 45;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+    padding: 8px;
+  }
+
+  .more-sheet a,
+  .more-sheet button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    font: inherit;
+    font-weight: 600;
+    color: var(--ink);
+    padding: 13px 14px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+
+  .more-sheet a.active {
+    background-color: #2b1108;
+    background-image: linear-gradient(rgba(32, 10, 2, 0.18), rgba(32, 10, 2, 0.18)), var(--leather);
+    background-size: cover;
+    color: var(--gold-bright);
+  }
+
+  .more-sheet .sheet-user {
+    padding: 8px 14px 10px;
+    font-size: 0.8rem;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 4px;
+  }
+
+  .more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 44;
+    background: rgba(51, 25, 13, 0.25);
+  }
+
+  .topbar {
+    padding: 14px 16px 10px;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .topbar-right .nav-user {
+    display: none;
+  }
+
+  .shell,
+  .auth-shell {
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  body::before {
+    background: linear-gradient(rgba(253, 246, 237, 0.66), rgba(253, 246, 237, 0.66)), url("/marca/fundo-mobile.jpg") center top / cover no-repeat, var(--bg);
+  }
+}
+
+/* Celular */
+@media (max-width: 720px) {
+  body {
+    font-size: 15px;
+  }
+
+  .page-head {
+    margin: 4px 0 18px;
+  }
+
+  .page-head h1 {
+    font-size: 1.45rem;
+  }
+
+  .page-head p {
+    font-size: 0.9rem;
+  }
+
+  .brand-logo {
+    height: 34px;
+  }
+
+  .brand-name {
+    font-size: 1rem;
+  }
+
+  /* Campos grandes o bastante para o dedo, e sem o zoom automático do iPhone */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .btn,
+  .icon-btn,
+  .radio-chip,
+  .tab-btn,
+  .toggle-chip {
+    min-height: 40px;
+  }
+
+  .icon-btn {
+    padding: 8px 12px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: var(--radius-md);
+  }
+
+  /* Quadros de números: 2 por linha */
+  .stat-grid,
+  .stat-grid.auto {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .stat-tile {
+    padding: 12px;
+  }
+
+  .stat-tile .value {
+    font-size: 1.05rem;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-tile .label {
+    font-size: 0.66rem;
+  }
+
+  /* Filtros e barras de ferramentas empilhados */
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .toolbar > .btn,
+  .toolbar > a.btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+  }
+
+  .filters .field {
+    min-width: 0;
+  }
+
+  .tabs {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    border-radius: 16px;
+    scrollbar-width: none;
+  }
+
+  .tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tab-btn {
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  .pay-row {
+    grid-template-columns: 1fr;
+  }
+
+  /* Janelas viram folhas que sobem de baixo, ocupando a tela */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-panel {
+    max-width: none;
+    max-height: 94vh;
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .modal-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    padding-top: 12px;
+    margin-top: 16px;
+  }
+
+  /* Tabelas viram cartões, uma informação por linha (os rótulos vêm dos títulos da tabela) */
+  .table-wrap {
+    overflow: visible;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .table-wrap table,
+  table {
+    display: block;
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  table thead {
+    display: none;
+  }
+
+  table tbody {
+    display: block;
+  }
+
+  table tr {
+    display: block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow);
+  }
+
+  table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 0;
+    border: none;
+    border-bottom: 1px dashed var(--border);
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  table td:last-child {
+    border-bottom: none;
+  }
+
+  table td[data-vazio] {
+    display: none;
+  }
+
+  table td::before {
+    content: attr(data-label);
+    flex: 0 0 34%;
+    max-width: 34%;
+    text-align: left;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  table td[data-label=""]::before,
+  table td:not([data-label])::before {
+    display: none;
+  }
+
+  table td > * {
+    text-align: right;
+  }
+
+  table .row-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  table td .hint {
+    text-align: right;
+  }
+
+  .thumb,
+  .thumb-placeholder {
+    margin-left: auto;
+  }
+
+  .installments-box,
+  .photo-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .photo-item {
+    width: calc(50% - 5px);
+  }
+
+  .photo-item img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+}
+
+/* Links com cara de botão não levam sublinhado */
+a.btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Menu do computador: nomes em uma linha só; se não couber ao lado da logo, desce para a linha de baixo */
+.topbar {
+  flex-wrap: wrap;
+}
+
+.topbar-right {
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+
+.nav a {
+  white-space: nowrap;
+  padding: 8px 13px;
+}
+
+.nav-user {
+  white-space: nowrap;
+}
+
+.brand-name {
+  white-space: nowrap;
 }

@@ -1,10 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NavBar from "./nav-bar";
+import ResponsiveTables from "./responsive-tables";
 
 export const metadata: Metadata = {
   title: "Radar de Vendas",
   description: "Registro e relatório de vendas",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#fdf6ed",
 };
 
 export default function RootLayout({
@@ -28,6 +35,7 @@ export default function RootLayout({
       </head>
       <body>
         <NavBar />
+        <ResponsiveTables />
         {children}
       </body>
     </html>
