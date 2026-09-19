@@ -1,0 +1,286 @@
+import type { Pool } from "pg";
+
+// Histórico de versões do banco de dados.
+// Regra de ouro: NUNCA editar uma migração que já foi aplicada. Para mudar algo,
+// crie uma migração nova no fim da lista. O banco guarda, na tabela
+// schema_migrations, quais já rodaram, e cada uma roda uma única vez.
+
+export interface Migration {
+  id: string;
+  name: string;
+  statements: string[];
+}
+
+// Versão 1: exatamente o que o radar já fazia antes de existir este histórico.
+// Foi escrita para poder rodar de novo sem estragar nada (é "idempotente"),
+// porque o banco real já tem tudo isso criado.
+export const LEGACY_BASELINE_STATEMENTS: string[] = [
+  `CREATE TABLE IF NOT EXISTS sales (
+    id SERIAL PRIMARY KEY,
+    sale_date DATE NOT NULL,
+    sale_type TEXT NOT NULL,
+    seller TEXT NOT NULL,
+    product_type TEXT NOT NULL,
+    manufacturer TEXT,
+    supplier TEXT,
+    warranty TEXT,
+    cost NUMERIC(12,2) NOT NULL,
+    sale_value NUMERIC(12,2) NOT NULL,
+    payment_method TEXT NOT NULL,
+    installments_count INT,
+    installments_dates TEXT,
+    client_name TEXT NOT NULL,
+    client_nickname TEXT,
+    client_city TEXT,
+    client_phone TEXT,
+    client_birthday DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS manufacturers (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS suppliers (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS sellers (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS clients (
+    id SERIAL PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    nickname TEXT,
+    city TEXT,
+    phone TEXT,
+    birthday DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    category TEXT NOT NULL,
+    subtype TEXT NOT NULL,
+    jewelry_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    manufacturer_id INT REFERENCES manufacturers(id) ON DELETE SET NULL,
+    supplier_id INT REFERENCES suppliers(id) ON DELETE SET NULL,
+    cost NUMERIC(12,2) NOT NULL DEFAULT 0,
+    price NUMERIC(12,2) NOT NULL DEFAULT 0,
+    stock_qty INT NOT NULL DEFAULT 0,
+    warranty TEXT,
+    photo_url TEXT,
+    active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE sales ADD COLUMN IF NOT EXISTS product_id INT REFERENCES products(id) ON DELETE SET NULL`,
+  `ALTER TABLE sales ADD COLUMN IF NOT EXISTS client_id INT REFERENCES clients(id) ON DELETE SET NULL`,
+  `ALTER TABLE sales ADD COLUMN IF NOT EXISTS seller_id INT REFERENCES sellers(id) ON DELETE SET NULL`,
+  // Nada pode impedir de salvar uma venda: todo campo pode ser completado depois.
+  `ALTER TABLE sales ALTER COLUMN sale_type DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN seller DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN product_type DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN cost DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN sale_value DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN payment_method DROP NOT NULL`,
+  `ALTER TABLE sales ALTER COLUMN client_name DROP NOT NULL`,
+  // O mesmo vale para produtos: dá para salvar só com a foto e o preço, ou menos.
+  `ALTER TABLE products ALTER COLUMN category DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN subtype DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN jewelry_type DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN name DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN cost DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN cost DROP DEFAULT`,
+  `ALTER TABLE products ALTER COLUMN price DROP NOT NULL`,
+  `ALTER TABLE products ALTER COLUMN price DROP DEFAULT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS material TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS gemstone TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS age_group TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS gender TEXT`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS karat TEXT`,
+  `ALTER TABLE clients ALTER COLUMN full_name DROP NOT NULL`,
+];
+
+export const MIGRATIONS: Migration[] = [
+  {
+    id: "001",
+    name: "base do radar (vendas, cadastros, produtos)",
+    statements: LEGACY_BASELINE_STATEMENTS,
+  },
+  {
+    id: "002",
+    name: "parametros do acordo e campos financeiros da venda",
+    statements: [
+      // Uma única linha (id = 1) com as regras do acordo entre João e Fernanda.
+      `CREATE TABLE IF NOT EXISTS agreement_settings (
+        id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        partnership_start DATE NOT NULL DEFAULT '2026-09-01',
+        retail_replenish_pct NUMERIC(5,2) NOT NULL DEFAULT 30
+          CHECK (retail_replenish_pct BETWEEN 0 AND 100),
+        wholesale_replenish_pct NUMERIC(5,2) NOT NULL DEFAULT 0
+          CHECK (wholesale_replenish_pct BETWEEN 0 AND 100),
+        joao_share_pct NUMERIC(5,2) NOT NULL DEFAULT 50
+          CHECK (joao_share_pct BETWEEN 0 AND 100),
+        initial_stock_value NUMERIC(12,2) NOT NULL DEFAULT 15000
+          CHECK (initial_stock_value >= 0),
+        cascade_mode TEXT NOT NULL DEFAULT 'recebimento'
+          CHECK (cascade_mode IN ('recebimento', 'venda')),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `INSERT INTO agreement_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS price_tier TEXT NOT NULL DEFAULT 'varejo'
+        CHECK (price_tier IN ('varejo', 'atacado'))`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS sale_costs NUMERIC(12,2) NOT NULL DEFAULT 0
+        CHECK (sale_costs >= 0)`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS payment_fee NUMERIC(12,2) NOT NULL DEFAULT 0
+        CHECK (payment_fee >= 0)`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ativa'
+        CHECK (status IN ('ativa', 'cancelada'))`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`,
+      `CREATE INDEX IF NOT EXISTS sales_sale_date_idx ON sales (sale_date)`,
+    ],
+  },
+  {
+    id: "003",
+    name: "parcelas a receber e consignado",
+    statements: [
+      // "Atrasada" não é guardada: é uma prevista cuja data já passou.
+      `CREATE TABLE IF NOT EXISTS sale_payments (
+        id SERIAL PRIMARY KEY,
+        sale_id INT NOT NULL REFERENCES sales(id) ON DELETE CASCADE,
+        due_date DATE NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+        status TEXT NOT NULL DEFAULT 'prevista' CHECK (status IN ('prevista', 'recebida')),
+        received_date DATE,
+        note TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CHECK (status <> 'recebida' OR received_date IS NOT NULL)
+      )`,
+      `CREATE INDEX IF NOT EXISTS sale_payments_sale_idx ON sale_payments (sale_id)`,
+      `CREATE INDEX IF NOT EXISTS sale_payments_status_due_idx ON sale_payments (status, due_date)`,
+      `CREATE TABLE IF NOT EXISTS consignments (
+        id SERIAL PRIMARY KEY,
+        client_id INT REFERENCES clients(id) ON DELETE SET NULL,
+        person_name TEXT,
+        out_date DATE NOT NULL,
+        expected_settlement_date DATE,
+        status TEXT NOT NULL DEFAULT 'aberto' CHECK (status IN ('aberto', 'encerrado')),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE TABLE IF NOT EXISTS consignment_items (
+        id SERIAL PRIMARY KEY,
+        consignment_id INT NOT NULL REFERENCES consignments(id) ON DELETE CASCADE,
+        product_id INT REFERENCES products(id) ON DELETE SET NULL,
+        description TEXT,
+        quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
+        unit_cost NUMERIC(12,2),
+        unit_price NUMERIC(12,2),
+        status TEXT NOT NULL DEFAULT 'com_cliente'
+          CHECK (status IN ('com_cliente', 'vendida', 'devolvida')),
+        settled_date DATE,
+        sale_id INT REFERENCES sales(id) ON DELETE SET NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS consignment_items_consignment_idx ON consignment_items (consignment_id)`,
+    ],
+  },
+  {
+    id: "004",
+    name: "compras de estoque, fundo de reposicao, passivo e pagamentos do Joao",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS stock_purchases (
+        id SERIAL PRIMARY KEY,
+        description TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('inicial', 'reposicao')),
+        amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+        purchase_date DATE,
+        payment_method TEXT,
+        supplier_id INT REFERENCES suppliers(id) ON DELETE SET NULL,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      // Quanto do fundo de reposicao ja foi usado para pagar cada compra.
+      `CREATE TABLE IF NOT EXISTS fund_payments (
+        id SERIAL PRIMARY KEY,
+        purchase_id INT NOT NULL REFERENCES stock_purchases(id) ON DELETE CASCADE,
+        paid_date DATE NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE TABLE IF NOT EXISTS liabilities (
+        id SERIAL PRIMARY KEY,
+        description TEXT NOT NULL,
+        responsible TEXT NOT NULL DEFAULT 'Fernanda',
+        total_amount NUMERIC(12,2) NOT NULL CHECK (total_amount >= 0),
+        due_date DATE,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE TABLE IF NOT EXISTS liability_payments (
+        id SERIAL PRIMARY KEY,
+        liability_id INT NOT NULL REFERENCES liabilities(id) ON DELETE CASCADE,
+        paid_date DATE NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      // Pagamentos diretos do Joao a Fernanda pelo estoque inicial (fora das vendas).
+      `CREATE TABLE IF NOT EXISTS joao_payments (
+        id SERIAL PRIMARY KEY,
+        paid_date DATE NOT NULL,
+        amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+    ],
+  },
+];
+
+// Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
+// ao mesmo tempo e tentarem aplicar migrações juntas.
+const LOCK_ID = 727274;
+
+/**
+ * Aplica as migrações que ainda não rodaram. Tudo ou nada: se uma falhar,
+ * nenhuma fica pela metade. Devolve os ids que foram aplicados agora.
+ */
+export async function runMigrations(pool: Pool): Promise<string[]> {
+  const aplicadas: string[] = [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1)", [LOCK_ID]);
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS schema_migrations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`
+    );
+    const { rows } = await client.query("SELECT id FROM schema_migrations");
+    const jaFeitas = new Set<string>(rows.map((r: { id: string }) => r.id));
+
+    for (const migracao of MIGRATIONS) {
+      if (jaFeitas.has(migracao.id)) continue;
+      for (const comando of migracao.statements) {
+        await client.query(comando);
+      }
+      await client.query("INSERT INTO schema_migrations (id, name) VALUES ($1, $2)", [
+        migracao.id,
+        migracao.name,
+      ]);
+      aplicadas.push(migracao.id);
+    }
+    await client.query("COMMIT");
+  } catch (erro) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw erro;
+  } finally {
+    client.release();
+  }
+  return aplicadas;
+}
