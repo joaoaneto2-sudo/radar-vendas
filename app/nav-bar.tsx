@@ -51,6 +51,9 @@ export default function NavBar() {
           <a href="/relatorio" className={pathname === "/relatorio" ? "active" : ""}>
             Relatório
           </a>
+          <a href="/financeiro" className={pathname === "/financeiro" ? "active" : ""}>
+            Financeiro
+          </a>
         </nav>
         <div className="nav-user">
           {nome && <span>{nome}</span>}

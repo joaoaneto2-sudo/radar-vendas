@@ -32,6 +32,7 @@ export interface SaleInput {
   tier: Tier;
   status: "ativa" | "cancelada";
   paymentMethod?: string | null;
+  label?: string | null; // nome do cliente, só para mostrar na tela
   payments: PaymentInput[];
 }
 

@@ -47,7 +47,7 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
     db.query(`SELECT * FROM agreement_settings WHERE id = 1`),
     db.query(
       `SELECT id, ${DIA("sale_date")} AS sale_date, sale_value, sale_costs, payment_fee,
-              price_tier, status, payment_method
+              price_tier, status, payment_method, client_name
          FROM sales ORDER BY sale_date, id`
     ),
     db.query(
@@ -102,6 +102,7 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
     tier: v.price_tier,
     status: v.status,
     paymentMethod: v.payment_method,
+    label: v.client_name,
     payments: parcelasPorVenda.get(v.id) ?? [],
   }));
 
