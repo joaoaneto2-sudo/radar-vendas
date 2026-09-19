@@ -8,12 +8,24 @@ import {
   INSTALLMENT_DATES_METHODS,
   buildWhatsAppMessage,
   formatBRL,
+  formatDateBR,
   Sale,
   Product,
   Client,
+  Manufacturer,
   SimpleEntity,
 } from "@/lib/format";
 import Combobox, { ComboboxOption } from "@/app/combobox";
+import {
+  AtacadoFields,
+  CostFields,
+  EMPTY_FINANCE,
+  PixPlan,
+  TierPicker,
+  financePayload,
+  type FinanceForm,
+} from "@/app/sale-finance-fields";
+import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE } from "@/lib/sale-finance";
 
 function todayISO(): string {
   const d = new Date();
@@ -29,7 +41,7 @@ const EMPTY_FORM = {
   product_id: null as number | null,
   cost: "",
   sale_value: "",
-  payment_method: PAYMENT_METHODS[0],
+  payment_method: NAO_INFORMADA,
   installments_count: "",
   installments_dates: "",
   client_id: null as number | null,
@@ -48,6 +60,8 @@ export default function NovaVendaPage() {
   const [sellers, setSellers] = useState<SimpleEntity[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [finance, setFinance] = useState<FinanceForm>(EMPTY_FINANCE);
   const [catalogLoading, setCatalogLoading] = useState(true);
 
   function loadCatalog() {
@@ -55,11 +69,13 @@ export default function NovaVendaPage() {
       fetch("/api/sellers").then((r) => r.json()),
       fetch("/api/products").then((r) => r.json()),
       fetch("/api/clients").then((r) => r.json()),
+      fetch("/api/manufacturers").then((r) => r.json()),
     ])
-      .then(([se, pr, cl]) => {
+      .then(([se, pr, cl, ma]) => {
         setSellers(se.items || []);
         setProducts(pr.items || []);
         setClients(cl.items || []);
+        setManufacturers(ma.items || []);
       })
       .finally(() => setCatalogLoading(false));
   }
@@ -75,12 +91,20 @@ export default function NovaVendaPage() {
   const selectedProduct = products.find((p) => p.id === form.product_id) || null;
   const selectedClient = clients.find((c) => c.id === form.client_id) || null;
 
+  function changeFinance(patch: Partial<FinanceForm>) {
+    setFinance((f) => ({ ...f, ...patch }));
+  }
+
   function handleSelectProduct(id: number | null) {
     set("product_id", id);
     const p = products.find((x) => x.id === id);
     if (p) {
       set("cost", String(p.cost ?? ""));
       set("sale_value", String(p.price ?? ""));
+      // Peça cadastrada como de atacado (do fabricante): já marca a venda como atacado.
+      if (p.sale_channel === "atacado") {
+        changeFinance({ price_tier: "atacado", manufacturer_id: p.manufacturer_id ?? null });
+      }
     }
   }
 
@@ -115,7 +139,12 @@ export default function NovaVendaPage() {
     const product = products.find((p) => p.id === form.product_id) || null;
     const client = clients.find((c) => c.id === form.client_id) || null;
 
+    const atacado = finance.price_tier === "atacado";
+    const pixAPrazo = !atacado && form.payment_method === PIX_A_PRAZO;
+    const parcelasComValor = finance.payments.filter((p) => Number(p.amount) > 0);
+
     const payload = {
+      ...financePayload(finance, form.payment_method),
       sale_date: form.sale_date,
       sale_type: form.sale_type || null,
       seller: seller?.name || null,
@@ -127,9 +156,15 @@ export default function NovaVendaPage() {
       product_id: product?.id || null,
       cost: form.cost || null,
       sale_value: form.sale_value || null,
-      payment_method: form.payment_method || null,
-      installments_count: form.installments_count || null,
-      installments_dates: form.installments_dates || null,
+      payment_method: atacado ? PIX_DIRETO_AO_FABRICANTE : form.payment_method || null,
+      // No Pix a prazo, o número e as datas para o texto do WhatsApp saem das parcelas.
+      installments_count: pixAPrazo ? parcelasComValor.length || null : form.installments_count || null,
+      installments_dates: pixAPrazo
+        ? parcelasComValor
+            .filter((p) => p.due_date)
+            .map((p) => formatDateBR(p.due_date).slice(0, 5))
+            .join(", ") || null
+        : form.installments_dates || null,
       client_name: client?.full_name || null,
       client_nickname: client?.nickname || null,
       client_city: client?.city || null,
@@ -170,6 +205,7 @@ export default function NovaVendaPage() {
     setConfirmedSale(null);
     setCopied(false);
     setForm({ ...EMPTY_FORM, sale_date: todayISO(), seller_id: form.seller_id });
+    setFinance(EMPTY_FINANCE);
   }
 
   async function handleCopy() {
@@ -278,6 +314,7 @@ export default function NovaVendaPage() {
             Venda
           </h2>
           <div className="form-grid">
+            <TierPicker form={finance} onChange={changeFinance} />
             <div className="field">
               <label htmlFor="sale_date">Data da venda</label>
               <input
@@ -369,22 +406,9 @@ export default function NovaVendaPage() {
           </h2>
           <div className="form-grid">
             <div className="field">
-              <label htmlFor="cost">Custo da peça</label>
-              <div className="money-input">
-                <span className="prefix">R$</span>
-                <input
-                  id="cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  inputMode="decimal"
-                  value={form.cost}
-                  onChange={(e) => set("cost", e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="field">
-              <label htmlFor="sale_value">Valor da venda</label>
+              <label htmlFor="sale_value">
+                {finance.price_tier === "atacado" ? "Valor da venda (pago ao fabricante)" : "Valor da venda"}
+              </label>
               <div className="money-input">
                 <span className="prefix">R$</span>
                 <input
@@ -398,22 +422,47 @@ export default function NovaVendaPage() {
                 />
               </div>
             </div>
-            <div className="field field--full">
-              <label>Forma de pagamento</label>
-              <div className="radio-row">
-                {PAYMENT_METHODS.map((m) => (
-                  <button
-                    type="button"
-                    key={m}
-                    className={"radio-chip" + (form.payment_method === m ? " selected" : "")}
-                    onClick={() => set("payment_method", m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {INSTALLMENT_COUNT_METHODS.includes(form.payment_method) && (
+            {finance.price_tier === "atacado" ? (
+              <AtacadoFields
+                form={finance}
+                onChange={changeFinance}
+                saleValue={form.sale_value}
+                manufacturers={manufacturers}
+              />
+            ) : (
+              <>
+                <CostFields form={finance} onChange={changeFinance} />
+                <div className="field field--full">
+                  <label>Forma de pagamento</label>
+                  <div className="radio-row">
+                    {PAYMENT_METHODS.map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        className={"radio-chip" + (form.payment_method === m ? " selected" : "")}
+                        onClick={() => set("payment_method", m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  {form.payment_method === NAO_INFORMADA && (
+                    <span className="hint">
+                      Sem forma de pagamento, a venda conta como recebida no dia. Dá para completar depois no Relatório.
+                    </span>
+                  )}
+                </div>
+                {form.payment_method === PIX_A_PRAZO && (
+                  <PixPlan
+                    form={finance}
+                    onChange={changeFinance}
+                    saleValue={form.sale_value}
+                    saleDate={form.sale_date}
+                  />
+                )}
+              </>
+            )}
+            {finance.price_tier !== "atacado" && form.payment_method === "Crédito parcelado" && (
               <div className="installments-box">
                 <div className="field">
                   <label htmlFor="installments_count">Nº de parcelas</label>
@@ -426,18 +475,7 @@ export default function NovaVendaPage() {
                     onChange={(e) => set("installments_count", e.target.value)}
                   />
                 </div>
-                {INSTALLMENT_DATES_METHODS.includes(form.payment_method) && (
-                  <div className="field">
-                    <label htmlFor="installments_dates">Datas das parcelas</label>
-                    <input
-                      id="installments_dates"
-                      type="text"
-                      placeholder="Ex: entrada à vista + 3x nos meses seguintes"
-                      value={form.installments_dates}
-                      onChange={(e) => set("installments_dates", e.target.value)}
-                    />
-                  </div>
-                )}
+
               </div>
             )}
           </div>

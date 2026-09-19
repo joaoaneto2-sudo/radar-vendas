@@ -20,6 +20,15 @@ import {
 } from "@/app/sale-finance-fields";
 import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE, PRICE_TIERS, commissionCents } from "@/lib/sale-finance";
 import { formatCentsBRL } from "@/lib/finance/money";
+import {
+  NO_FILTERS,
+  distinctValues,
+  filterSales,
+  filtersToQuery,
+  hasActiveFilters,
+  paymentLabel,
+  type SaleFilters,
+} from "@/lib/sales-filter";
 
 type LoadState = "loading" | "ready" | "db_missing" | "error";
 
@@ -153,6 +162,7 @@ function EditModal({
 
         <form onSubmit={handleSubmit}>
           <div className="form-grid">
+            <TierPicker form={finance} onChange={changeFinance} />
             <div className="field">
               <label>Data da venda</label>
               <input
@@ -170,7 +180,7 @@ function EditModal({
               />
             </div>
             <div className="field field--full">
-              <label>Onde vendeu (tipo de venda)</label>
+              <label>Tipo de venda</label>
               <div className="radio-row">
                 {SALE_TYPES.map((t) => (
                   <button
@@ -184,8 +194,6 @@ function EditModal({
                 ))}
               </div>
             </div>
-
-            <TierPicker form={finance} onChange={changeFinance} />
 
             <div className="field field--full">
               <label>Tipo da peça</label>
@@ -220,19 +228,6 @@ function EditModal({
               />
             </div>
 
-            <div className="field">
-              <label>Custo da peça</label>
-              <div className="money-input">
-                <span className="prefix">R$</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.cost}
-                  onChange={(e) => set("cost", e.target.value)}
-                />
-              </div>
-            </div>
             <div className="field">
               <label>Valor da venda</label>
               <div className="money-input">
@@ -355,9 +350,8 @@ function EditModal({
 export default function RelatorioPage() {
   const [sales, setSales] = useState<Sale[]>([]);
   const [state, setState] = useState<LoadState>("loading");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [seller, setSeller] = useState("");
+  const [filters, setFilters] = useState<SaleFilters>(NO_FILTERS);
+  const setFilter = (chave: keyof SaleFilters, valor: string) => setFilters((f) => ({ ...f, [chave]: valor }));
   const [editing, setEditing] = useState<Sale | null>(null);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
 
@@ -386,19 +380,11 @@ export default function RelatorioPage() {
       .catch(() => setState("error"));
   }, []);
 
-  const sellers = useMemo(() => {
-    const set = new Set(sales.map((s) => s.seller).filter((s): s is string => !!s));
-    return Array.from(set).sort();
-  }, [sales]);
+  const sellers = useMemo(() => distinctValues(sales.map((s) => s.seller)), [sales]);
+  const pieces = useMemo(() => distinctValues(sales.map((s) => s.product_type)), [sales]);
+  const payments = useMemo(() => distinctValues(sales.map((s) => paymentLabel(s))), [sales]);
 
-  const filtered = useMemo(() => {
-    return sales.filter((s) => {
-      if (from && s.sale_date.slice(0, 10) < from) return false;
-      if (to && s.sale_date.slice(0, 10) > to) return false;
-      if (seller && s.seller !== seller) return false;
-      return true;
-    });
-  }, [sales, from, to, seller]);
+  const filtered = useMemo(() => filterSales(sales, filters), [sales, filters]);
 
   // Faturamento, custo e lucro contam só varejo e consignado. No atacado o cliente paga ao
   // fabricante: o que é nosso é a comissão, mostrada à parte.
@@ -443,7 +429,7 @@ export default function RelatorioPage() {
       <div className="page-head">
         <p className="eyebrow">Relatório</p>
         <h1>Vendas registradas</h1>
-        <p>Acompanhe o que a equipe vendeu, filtrando por período ou vendedora.</p>
+        <p>Acompanhe o que a equipe vendeu, filtrando por período, vendedora, tipo de saída, peça ou pagamento.</p>
       </div>
 
       {state === "db_missing" && (
@@ -498,15 +484,15 @@ export default function RelatorioPage() {
             <div className="filters">
               <div className="field">
                 <label htmlFor="from">De</label>
-                <input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+                <input id="from" type="date" value={filters.from} onChange={(e) => setFilter("from", e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="to">Até</label>
-                <input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                <input id="to" type="date" value={filters.to} onChange={(e) => setFilter("to", e.target.value)} />
               </div>
               <div className="field">
                 <label htmlFor="seller">Vendedora</label>
-                <select id="seller" value={seller} onChange={(e) => setSeller(e.target.value)}>
+                <select id="seller" value={filters.seller} onChange={(e) => setFilter("seller", e.target.value)}>
                   <option value="">Todas</option>
                   {sellers.map((s) => (
                     <option key={s} value={s}>
@@ -515,9 +501,47 @@ export default function RelatorioPage() {
                   ))}
                 </select>
               </div>
+              <div className="field">
+                <label htmlFor="tier">Tipo de saída</label>
+                <select id="tier" value={filters.tier} onChange={(e) => setFilter("tier", e.target.value)}>
+                  <option value="">Todos</option>
+                  {PRICE_TIERS.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="piece">Peça</label>
+                <select id="piece" value={filters.piece} onChange={(e) => setFilter("piece", e.target.value)}>
+                  <option value="">Todas</option>
+                  {pieces.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="payment">Pagamento</label>
+                <select id="payment" value={filters.payment} onChange={(e) => setFilter("payment", e.target.value)}>
+                  <option value="">Todos</option>
+                  {payments.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {hasActiveFilters(filters) && (
+                <button type="button" className="btn btn-ghost" onClick={() => setFilters(NO_FILTERS)}>
+                  Limpar filtros
+                </button>
+              )}
             </div>
-            <a className="btn btn-ghost" href="/api/sales/export">
-              Exportar Excel
+            <a className="btn btn-ghost" href={`/api/sales/export${filtersToQuery(filters)}`}>
+              {hasActiveFilters(filters) ? "Exportar Excel (com os filtros)" : "Exportar Excel"}
             </a>
           </div>
 
@@ -530,7 +554,7 @@ export default function RelatorioPage() {
                   <tr>
                     <th>Data</th>
                     <th>Vendedora</th>
-                    <th>Tipo</th>
+                    <th>Saída</th>
                     <th>Cliente</th>
                     <th>Peça</th>
                     <th>Pagamento</th>

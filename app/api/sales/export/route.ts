@@ -2,19 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getPool, ensureSchema } from "@/lib/db";
 import { formatDateBR } from "@/lib/format";
+import { PRICE_TIERS, commissionCents } from "@/lib/sale-finance";
+import { filterSales, filtersFromParams } from "@/lib/sales-filter";
+import { SALE_SELECT } from "@/lib/sales-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const HEADERS = [
   "Data da venda",
+  "Tipo de saída",
   "Tipo de venda",
   "Vendedora",
   "Tipo da peça",
   "Fabricante",
   "Fornecedor",
   "Garantia",
-  "Custo (R$)",
+  "Custo da peça (R$)",
+  "Custos da venda (R$)",
+  "Taxa (R$)",
   "Valor da venda (R$)",
   "Lucro (R$)",
   "Forma de pagamento",
@@ -35,15 +41,21 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureSchema();
-    const { rows } = await db.query(
-      "SELECT * FROM sales ORDER BY sale_date DESC, id DESC"
-    );
+    const { rows: todas } = await db.query(`${SALE_SELECT} ORDER BY s.sale_date DESC, s.id DESC`);
+    // Mesmos filtros da tela do Relatório (período, vendedora, tipo de saída, peça e pagamento).
+    const rows = filterSales(todas, filtersFromParams(req.nextUrl.searchParams));
 
     const data = rows.map((r) => {
       const cost = Number(r.cost) || 0;
       const saleValue = Number(r.sale_value) || 0;
+      const atacado = r.price_tier === "atacado";
+      // No atacado o cliente paga ao fabricante: o lucro da empresa é a comissão.
+      const lucro = atacado
+        ? commissionCents(saleValue, r.commission_pct === null ? null : Number(r.commission_pct)) / 100
+        : saleValue - cost - (Number(r.sale_costs) || 0) - (Number(r.payment_fee) || 0);
       return [
         formatDateBR(r.sale_date),
+        PRICE_TIERS.find((t) => t.value === (r.price_tier ?? "varejo"))?.label ?? "Varejo",
         r.sale_type,
         r.seller,
         r.product_type,
@@ -51,8 +63,10 @@ export async function GET(req: NextRequest) {
         r.supplier || "",
         r.warranty || "",
         cost,
+        Number(r.sale_costs) || 0,
+        Number(r.payment_fee) || 0,
         saleValue,
-        saleValue - cost,
+        lucro,
         r.payment_method,
         r.installments_count || "",
         r.installments_dates || "",

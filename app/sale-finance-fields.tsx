@@ -81,7 +81,7 @@ export function TierPicker({ form, onChange }: { form: FinanceForm; onChange: Mu
   const atual = PRICE_TIERS.find((t) => t.value === form.price_tier);
   return (
     <div className="field field--full">
-      <label>Esta venda é</label>
+      <label>Tipo de saída</label>
       <div className="radio-row">
         {PRICE_TIERS.map((t) => (
           <button
