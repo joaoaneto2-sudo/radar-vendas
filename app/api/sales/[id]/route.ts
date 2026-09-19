@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseSaleFinance } from "@/lib/sale-finance";
-import { SALE_SELECT, savePayments } from "@/lib/sales-query";
+import { SALE_SELECT, resolveIncentive, savePayments } from "@/lib/sales-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +56,14 @@ export async function PATCH(
   try {
     await ensureSchema();
     await client.query("BEGIN");
+    const atual = await client.query("SELECT client_id, price_tier FROM sales WHERE id = $1", [id]);
+    if (atual.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    const tierFinal = fin.priceTier ?? atual.rows[0].price_tier;
+    // Desconto/cashback: o servidor recalcula o valor que o cliente paga (saldo sem contar esta venda).
+    const inc = await resolveIncentive(client, { ...body, price_tier: tierFinal }, atual.rows[0].client_id, id);
     // Tipo, custos e taxa que não vieram na chamada continuam como estão. Fabricante e data do
     // estoque só mudam se a chave veio (mesmo vazia, para poder limpar).
     const { rows } = await client.query(
@@ -68,7 +76,7 @@ export async function PATCH(
         supplier = $6,
         warranty = $7,
         cost = $8,
-        sale_value = $9,
+        sale_value = COALESCE($26::numeric, $9::numeric),
         payment_method = $10,
         installments_count = $11,
         installments_dates = $12,
@@ -81,7 +89,12 @@ export async function PATCH(
         sale_costs = COALESCE($20, sale_costs),
         payment_fee = COALESCE($21, payment_fee),
         manufacturer_id = CASE WHEN $22::boolean THEN $23::int ELSE manufacturer_id END,
-        stock_received_date = CASE WHEN $24::boolean THEN $25::date ELSE stock_received_date END
+        stock_received_date = CASE WHEN $24::boolean THEN $25::date ELSE stock_received_date END,
+        gross_value = CASE WHEN $27::boolean THEN $28::numeric ELSE gross_value END,
+        discount_pct = CASE WHEN $27::boolean THEN $29::numeric ELSE discount_pct END,
+        cashback_pct = CASE WHEN $27::boolean THEN $30::numeric ELSE cashback_pct END,
+        cashback_earned = CASE WHEN $27::boolean THEN $31::numeric ELSE cashback_earned END,
+        cashback_used = CASE WHEN $27::boolean THEN $32::numeric ELSE cashback_used END
       WHERE id = $18
       RETURNING id`,
       [
@@ -110,6 +123,13 @@ export async function PATCH(
         fin.manufacturerId,
         fin.hasStockDate,
         fin.stockReceivedDate,
+        inc ? inc.saleValue : null,
+        inc !== null,
+        inc ? inc.grossValue : null,
+        inc ? inc.discountPct : null,
+        inc ? inc.cashbackPct : null,
+        inc ? inc.cashbackEarned : 0,
+        inc ? inc.cashbackUsed : 0,
       ]
     );
     if (rows.length === 0) {

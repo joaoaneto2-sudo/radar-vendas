@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getFinanceSummary } from "../../lib/finance/load";
 import { runMigrations } from "../../lib/migrations";
 import { parseSaleFinance } from "../../lib/sale-finance";
-import { SALE_SELECT, savePayments } from "../../lib/sales-query";
+import { SALE_SELECT, cashbackBalanceCents, resolveIncentive, savePayments } from "../../lib/sales-query";
 import { bancoDeTesteDisponivel, criarBancoDescartavel } from "./helpers";
 
 // Cadastro da venda: parcelas gravadas junto, consulta que devolve parcelas e comissão,
@@ -148,5 +148,75 @@ describe.skipIf(!disponivel)("cadastro de venda no banco", () => {
     expect(r.cascade.totals.costsCents).toBe(5000);
     expect(r.cascade.totals.replenishCents).toBe(30000 + 6000); // 30% do varejo e 30% da parcela consignada
     expect(r.cascade.check.fernandaPlusJoaoEqualsDistributable).toBe(true);
+  });
+
+  it("desconto e cashback: proteções do banco", async () => {
+    await expect(pool.query(`INSERT INTO sales (sale_date, discount_pct) VALUES ('2026-09-01', 101)`)).rejects.toThrow();
+    await expect(pool.query(`INSERT INTO sales (sale_date, cashback_pct) VALUES ('2026-09-01', -1)`)).rejects.toThrow();
+    await expect(pool.query(`INSERT INTO sales (sale_date, cashback_used) VALUES ('2026-09-01', -5)`)).rejects.toThrow();
+    await expect(pool.query(`INSERT INTO sales (sale_date, gross_value, discount_pct) VALUES ('2026-09-01', 200, 10)`)).resolves.toBeDefined();
+  });
+
+  it("cashback: o cliente ganha na venda, usa depois (nunca mais que o saldo) e o saldo acompanha", async () => {
+    await pool.query(`DELETE FROM sales`);
+    const { rows: cli } = await pool.query(`INSERT INTO clients (full_name) VALUES ('Maria Cashback') RETURNING id`);
+    const clientId = cli[0].id as number;
+
+    // Venda 1: R$ 200 com 10% de cashback: paga 200 e ganha 20.
+    const v1 = await resolveIncentive(
+      pool,
+      { gross_value: "200", incentive_kind: "cashback", incentive_pct: "10", price_tier: "varejo" },
+      clientId,
+      null
+    );
+    expect(v1).toMatchObject({ saleValue: 200, cashbackEarned: 20, cashbackPct: 10, grossValue: 200 });
+    await pool.query(
+      `INSERT INTO sales (sale_date, client_id, sale_value, gross_value, cashback_pct, cashback_earned)
+       VALUES ('2026-09-10', $1, 200, 200, 10, 20)`,
+      [clientId]
+    );
+    expect(await cashbackBalanceCents(pool, clientId)).toBe(2000);
+
+    // Venda 2: tenta usar R$ 50, mas o saldo é só R$ 20; com 5% de desconto.
+    const v2 = await resolveIncentive(
+      pool,
+      { gross_value: "100", incentive_kind: "desconto", incentive_pct: "5", cashback_used: "50", price_tier: "varejo" },
+      clientId,
+      null
+    );
+    expect(v2).toMatchObject({ cashbackUsed: 20, discountPct: 5, saleValue: 100 - 5 - 20 });
+    const { rows: v2row } = await pool.query(
+      `INSERT INTO sales (sale_date, client_id, sale_value, gross_value, discount_pct, cashback_used)
+       VALUES ('2026-09-12', $1, 75, 100, 5, 20) RETURNING id`,
+      [clientId]
+    );
+    expect(await cashbackBalanceCents(pool, clientId)).toBe(0);
+
+    // Editando a venda 2, o saldo não conta o que ela mesma usou: dá para manter os R$ 20.
+    expect(await cashbackBalanceCents(pool, clientId, v2row[0].id)).toBe(2000);
+    const edicao = await resolveIncentive(
+      pool,
+      { gross_value: "100", incentive_kind: "nenhum", cashback_used: "20", price_tier: "varejo" },
+      clientId,
+      v2row[0].id
+    );
+    expect(edicao).toMatchObject({ cashbackUsed: 20, saleValue: 80, grossValue: 100, discountPct: null });
+
+    // Venda cancelada não conta no saldo.
+    await pool.query(`UPDATE sales SET status = 'cancelada' WHERE client_id = $1 AND cashback_earned > 0`, [clientId]);
+    expect(await cashbackBalanceCents(pool, clientId)).toBe(0);
+
+    // Sem cliente escolhido, nada pode ser usado; e sem o bloco, nada muda.
+    const semCliente = await resolveIncentive(pool, { gross_value: "100", cashback_used: "30", price_tier: "varejo" }, null, null);
+    expect(semCliente).toMatchObject({ cashbackUsed: 0, saleValue: 100, grossValue: null });
+    expect(await resolveIncentive(pool, { sale_value: "100" }, clientId, null)).toBeNull();
+    // Atacado nunca tem desconto nem cashback.
+    const atac = await resolveIncentive(
+      pool,
+      { gross_value: "1000", incentive_kind: "desconto", incentive_pct: "10", price_tier: "atacado" },
+      clientId,
+      null
+    );
+    expect(atac).toMatchObject({ saleValue: 1000, discountPct: null, grossValue: null });
   });
 });

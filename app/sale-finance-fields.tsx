@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { formatBRL, formatDateBR, Manufacturer, Sale } from "@/lib/format";
 import { formatCentsBRL } from "@/lib/finance/money";
+import { INCENTIVE_KINDS, computeIncentive, type IncentiveKind, type IncentiveResult } from "@/lib/sale-incentive";
 import {
   PIX_A_PRAZO,
   PRICE_TIERS,
@@ -27,6 +28,9 @@ export type FinanceForm = {
   stock_received_date: string;
   payments: PaymentRow[];
   paymentsManual: boolean; // true: o valor das parcelas foi digitado à mão, não refazer sozinho
+  incentive_kind: IncentiveKind; // nenhum, desconto ou cashback
+  incentive_pct: string; // % do desconto ou do cashback
+  cashback_used: string; // saldo de cashback usado nesta venda (R$)
 };
 
 export const EMPTY_FINANCE: FinanceForm = {
@@ -37,6 +41,9 @@ export const EMPTY_FINANCE: FinanceForm = {
   stock_received_date: "",
   payments: [],
   paymentsManual: false,
+  incentive_kind: "nenhum",
+  incentive_pct: "",
+  cashback_used: "",
 };
 
 function numeroOuVazio(v: number | string | null | undefined): string {
@@ -59,13 +66,21 @@ export function financeFromSale(s: Sale): FinanceForm {
       received_date: p.received_date ?? "",
     })),
     paymentsManual: true, // vendas já salvas: não mexer nos valores das parcelas sem o João pedir
+    incentive_kind: Number(s.discount_pct) > 0 ? "desconto" : Number(s.cashback_pct) > 0 ? "cashback" : "nenhum",
+    incentive_pct: numeroOuVazio(Number(s.discount_pct) > 0 ? s.discount_pct : s.cashback_pct),
+    cashback_used: numeroOuVazio(s.cashback_used),
   };
 }
 
 /** Campos financeiros que vão junto com a venda para a API. */
-export function financePayload(f: FinanceForm, paymentMethod: string): Record<string, unknown> {
+export function financePayload(f: FinanceForm, paymentMethod: string, listValue: string): Record<string, unknown> {
   const atacado = f.price_tier === "atacado";
   return {
+    // Desconto e cashback: a tela manda o valor de tabela e o servidor recalcula o que o cliente paga.
+    gross_value: listValue,
+    incentive_kind: atacado ? "nenhum" : f.incentive_kind,
+    incentive_pct: atacado ? "" : f.incentive_pct,
+    cashback_used: atacado ? "" : f.cashback_used,
     price_tier: f.price_tier,
     sale_costs: atacado ? "0" : f.sale_costs,
     payment_fee: atacado ? "0" : f.payment_fee,
@@ -345,5 +360,127 @@ export function PixPlan({
         </div>
       )}
     </div>
+  );
+}
+
+/** Cálculo de desconto e cashback como a tela mostra (o servidor refaz a mesma conta). */
+export function calcIncentive(form: FinanceForm, listValue: string, availableCents: number): IncentiveResult {
+  const atacado = form.price_tier === "atacado";
+  return computeIncentive({
+    listValue,
+    kind: atacado ? "nenhum" : form.incentive_kind,
+    pct: form.incentive_pct,
+    cashbackUsed: atacado ? "" : form.cashback_used,
+    availableCents: atacado ? 0 : availableCents,
+  });
+}
+
+export function IncentiveFields({
+  form,
+  onChange,
+  result,
+  hasClient,
+  availableCents,
+}: {
+  form: FinanceForm;
+  onChange: Mudar;
+  result: IncentiveResult;
+  hasClient: boolean;
+  availableCents: number;
+}) {
+  const pedido = centsOrZero(form.cashback_used);
+  const mostrarResumo = result.discountCents > 0 || result.usedCents > 0 || result.earnedCents > 0;
+
+  return (
+    <>
+      <div className="field field--full">
+        <label>Desconto ou cashback</label>
+        <div className="radio-row">
+          {INCENTIVE_KINDS.map((k) => (
+            <button
+              type="button"
+              key={k.value}
+              className={"radio-chip" + (form.incentive_kind === k.value ? " selected" : "")}
+              onClick={() => onChange({ incentive_kind: k.value, ...(k.value === "nenhum" ? { incentive_pct: "" } : {}) })}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+        {form.incentive_kind === "desconto" && (
+          <span className="hint">O cliente paga menos agora. Informe a porcentagem do desconto.</span>
+        )}
+        {form.incentive_kind === "cashback" && (
+          <span className="hint">
+            O cliente paga o valor cheio e ganha essa porcentagem de volta, em crédito para as próximas compras.
+          </span>
+        )}
+      </div>
+
+      {form.incentive_kind !== "nenhum" && (
+        <div className="field">
+          <label htmlFor="incentive_pct">{form.incentive_kind === "desconto" ? "Desconto (%)" : "Cashback (%)"}</label>
+          <input
+            id="incentive_pct"
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            inputMode="decimal"
+            placeholder="Ex: 10"
+            value={form.incentive_pct}
+            onChange={(e) => onChange({ incentive_pct: e.target.value })}
+          />
+        </div>
+      )}
+
+      {form.incentive_kind === "cashback" && !hasClient && (
+        <div className="field field--full">
+          <div className="banner banner-warning" style={{ margin: 0 }}>
+            <span>⚠️</span>
+            <span>Escolha o cliente cadastrado (na parte Cliente) para o crédito ficar guardado no nome dele.</span>
+          </div>
+        </div>
+      )}
+
+      {availableCents > 0 && (
+        <div className="field">
+          <label htmlFor="cashback_used">{`Usar cashback (disponível: ${formatCentsBRL(availableCents)})`}</label>
+          <div className="money-input">
+            <span className="prefix">R$</span>
+            <input
+              id="cashback_used"
+              type="number"
+              step="0.01"
+              min="0"
+              inputMode="decimal"
+              value={form.cashback_used}
+              onChange={(e) => onChange({ cashback_used: e.target.value })}
+            />
+          </div>
+          {pedido > result.usedCents && (
+            <span className="hint">{`Só dá para usar ${formatCentsBRL(result.usedCents)} (saldo ou valor da venda).`}</span>
+          )}
+        </div>
+      )}
+
+      {mostrarResumo && (
+        <div className="field field--full">
+          <div className="banner banner-info" style={{ margin: 0, flexDirection: "column", gap: 2 }}>
+            <span>{`Valor de tabela: ${formatCentsBRL(result.listCents)}`}</span>
+            {result.discountCents > 0 && (
+              <span>{`Desconto de ${String(result.pct).replace(".", ",")}%: menos ${formatCentsBRL(result.discountCents)}`}</span>
+            )}
+            {result.usedCents > 0 && <span>{`Cashback usado: menos ${formatCentsBRL(result.usedCents)}`}</span>}
+            <span>
+              <strong>{`Cliente paga: ${formatCentsBRL(result.netCents)}`}</strong>
+            </span>
+            {result.earnedCents > 0 && (
+              <span>{`Cliente ganha de cashback: ${formatCentsBRL(result.earnedCents)} (${String(result.pct).replace(".", ",")}%)`}</span>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

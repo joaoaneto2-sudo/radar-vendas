@@ -8,17 +8,20 @@ import {
   SALE_TYPES,
   PAYMENT_METHODS,
   Manufacturer,
+  Client,
 } from "@/lib/format";
 import {
   AtacadoFields,
   CostFields,
+  IncentiveFields,
+  calcIncentive,
   PixPlan,
   TierPicker,
   financeFromSale,
   financePayload,
   type FinanceForm,
 } from "@/app/sale-finance-fields";
-import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE, PRICE_TIERS, commissionCents } from "@/lib/sale-finance";
+import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE, PRICE_TIERS, centsOrZero, commissionCents } from "@/lib/sale-finance";
 import { formatCentsBRL } from "@/lib/finance/money";
 import {
   NO_FILTERS,
@@ -62,7 +65,7 @@ function saleToForm(s: Sale): EditForm {
     supplier: s.supplier || "",
     warranty: s.warranty || "",
     cost: String(s.cost ?? ""),
-    sale_value: String(s.sale_value ?? ""),
+    sale_value: String(s.list_value ?? s.sale_value ?? ""), // valor de tabela (antes do desconto)
     payment_method: s.payment_method || "",
     installments_count: s.installments_count ? String(s.installments_count) : "",
     installments_dates: s.installments_dates || "",
@@ -77,11 +80,13 @@ function saleToForm(s: Sale): EditForm {
 function EditModal({
   sale,
   manufacturers,
+  clients,
   onClose,
   onSaved,
 }: {
   sale: Sale;
   manufacturers: Manufacturer[];
+  clients: Client[];
   onClose: () => void;
   onSaved: (updated: Sale) => void;
 }) {
@@ -91,6 +96,15 @@ function EditModal({
   function changeFinance(patch: Partial<FinanceForm>) {
     setFinance((f) => ({ ...f, ...patch }));
   }
+
+  // Saldo do cliente sem contar esta venda (o que ela ganhou e usou volta para a conta).
+  const cliente = clients.find((c) => c.id === sale.client_id) ?? null;
+  const availableCents = cliente
+    ? Math.max(centsOrZero(cliente.cashback_balance ?? 0) - centsOrZero(sale.cashback_earned ?? 0) + centsOrZero(sale.cashback_used ?? 0), 0)
+    : 0;
+  const incentive = calcIncentive(finance, form.sale_value, availableCents);
+  const noAtacado = finance.price_tier === "atacado";
+  const netValue = noAtacado ? form.sale_value : (incentive.netCents / 100).toFixed(2);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,7 +123,8 @@ function EditModal({
       const fabricante = manufacturers.find((m) => m.id === finance.manufacturer_id);
       const corpo = {
         ...form,
-        ...financePayload(finance, form.payment_method),
+        ...financePayload(finance, form.payment_method, form.sale_value),
+        sale_value: netValue,
         payment_method: atacado ? PIX_DIRETO_AO_FABRICANTE : form.payment_method,
         manufacturer: atacado && fabricante ? fabricante.name : form.manufacturer,
         // No Pix a prazo, o número e as datas para o texto do WhatsApp saem das parcelas.
@@ -241,6 +256,15 @@ function EditModal({
                 />
               </div>
             </div>
+            {!noAtacado && (
+              <IncentiveFields
+                form={finance}
+                onChange={changeFinance}
+                result={incentive}
+                hasClient={!!cliente}
+                availableCents={availableCents}
+              />
+            )}
             {finance.price_tier === "atacado" ? (
               <AtacadoFields
                 form={finance}
@@ -270,7 +294,7 @@ function EditModal({
                   <PixPlan
                     form={finance}
                     onChange={changeFinance}
-                    saleValue={form.sale_value}
+                    saleValue={netValue}
                     saleDate={form.sale_date}
                   />
                 )}
@@ -354,6 +378,14 @@ export default function RelatorioPage() {
   const setFilter = (chave: keyof SaleFilters, valor: string) => setFilters((f) => ({ ...f, [chave]: valor }));
   const [editing, setEditing] = useState<Sale | null>(null);
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+
+  useEffect(() => {
+    fetch("/api/clients")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setClients(d.items || []))
+      .catch(() => setClients([]));
+  }, [editing]);
 
   useEffect(() => {
     fetch("/api/manufacturers")
@@ -591,7 +623,14 @@ export default function RelatorioPage() {
                           )}
                         </td>
                         <td className="num">{formatBRL(s.cost)}</td>
-                        <td className="num">{formatBRL(s.sale_value)}</td>
+                        <td className="num">
+                          {formatBRL(s.sale_value)}
+                          {Number(s.discount_pct) > 0 && <div className="hint">{`desconto ${String(Number(s.discount_pct)).replace(".", ",")}%`}</div>}
+                          {Number(s.cashback_earned) > 0 && (
+                            <div className="hint">{`cashback +${formatBRL(s.cashback_earned)}`}</div>
+                          )}
+                          {Number(s.cashback_used) > 0 && <div className="hint">{`usou ${formatBRL(s.cashback_used)}`}</div>}
+                        </td>
                         <td className={"num " + (profit >= 0 ? "profit-pos" : "profit-neg")}>
                           {formatBRL(profit)}
                         </td>
@@ -622,6 +661,7 @@ export default function RelatorioPage() {
         <EditModal
           sale={editing}
           manufacturers={manufacturers}
+          clients={clients}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
         />

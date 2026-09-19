@@ -20,12 +20,14 @@ import {
   AtacadoFields,
   CostFields,
   EMPTY_FINANCE,
+  IncentiveFields,
+  calcIncentive,
   PixPlan,
   TierPicker,
   financePayload,
   type FinanceForm,
 } from "@/app/sale-finance-fields";
-import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE } from "@/lib/sale-finance";
+import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE, centsOrZero } from "@/lib/sale-finance";
 
 function todayISO(): string {
   const d = new Date();
@@ -91,6 +93,12 @@ export default function NovaVendaPage() {
   const selectedProduct = products.find((p) => p.id === form.product_id) || null;
   const selectedClient = clients.find((c) => c.id === form.client_id) || null;
 
+  // Desconto e cashback: o valor digitado é o de tabela; o cliente paga o valor com o ajuste.
+  const availableCents = centsOrZero(selectedClient?.cashback_balance ?? 0);
+  const incentive = calcIncentive(finance, form.sale_value, availableCents);
+  const noAtacado = finance.price_tier === "atacado";
+  const netValue = noAtacado ? form.sale_value : (incentive.netCents / 100).toFixed(2);
+
   function changeFinance(patch: Partial<FinanceForm>) {
     setFinance((f) => ({ ...f, ...patch }));
   }
@@ -144,7 +152,7 @@ export default function NovaVendaPage() {
     const parcelasComValor = finance.payments.filter((p) => Number(p.amount) > 0);
 
     const payload = {
-      ...financePayload(finance, form.payment_method),
+      ...financePayload(finance, form.payment_method, form.sale_value),
       sale_date: form.sale_date,
       sale_type: form.sale_type || null,
       seller: seller?.name || null,
@@ -155,7 +163,7 @@ export default function NovaVendaPage() {
       warranty: product?.warranty || null,
       product_id: product?.id || null,
       cost: form.cost || null,
-      sale_value: form.sale_value || null,
+      sale_value: netValue || null,
       payment_method: atacado ? PIX_DIRETO_AO_FABRICANTE : form.payment_method || null,
       // No Pix a prazo, o número e as datas para o texto do WhatsApp saem das parcelas.
       installments_count: pixAPrazo ? parcelasComValor.length || null : form.installments_count || null,
@@ -422,6 +430,15 @@ export default function NovaVendaPage() {
                 />
               </div>
             </div>
+            {!noAtacado && (
+              <IncentiveFields
+                form={finance}
+                onChange={changeFinance}
+                result={incentive}
+                hasClient={!!selectedClient}
+                availableCents={availableCents}
+              />
+            )}
             {finance.price_tier === "atacado" ? (
               <AtacadoFields
                 form={finance}
@@ -456,7 +473,7 @@ export default function NovaVendaPage() {
                   <PixPlan
                     form={finance}
                     onChange={changeFinance}
-                    saleValue={form.sale_value}
+                    saleValue={netValue}
                     saleDate={form.sale_date}
                   />
                 )}

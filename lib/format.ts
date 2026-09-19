@@ -29,6 +29,12 @@ export type Sale = {
   manufacturer_ref_name?: string | null;
   stock_received_date?: string | null;
   commission_pct?: number | string | null; // só se o fabricante é representado
+  list_value?: number | string | null; // valor de tabela (antes de desconto e cashback usado)
+  gross_value?: number | string | null;
+  discount_pct?: number | string | null;
+  cashback_pct?: number | string | null;
+  cashback_earned?: number | string | null;
+  cashback_used?: number | string | null;
   status?: "ativa" | "cancelada";
   payments?: {
     id: number;
@@ -51,6 +57,7 @@ export type Client = {
   city?: string | null;
   phone?: string | null;
   birthday?: string | null;
+  cashback_balance?: number | string | null; // crédito de cashback disponível
 };
 
 export type Product = {
@@ -208,6 +215,17 @@ export function buildWhatsAppMessage(sale: Sale): string {
   lines.push("");
   lines.push(`💰 Custo da peça: ${formatBRL(sale.cost)}`);
   lines.push(`💲 Valor da venda: ${formatBRL(sale.sale_value)}`);
+  const pct = (v: number | string | null | undefined) => String(Number(v)).replace(".", ",");
+  const listValue = sale.gross_value ?? sale.list_value;
+  if (Number(sale.discount_pct) > 0) {
+    lines.push(`🏷️ Desconto: ${pct(sale.discount_pct)}% (valor de tabela ${formatBRL(listValue)})`);
+  }
+  if (Number(sale.cashback_used) > 0) {
+    lines.push(`🎁 Cashback usado: ${formatBRL(sale.cashback_used)}`);
+  }
+  if (Number(sale.cashback_pct) > 0 && Number(sale.cashback_earned) > 0) {
+    lines.push(`🎁 Cashback: ${pct(sale.cashback_pct)}% = ${formatBRL(sale.cashback_earned)} para as próximas compras`);
+  }
   let payment = `💳 Forma de pagamento: ${sale.payment_method || "-"}`;
   if (
     sale.payment_method &&

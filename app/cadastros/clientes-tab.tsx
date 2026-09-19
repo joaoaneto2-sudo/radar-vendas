@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Client, formatDateBR } from "@/lib/format";
+import { Client, formatBRL, formatDateBR } from "@/lib/format";
 
 type ClientForm = {
   full_name: string;
@@ -106,6 +106,7 @@ export default function ClientesTab() {
                 <th>Praça</th>
                 <th>Telefone</th>
                 <th>Aniversário</th>
+                <th>Cashback</th>
                 <th>Ações</th>
               </tr>
             </thead>
@@ -117,6 +118,7 @@ export default function ClientesTab() {
                   <td>{c.city || "-"}</td>
                   <td>{c.phone || "-"}</td>
                   <td>{c.birthday ? formatDateBR(c.birthday) : "-"}</td>
+                  <td className="num">{Number(c.cashback_balance) > 0 ? formatBRL(c.cashback_balance) : "-"}</td>
                   <td>
                     <div className="row-actions">
                       <button className="icon-btn" onClick={() => openEdit(c)}>

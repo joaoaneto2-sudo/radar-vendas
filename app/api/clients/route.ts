@@ -9,7 +9,14 @@ export async function GET() {
   if (!db) return NextResponse.json({ error: "db_not_configured" }, { status: 503 });
   try {
     await ensureSchema();
-    const { rows } = await db.query("SELECT * FROM clients ORDER BY full_name ASC");
+    // cashback_balance: crédito ganho menos usado, nas vendas ativas do cliente.
+    const { rows } = await db.query(
+      `SELECT c.*,
+              COALESCE((SELECT SUM(s.cashback_earned - s.cashback_used)
+                          FROM sales s WHERE s.client_id = c.id AND s.status = 'ativa'), 0) AS cashback_balance
+         FROM clients c
+        ORDER BY c.full_name ASC`
+    );
     return NextResponse.json({ items: rows });
   } catch (err) {
     console.error(err);

@@ -266,7 +266,7 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
       `INSERT INTO joao_payments (paid_date, amount, notes) VALUES ('2026-09-01', 1000, 'Pagamento inicial'), ('2026-09-15', 250.50, NULL)`
     );
 
-    expect(await runMigrations(pool)).toEqual(["008"]);
+    expect(await runMigrations(pool)).toEqual(TODOS_OS_IDS.filter((id) => id > "007")); // 008 em diante
 
     const { rows } = await pool.query(
       `SELECT kind, status, to_char(received_date, 'YYYY-MM-DD') AS d, amount, partner, reason FROM receipts ORDER BY received_date`

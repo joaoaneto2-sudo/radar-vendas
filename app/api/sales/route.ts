@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseSaleFinance } from "@/lib/sale-finance";
-import { SALE_SELECT, savePayments } from "@/lib/sales-query";
+import { SALE_SELECT, resolveIncentive, savePayments } from "@/lib/sales-query";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,14 +68,17 @@ export async function POST(req: NextRequest) {
   try {
     await ensureSchema();
     await client.query("BEGIN");
+    // Desconto/cashback: o servidor recalcula o valor que o cliente paga.
+    const inc = await resolveIncentive(client, { ...body, price_tier: tier }, clientId, null);
     const { rows } = await client.query(
       `INSERT INTO sales (
         sale_date, sale_type, seller, product_type, manufacturer, supplier,
         warranty, cost, sale_value, payment_method, installments_count,
         installments_dates, client_name, client_nickname, client_city,
         client_phone, client_birthday, product_id, client_id, seller_id,
-        price_tier, sale_costs, payment_fee, manufacturer_id, stock_received_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+        price_tier, sale_costs, payment_fee, manufacturer_id, stock_received_date,
+        gross_value, discount_pct, cashback_pct, cashback_earned, cashback_used
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
       RETURNING id`,
       [
         body.sale_date,
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
         body.supplier || null,
         body.warranty || null,
         cost,
-        saleValue,
+        inc ? inc.saleValue : saleValue,
         body.payment_method || null,
         installmentsCount,
         body.installments_dates || null,
@@ -103,6 +106,11 @@ export async function POST(req: NextRequest) {
         fin.paymentFee ?? 0,
         fin.manufacturerId,
         fin.stockReceivedDate,
+        inc ? inc.grossValue : null,
+        inc ? inc.discountPct : null,
+        inc ? inc.cashbackPct : null,
+        inc ? inc.cashbackEarned : 0,
+        inc ? inc.cashbackUsed : 0,
       ]
     );
     const saleId = rows[0].id as number;

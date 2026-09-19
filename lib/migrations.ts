@@ -409,6 +409,26 @@ export const MIGRATIONS: Migration[] = [
       `DROP TABLE joao_payments`,
     ],
   },
+  {
+    id: "009",
+    name: "desconto e cashback na venda",
+    statements: [
+      // sale_value continua sendo o que o cliente PAGA. gross_value é o valor de tabela
+      // (antes do desconto e do cashback usado); fica vazio quando não houve nenhum dos dois.
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS gross_value NUMERIC(12,2)
+         CHECK (gross_value IS NULL OR gross_value >= 0)`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS discount_pct NUMERIC(5,2)
+         CHECK (discount_pct IS NULL OR discount_pct BETWEEN 0 AND 100)`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS cashback_pct NUMERIC(5,2)
+         CHECK (cashback_pct IS NULL OR cashback_pct BETWEEN 0 AND 100)`,
+      // Crédito que o cliente ganhou nesta venda e saldo que ele usou nela.
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS cashback_earned NUMERIC(12,2) NOT NULL DEFAULT 0
+         CHECK (cashback_earned >= 0)`,
+      `ALTER TABLE sales ADD COLUMN IF NOT EXISTS cashback_used NUMERIC(12,2) NOT NULL DEFAULT 0
+         CHECK (cashback_used >= 0)`,
+      `CREATE INDEX IF NOT EXISTS sales_client_idx ON sales (client_id)`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
