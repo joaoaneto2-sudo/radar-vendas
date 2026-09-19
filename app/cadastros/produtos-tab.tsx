@@ -20,6 +20,7 @@ import {
   buildProductDescription,
 } from "@/lib/format";
 import Combobox, { ComboboxOption } from "@/app/combobox";
+import LojaOnlineSection from "@/app/cadastros/loja-online-section";
 import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
 
@@ -53,6 +54,10 @@ type ProductForm = {
   purchase_payment_method: string;
   purchasePaymentOther: boolean;
   purchase_qty: string;
+  show_online: boolean;
+  featured: boolean;
+  sale_price: string;
+  public_description: string;
 };
 
 const EMPTY: ProductForm = {
@@ -80,6 +85,10 @@ const EMPTY: ProductForm = {
   purchase_payment_method: "",
   purchasePaymentOther: false,
   purchase_qty: "",
+  show_online: false,
+  featured: false,
+  sale_price: "",
+  public_description: "",
 };
 
 function productToForm(p: Product): ProductForm {
@@ -109,6 +118,10 @@ function productToForm(p: Product): ProductForm {
     purchase_payment_method: p.purchase_payment_method || "",
     purchasePaymentOther: !!(p.purchase_payment_method && !PURCHASE_PAYMENT_METHODS.includes(p.purchase_payment_method)),
     purchase_qty: p.purchase_qty === null || p.purchase_qty === undefined ? "" : String(p.purchase_qty),
+    show_online: !!p.show_online,
+    featured: !!p.featured,
+    sale_price: p.sale_price === null || p.sale_price === undefined ? "" : String(Number(p.sale_price)),
+    public_description: p.public_description || "",
   };
 }
 
@@ -137,6 +150,7 @@ export default function ProdutosTab() {
   const [form, setForm] = useState<ProductForm>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [siteFilter, setSiteFilter] = useState<"todas" | "no_site" | "fora">("todas");
 
   function load() {
     Promise.all([
@@ -268,7 +282,8 @@ export default function ProdutosTab() {
         setEditing(null);
         load();
       } else {
-        window.alert("Não foi possível salvar. Tente novamente.");
+        const dados = await res.json().catch(() => ({}));
+        window.alert(dados.message || "Não foi possível salvar. Tente novamente.");
       }
     } finally {
       setSaving(false);
@@ -281,6 +296,26 @@ export default function ProdutosTab() {
     const res = await fetch(`/api/products/${p.id}`, { method: "DELETE" });
     if (res.ok) setItems((prev) => prev.filter((i) => i.id !== p.id));
   }
+
+  // "No site" e "Carrossel" direto na linha, sem abrir o cadastro.
+  async function toggleStore(p: Product, campo: "show_online" | "featured") {
+    const res = await fetch(`/api/products/${p.id}/store`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [campo]: !p[campo] }),
+    });
+    const dados = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      window.alert(dados.message || "Não foi possível mudar. Tente novamente.");
+      return;
+    }
+    setItems((prev) => prev.map((i) => (i.id === p.id ? { ...i, ...dados.item } : i)));
+  }
+
+  const visibleItems = items.filter((p) =>
+    siteFilter === "todas" ? true : siteFilter === "no_site" ? !!p.show_online : !p.show_online
+  );
+  const noSiteCount = items.filter((p) => p.show_online).length;
 
   const suggestedName = buildProductDescription(form);
   const totals = productPurchaseTotals(items, partnershipStart);
@@ -295,7 +330,23 @@ export default function ProdutosTab() {
   return (
     <div>
       <div className="toolbar" style={{ marginBottom: 18 }}>
-        <div />
+        <div className="tabs" style={{ marginBottom: 0 }} aria-label="Filtro da loja online">
+          {(
+            [
+              ["todas", `Todas (${items.length})`],
+              ["no_site", `No site (${noSiteCount})`],
+              ["fora", `Fora do site (${items.length - noSiteCount})`],
+            ] as const
+          ).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              className={"tab-btn" + (siteFilter === valor ? " active" : "")}
+              onClick={() => setSiteFilter(valor)}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
         <button className="btn btn-primary" onClick={openNew}>
           + Novo produto
         </button>
@@ -360,11 +411,12 @@ export default function ProdutosTab() {
                 <th>Custo</th>
                 <th>Preço</th>
                 <th>Estoque</th>
+                <th>Loja online</th>
                 <th>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {items.map((p) => (
+              {visibleItems.map((p) => (
                 <tr key={p.id}>
                   <td>
                     {p.photo_url ? (
@@ -412,9 +464,38 @@ export default function ProdutosTab() {
                     )}
                   </td>
                   <td className="num">{formatBRL(p.cost)}</td>
-                  <td className="num">{formatBRL(p.price)}</td>
+                  <td className="num">
+                    {formatBRL(p.price)}
+                    {p.sale_price !== null && p.sale_price !== undefined && (
+                      <div>
+                        <span className="stock-pill low">{`Promo ${formatBRL(p.sale_price)}`}</span>
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <span className={`stock-pill ${stockClass(p.stock_qty)}`}>{p.stock_qty}</span>
+                  </td>
+                  <td>
+                    <div className="store-toggles">
+                      <button
+                        type="button"
+                        disabled={p.sale_channel === "atacado"}
+                        title={p.sale_channel === "atacado" ? "Peça do fabricante não vai para o site" : undefined}
+                        className={"toggle-chip" + (p.show_online ? " on" : "")}
+                        onClick={() => toggleStore(p, "show_online")}
+                      >
+                        No site
+                      </button>
+                      <button
+                        type="button"
+                        disabled={p.sale_channel === "atacado" || !p.show_online}
+                        title={!p.show_online ? "Ligue \"No site\" primeiro" : undefined}
+                        className={"toggle-chip" + (p.featured ? " on" : "")}
+                        onClick={() => toggleStore(p, "featured")}
+                      >
+                        Carrossel
+                      </button>
+                    </div>
                   </td>
                   <td>
                     <div className="row-actions">
@@ -478,7 +559,13 @@ export default function ProdutosTab() {
                         type="button"
                         key={c.value}
                         className={"radio-chip" + (form.sale_channel === c.value ? " selected" : "")}
-                        onClick={() => set("sale_channel", c.value)}
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            sale_channel: c.value,
+                            ...(c.value === "atacado" ? { show_online: false, featured: false } : {}),
+                          }))
+                        }
                       >
                         {c.label}
                       </button>
@@ -836,6 +923,14 @@ export default function ProdutosTab() {
                   </>
                 )}
               </div>
+
+              <LojaOnlineSection
+                form={form}
+                onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+                channel={form.sale_channel}
+                price={form.price}
+                productId={editing !== "new" && editing !== null ? editing.id : null}
+              />
 
               <div className="modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setEditing(null)}>

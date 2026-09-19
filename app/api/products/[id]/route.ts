@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
+import { resolveStoreFields } from "@/lib/store-rules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,17 +33,38 @@ export async function PATCH(
   const cost = numOrNull(body.cost);
   const price = numOrNull(body.price);
   const stockQty = Number.isFinite(Number(body.stock_qty)) ? Number(body.stock_qty) : 0;
+  const saleChannel = body.sale_channel === "atacado" ? "atacado" : "varejo";
 
   try {
     await ensureSchema();
+
+    // Regras da loja online: chaves que não vieram mantêm o que a peça já tem.
+    const atual = await db.query(
+      `SELECT show_online, featured, sale_price, public_description FROM products WHERE id = $1`,
+      [id]
+    );
+    if (atual.rows.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const antes = atual.rows[0];
+    const loja = resolveStoreFields(
+      body,
+      {
+        show_online: antes.show_online,
+        featured: antes.featured,
+        sale_price: antes.sale_price === null ? null : Number(antes.sale_price),
+        public_description: antes.public_description,
+      },
+      { saleChannel, price }
+    );
+    if (!loja.ok) return NextResponse.json({ error: loja.error, message: loja.message }, { status: 400 });
+
     const { rows } = await db.query(
       `UPDATE products SET
         category=$1, subtype=$2, jewelry_type=$3, name=$4, manufacturer_id=$5,
         supplier_id=$6, cost=$7, price=$8, stock_qty=$9, warranty=$10,
         photo_url=$11, active=$12, material=$13, gemstone=$14, age_group=$15, gender=$16,
         karat=$17, purchase_date=$18, purchase_payment_method=$19, purchase_qty=$20,
-        sale_channel=$21
-      WHERE id=$22
+        sale_channel=$21, show_online=$22, featured=$23, sale_price=$24, public_description=$25
+      WHERE id=$26
       RETURNING *`,
       [
         body.category || null,
@@ -65,12 +87,16 @@ export async function PATCH(
         dateOrNull(body.purchase_date),
         body.purchase_payment_method || null,
         intOrNull(body.purchase_qty),
-        body.sale_channel === "atacado" ? "atacado" : "varejo",
+        saleChannel,
+        loja.value.show_online,
+        loja.value.featured,
+        loja.value.sale_price,
+        loja.value.public_description,
         id,
       ]
     );
     if (rows.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json({ item: rows[0] });
+    return NextResponse.json({ item: rows[0], notes: loja.notes });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });

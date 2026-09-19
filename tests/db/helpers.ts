@@ -42,6 +42,7 @@ export async function criarBancoDescartavel() {
 
   return {
     pool,
+    url: url.toString(),
     async apagar() {
       await pool.end();
       await admin.query(`DROP DATABASE ${nome} WITH (FORCE)`);

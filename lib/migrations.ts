@@ -429,6 +429,69 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS sales_client_idx ON sales (client_id)`,
     ],
   },
+  {
+    id: "010",
+    name: "loja online: controle das pecas no site, fotos extras, ajustes da loja e visoes publicas",
+    statements: [
+      // Só acrescenta. Nada existente muda: as colunas novas nascem "fora do site" e sem promoção.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS show_online BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false`,
+      // Vazio (NULL) = sem promoção. Nunca zero.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_price NUMERIC(12,2)
+         CHECK (sale_price IS NULL OR sale_price > 0)`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS public_description TEXT`,
+      // Regras da loja garantidas pelo próprio banco.
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_featured_needs_online') THEN
+           ALTER TABLE products ADD CONSTRAINT products_featured_needs_online
+             CHECK (NOT featured OR show_online);
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_online_not_wholesale') THEN
+           ALTER TABLE products ADD CONSTRAINT products_online_not_wholesale
+             CHECK (NOT show_online OR sale_channel <> 'atacado');
+         END IF;
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_sale_price_below_price') THEN
+           ALTER TABLE products ADD CONSTRAINT products_sale_price_below_price
+             CHECK (sale_price IS NULL OR (price IS NOT NULL AND sale_price < price));
+         END IF;
+       END $$`,
+      `CREATE INDEX IF NOT EXISTS products_show_online_idx ON products (show_online) WHERE show_online`,
+      // Fotos extras. A photo_url da peça continua sendo a foto principal.
+      `CREATE TABLE IF NOT EXISTS product_photos (
+        id SERIAL PRIMARY KEY,
+        product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        url TEXT NOT NULL,
+        position INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS product_photos_product_idx ON product_photos (product_id, position)`,
+      // Valores da loja que o João muda sozinho. Uma única linha (id = 1).
+      // Entrega e Correios vazios = ainda não definido.
+      `CREATE TABLE IF NOT EXISTS store_settings (
+        id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        delivery_salvador NUMERIC(12,2) CHECK (delivery_salvador IS NULL OR delivery_salvador >= 0),
+        shipping_correios NUMERIC(12,2) CHECK (shipping_correios IS NULL OR shipping_correios >= 0),
+        installment_fee NUMERIC(12,2) NOT NULL DEFAULT 10 CHECK (installment_fee >= 0),
+        max_installments INT NOT NULL DEFAULT 12 CHECK (max_installments BETWEEN 1 AND 24),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `INSERT INTO store_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+      // O que a loja lê: visões que já entregam SÓ as peças marcadas "No site" (ativas e que não
+      // sejam de atacado) e SÓ as colunas públicas. Custo, compra, fornecedor e fabricante não
+      // aparecem. Colunas novas da peça NÃO entram aqui sozinhas: é preciso acrescentar de propósito.
+      `CREATE OR REPLACE VIEW store_products AS
+         SELECT id, category, subtype, jewelry_type, name, material, karat, gemstone,
+                age_group, gender, price, sale_price, stock_qty, warranty, photo_url,
+                featured, public_description
+           FROM products
+          WHERE show_online AND active AND sale_channel <> 'atacado'`,
+      `CREATE OR REPLACE VIEW store_product_photos AS
+         SELECT pp.id, pp.product_id, pp.url, pp.position
+           FROM product_photos pp
+           JOIN products p ON p.id = pp.product_id
+          WHERE p.show_online AND p.active AND p.sale_channel <> 'atacado'`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

@@ -54,6 +54,9 @@ export default function NavBar() {
           <a href="/financeiro" className={pathname === "/financeiro" ? "active" : ""}>
             Financeiro
           </a>
+          <a href="/loja-online" className={pathname === "/loja-online" ? "active" : ""}>
+            Loja online
+          </a>
           <a href="/financeiro/recebimentos" className={pathname === "/financeiro/recebimentos" ? "active" : ""}>
             Recebimentos
           </a>

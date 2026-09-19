@@ -339,6 +339,76 @@ input[type="date"] {
   margin-top: 2px;
 }
 
+/* Loja online */
+
+.store-section {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.store-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.toggle-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toggle-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.toggle-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.radio-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.photo-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+
+.photo-item {
+  width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.photo-item img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.photo-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 /* Parcelas do Pix a prazo */
 
 .pix-plan {

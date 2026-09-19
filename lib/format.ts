@@ -85,6 +85,12 @@ export type Product = {
   purchase_payment_method?: string | null;
   purchase_qty?: number | null;
   sale_channel?: string | null; // "varejo" (estoque nosso) ou "atacado" (peça do fabricante)
+  // Loja online
+  show_online?: boolean;
+  featured?: boolean;
+  sale_price?: number | string | null; // preço promocional; vazio = sem promoção
+  public_description?: string | null;
+  extra_photos?: number;
 };
 
 export type Manufacturer = {
