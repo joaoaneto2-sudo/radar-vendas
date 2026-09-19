@@ -58,7 +58,39 @@ export type Product = {
   age_group?: string | null;
   gender?: string | null;
   active: boolean;
+  purchase_date?: string | null; // AAAA-MM-DD
+  purchase_payment_method?: string | null;
+  purchase_qty?: number | null;
+  sale_channel?: string | null; // "varejo" (estoque nosso) ou "atacado" (peça do fabricante)
 };
+
+export type Manufacturer = {
+  id: number;
+  name: string;
+  represented: boolean;
+  commission_pct: number | string | null;
+  commission_days: number;
+  wholesale_mode: string; // "pronta_entrega" ou "encomenda"
+};
+
+export const SALE_CHANNELS = [
+  { value: "varejo", label: "Varejo (estoque nosso)" },
+  { value: "atacado", label: "Atacado (peça do fabricante, pronta entrega)" },
+];
+
+export const WHOLESALE_MODES = [
+  { value: "pronta_entrega", label: "Pronta entrega" },
+  { value: "encomenda", label: "Sob encomenda" },
+];
+
+export const PURCHASE_PAYMENT_METHODS = [
+  "Cartão da empresa",
+  "Cartão pessoal da Fernanda",
+  "Cartão pessoal do João",
+  "Pix",
+  "Dinheiro",
+  "Boleto",
+];
 
 export const PRODUCT_CATEGORIES: Record<string, string[]> = {
   "Anéis": ["Aliança", "Solitário", "Meia Aliança", "Chevalier", "Formatura", "Infantil", "Outro"],

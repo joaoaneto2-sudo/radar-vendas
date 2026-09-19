@@ -1,5 +1,9 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
 import { runMigrations } from "./migrations";
+
+// Datas (tipo DATE) saem do banco como texto AAAA-MM-DD, sem fuso horário.
+// Assim o dia nunca "anda" (por exemplo, 01/09 virando 31/08 num servidor de outro fuso).
+types.setTypeParser(1082, (valor: string) => valor);
 
 let pool: Pool | null = null;
 

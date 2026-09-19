@@ -343,6 +343,36 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS card_invoice_parts_invoice_idx ON card_invoice_parts (invoice_id)`,
     ],
   },
+  {
+    id: "007",
+    name: "dados da compra no cadastro da peca (data, forma de pagamento, quantidade) e canal varejo/atacado",
+    statements: [
+      // A data da compra separa as duas fases do negocio: antes de 01/09 (estoque inicial,
+      // pago pela Fernanda) e de 01/09 em diante. Tudo opcional: dá para completar depois.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_date DATE`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_payment_method TEXT`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS purchase_qty INT
+         CHECK (purchase_qty IS NULL OR purchase_qty >= 0)`,
+      `CREATE INDEX IF NOT EXISTS products_purchase_date_idx ON products (purchase_date)`,
+      // Canal da peça: varejo = estoque nosso (comprado por nós); atacado = peça do fabricante
+      // representado, vendida em pronta entrega (não é compra nossa, não entra no estoque comprado).
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_channel TEXT NOT NULL DEFAULT 'varejo'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_sale_channel_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_sale_channel_check
+             CHECK (sale_channel IN ('varejo', 'atacado'));
+         END IF;
+       END $$`,
+      // Modalidade do atacado do fabricante. Hoje so existe pronta entrega (Bia Belutti).
+      `ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS wholesale_mode TEXT NOT NULL DEFAULT 'pronta_entrega'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'manufacturers_wholesale_mode_check') THEN
+           ALTER TABLE manufacturers ADD CONSTRAINT manufacturers_wholesale_mode_check
+             CHECK (wholesale_mode IN ('pronta_entrega', 'encomenda'));
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

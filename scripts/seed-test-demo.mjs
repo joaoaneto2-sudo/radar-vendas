@@ -25,12 +25,25 @@ try {
 
   // Fabricante representado: 20% de comissão, paga 15 dias depois de receber o estoque.
   const { rows: fab } = await client.query(
-    `INSERT INTO manufacturers (name, represented, commission_pct, commission_days)
-     VALUES ('Bia Belutti (DEMO)', true, 20, 15)
+    `INSERT INTO manufacturers (name, represented, commission_pct, commission_days, wholesale_mode)
+     VALUES ('Bia Belutti (DEMO)', true, 20, 15, 'pronta_entrega')
      ON CONFLICT (name) DO UPDATE SET represented = true, commission_pct = 20, commission_days = 15
      RETURNING id`
   );
   const fabId = fab[0].id;
+
+  // Produtos de exemplo: estoque inicial (antes de 01/09), compra depois de 01/09,
+  // uma peça sem data da compra e uma peça de atacado (do fabricante, fora do estoque comprado).
+  await client.query(`DELETE FROM products WHERE name LIKE 'DEMO %'`);
+  await client.query(
+    `INSERT INTO products (name, category, subtype, jewelry_type, cost, price, stock_qty, purchase_date, purchase_payment_method, purchase_qty, sale_channel, manufacturer_id) VALUES
+       ('DEMO Anel Solitário Zircônia', 'Anéis', 'Solitário', 'Semijoia', 60.00, 180.00, 8, '2026-08-12', 'Cartão pessoal da Fernanda', 10, 'varejo', NULL),
+       ('DEMO Brinco Argola Folheado', 'Brincos', 'Argola', 'Semijoia', 35.00, 110.00, 15, '2026-08-25', 'Cartão pessoal da Fernanda', 20, 'varejo', NULL),
+       ('DEMO Pulseira Riviera', 'Pulseiras', 'Riviera', 'Semijoia', 90.00, 260.00, 6, '2026-09-05', 'Cartão da empresa', 8, 'varejo', NULL),
+       ('DEMO Colar Ponto de Luz (sem data da compra)', 'Colares e Correntes', 'Ponto de Luz', 'Semijoia', 45.00, 150.00, 5, NULL, NULL, NULL, 'varejo', NULL),
+       ('DEMO Anel Bia Belutti (atacado, pronta entrega)', 'Anéis', 'Outro', 'Semijoia', 50.00, 130.00, 30, NULL, NULL, NULL, 'atacado', $1)`,
+    [fabId]
+  );
 
   // Atacado: o cliente paga direto ao fabricante; a sociedade recebe a comissão depois.
   await client.query(

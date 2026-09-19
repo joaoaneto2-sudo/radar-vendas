@@ -170,6 +170,48 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     expect(rows[0].commission_days).toBe(15); // prazo padrão
   });
 
+  it("dados da compra da peça: tudo opcional; canal só varejo/atacado; quantidade não negativa", async () => {
+    const pool = await bancoPronto();
+
+    // Peça já existente (sem dados da compra) continua valendo, como varejo.
+    await pool.query(`INSERT INTO products (name) VALUES ('Peça antiga')`);
+    const antiga = await pool.query(
+      `SELECT purchase_date, purchase_payment_method, purchase_qty, sale_channel FROM products WHERE name = 'Peça antiga'`
+    );
+    expect(antiga.rows[0]).toEqual({
+      purchase_date: null,
+      purchase_payment_method: null,
+      purchase_qty: null,
+      sale_channel: "varejo",
+    });
+
+    // A data volta como texto AAAA-MM-DD (sem fuso).
+    await pool.query(
+      `INSERT INTO products (name, purchase_date, purchase_payment_method, purchase_qty)
+       VALUES ('Peça de agosto', '2026-08-31', 'Cartão pessoal da Fernanda', 12)`
+    );
+    const { rows } = await pool.query(
+      `SELECT to_char(purchase_date, 'YYYY-MM-DD') AS d, purchase_qty FROM products WHERE name = 'Peça de agosto'`
+    );
+    expect(rows[0]).toEqual({ d: "2026-08-31", purchase_qty: 12 });
+
+    await expect(pool.query(`INSERT INTO products (name, purchase_qty) VALUES ('Negativa', -1)`)).rejects.toThrow();
+    await expect(pool.query(`INSERT INTO products (name, sale_channel) VALUES ('Canal ruim', 'outro')`)).rejects.toThrow();
+    await expect(
+      pool.query(`INSERT INTO products (name, sale_channel) VALUES ('Da Bia', 'atacado')`)
+    ).resolves.toBeDefined();
+  });
+
+  it("fabricante: modalidade do atacado é pronta entrega (padrão) ou encomenda", async () => {
+    const pool = await bancoPronto();
+    await pool.query(`INSERT INTO manufacturers (name) VALUES ('Padrão')`);
+    const { rows } = await pool.query(`SELECT wholesale_mode FROM manufacturers WHERE name = 'Padrão'`);
+    expect(rows[0].wholesale_mode).toBe("pronta_entrega");
+    await expect(
+      pool.query(`INSERT INTO manufacturers (name, wholesale_mode) VALUES ('Errada', 'consignado')`)
+    ).rejects.toThrow();
+  });
+
   it("parcela pode ficar sem data enquanto o estoque do fabricante não chega", async () => {
     const pool = await bancoPronto();
     await expect(

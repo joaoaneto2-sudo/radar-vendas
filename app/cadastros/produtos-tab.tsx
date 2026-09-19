@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   Product,
+  Manufacturer,
   SimpleEntity,
   formatBRL,
+  formatDateBR,
+  SALE_CHANNELS,
+  PURCHASE_PAYMENT_METHODS,
   PRODUCT_CATEGORIES,
   PRODUCT_CATEGORY_NAMES,
   JEWELRY_TYPES,
@@ -16,6 +20,8 @@ import {
   buildProductDescription,
 } from "@/lib/format";
 import Combobox, { ComboboxOption } from "@/app/combobox";
+import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
+import { formatCentsBRL } from "@/lib/finance/money";
 
 const MATERIAL_PRESETS = MATERIALS.slice(0, -1);
 const GEMSTONE_PRESETS = GEMSTONES.slice(0, -1);
@@ -42,6 +48,11 @@ type ProductForm = {
   gemstoneOther: boolean;
   age_group: string;
   gender: string;
+  sale_channel: string;
+  purchase_date: string;
+  purchase_payment_method: string;
+  purchasePaymentOther: boolean;
+  purchase_qty: string;
 };
 
 const EMPTY: ProductForm = {
@@ -64,6 +75,11 @@ const EMPTY: ProductForm = {
   gemstoneOther: false,
   age_group: "",
   gender: "",
+  sale_channel: "varejo",
+  purchase_date: "",
+  purchase_payment_method: "",
+  purchasePaymentOther: false,
+  purchase_qty: "",
 };
 
 function productToForm(p: Product): ProductForm {
@@ -88,7 +104,21 @@ function productToForm(p: Product): ProductForm {
     gemstoneOther: !!(p.gemstone && !GEMSTONE_PRESETS.includes(p.gemstone)),
     age_group: p.age_group || "",
     gender: p.gender || "",
+    sale_channel: p.sale_channel === "atacado" ? "atacado" : "varejo",
+    purchase_date: p.purchase_date ? p.purchase_date.slice(0, 10) : "",
+    purchase_payment_method: p.purchase_payment_method || "",
+    purchasePaymentOther: !!(p.purchase_payment_method && !PURCHASE_PAYMENT_METHODS.includes(p.purchase_payment_method)),
+    purchase_qty: p.purchase_qty === null || p.purchase_qty === undefined ? "" : String(p.purchase_qty),
   };
+}
+
+// Selo da fase da compra, pela data (início da sociedade vem das Parâmetros do acordo).
+function phaseBadge(p: Product, inicio: string): { text: string; cls: string } | null {
+  if (p.sale_channel === "atacado") return null;
+  const fase = purchasePhase(p.purchase_date, inicio);
+  if (fase === "inicial") return { text: "Estoque inicial", cls: "ok" };
+  if (fase === "posterior") return { text: `A partir de ${formatDateBR(inicio).slice(0, 5)}`, cls: "low" };
+  return { text: "Sem data da compra", cls: "out" };
 }
 
 function stockClass(qty: number): string {
@@ -99,8 +129,9 @@ function stockClass(qty: number): string {
 
 export default function ProdutosTab() {
   const [items, setItems] = useState<Product[]>([]);
-  const [manufacturers, setManufacturers] = useState<SimpleEntity[]>([]);
+  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [suppliers, setSuppliers] = useState<SimpleEntity[]>([]);
+  const [partnershipStart, setPartnershipStart] = useState("2026-09-01");
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [form, setForm] = useState<ProductForm>(EMPTY);
@@ -115,6 +146,7 @@ export default function ProdutosTab() {
     ])
       .then(([p, m, s]) => {
         setItems(p.items || []);
+        if (p.partnershipStart) setPartnershipStart(p.partnershipStart);
         setManufacturers(m.items || []);
         setSuppliers(s.items || []);
       })
@@ -156,6 +188,18 @@ export default function ProdutosTab() {
       setForm((f) => ({ ...f, gemstoneOther: true, gemstone: f.gemstoneOther ? f.gemstone : "" }));
     } else {
       setForm((f) => ({ ...f, gemstoneOther: false, gemstone: g }));
+    }
+  }
+
+  function selectPurchasePayment(m: string) {
+    if (m === "Outro") {
+      setForm((f) => ({
+        ...f,
+        purchasePaymentOther: true,
+        purchase_payment_method: f.purchasePaymentOther ? f.purchase_payment_method : "",
+      }));
+    } else {
+      setForm((f) => ({ ...f, purchasePaymentOther: false, purchase_payment_method: m }));
     }
   }
 
@@ -239,6 +283,11 @@ export default function ProdutosTab() {
   }
 
   const suggestedName = buildProductDescription(form);
+  const totals = productPurchaseTotals(items, partnershipStart);
+  const varejoCount = items.filter((p) => p.sale_channel !== "atacado").length;
+  const atacadoCount = items.length - varejoCount;
+  const selectedManufacturer = manufacturers.find((m) => m.id === form.manufacturer_id);
+  const inicioBR = formatDateBR(partnershipStart);
 
   const manufacturerOptions: ComboboxOption[] = manufacturers.map((m) => ({ id: m.id, label: m.name }));
   const supplierOptions: ComboboxOption[] = suppliers.map((s) => ({ id: s.id, label: s.name }));
@@ -251,6 +300,47 @@ export default function ProdutosTab() {
           + Novo produto
         </button>
       </div>
+
+      {!loading && items.length > 0 && (
+        <div className="stat-grid" style={{ marginBottom: 12 }}>
+          <div className="stat-tile">
+            <div className="label">Estoque inicial (antes de {inicioBR})</div>
+            <div className="value">{formatCentsBRL(totals.initial.cents)}</div>
+            <div className="hint">
+              {totals.initial.pieces} peças em {totals.initial.products} cadastros. Custo x quantidade comprada.
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="label">Compras a partir de {inicioBR}</div>
+            <div className="value">{formatCentsBRL(totals.posterior.cents)}</div>
+            <div className="hint">
+              {totals.posterior.pieces} peças em {totals.posterior.products} cadastros.
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="label">Faltam preencher</div>
+            <div className="value">{totals.undatedProducts}</div>
+            <div className="hint">
+              peças de varejo sem data da compra
+              {totals.withoutQtyProducts > 0 ? `; ${totals.withoutQtyProducts} sem quantidade` : ""}
+              {totals.withoutCostProducts > 0 ? `; ${totals.withoutCostProducts} sem custo` : ""}.
+            </div>
+          </div>
+          <div className="stat-tile">
+            <div className="label">Canal</div>
+            <div className="value">
+              {varejoCount} / {atacadoCount}
+            </div>
+            <div className="hint">cadastros de varejo / de atacado (fabricante)</div>
+          </div>
+        </div>
+      )}
+      {!loading && items.length > 0 && (
+        <p className="hint" style={{ marginBottom: 18 }}>
+          Estes números vêm só do cadastro das peças. O painel financeiro continua usando o valor provisório do
+          acordo até vocês confirmarem o estoque inicial apurado aqui.
+        </p>
+      )}
 
       {loading ? (
         <div className="loading-state">Carregando...</div>
@@ -266,6 +356,7 @@ export default function ProdutosTab() {
                 <th>Categoria</th>
                 <th>Fabricante</th>
                 <th>Fornecedor</th>
+                <th>Compra</th>
                 <th>Custo</th>
                 <th>Preço</th>
                 <th>Estoque</th>
@@ -296,6 +387,30 @@ export default function ProdutosTab() {
                   </td>
                   <td>{p.manufacturer_name || "-"}</td>
                   <td>{p.supplier_name || "-"}</td>
+                  <td>
+                    {p.sale_channel === "atacado" ? (
+                      <>
+                        <span className="stock-pill low">Atacado</span>
+                        <div className="hint">Peça do fabricante</div>
+                      </>
+                    ) : (
+                      <>
+                        {(() => {
+                          const b = phaseBadge(p, partnershipStart);
+                          return b ? <span className={`stock-pill ${b.cls}`}>{b.text}</span> : null;
+                        })()}
+                        <div className="hint">
+                          {[
+                            p.purchase_date ? formatDateBR(p.purchase_date) : null,
+                            p.purchase_qty !== null && p.purchase_qty !== undefined ? `${p.purchase_qty} un.` : null,
+                            p.purchase_payment_method,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "-"}
+                        </div>
+                      </>
+                    )}
+                  </td>
                   <td className="num">{formatBRL(p.cost)}</td>
                   <td className="num">{formatBRL(p.price)}</td>
                   <td>
@@ -355,6 +470,26 @@ export default function ProdutosTab() {
               </div>
 
               <div className="form-grid">
+                <div className="field field--full">
+                  <label>Canal de venda desta peça</label>
+                  <div className="radio-row">
+                    {SALE_CHANNELS.map((c) => (
+                      <button
+                        type="button"
+                        key={c.value}
+                        className={"radio-chip" + (form.sale_channel === c.value ? " selected" : "")}
+                        onClick={() => set("sale_channel", c.value)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="hint">
+                    O estoque inicial é todo de varejo. Atacado é só peça de fabricante que vocês representam (hoje
+                    a Bia Belutti), em pronta entrega.
+                  </span>
+                </div>
+
                 <div className="field field--full">
                   <label>Nome do produto</label>
                   <input
@@ -548,6 +683,22 @@ export default function ProdutosTab() {
                     createLabel="+ Cadastrar"
                   />
                 </div>
+                {form.sale_channel === "atacado" && form.manufacturer_id && selectedManufacturer && !selectedManufacturer.represented && (
+                  <div className="banner banner-warning field--full" style={{ marginBottom: 0 }}>
+                    <span>⚠️</span>
+                    <span>
+                      Este fabricante ainda não está marcado como representado. Na aba Fabricantes, marque
+                      "Representamos" e informe a comissão, senão a venda no atacado não gera comissão.
+                    </span>
+                  </div>
+                )}
+                {form.sale_channel === "atacado" && !form.manufacturer_id && (
+                  <div className="banner banner-warning field--full" style={{ marginBottom: 0 }}>
+                    <span>⚠️</span>
+                    <span>Escolha o fabricante desta peça de atacado.</span>
+                  </div>
+                )}
+
                 <div className="field">
                   <label>Fornecedor</label>
                   <Combobox
@@ -604,6 +755,86 @@ export default function ProdutosTab() {
                     onChange={(e) => set("warranty", e.target.value)}
                   />
                 </div>
+
+                {form.sale_channel === "atacado" ? (
+                  <div className="field field--full">
+                    <span className="hint">
+                      Peça de atacado é do fabricante: não tem compra da empresa, então não há data nem forma de
+                      pagamento da compra. O custo e o estoque acima são só informativos.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="field field--full">
+                      <label>Compra desta peça</label>
+                      <span className="hint">
+                        Serve para separar o estoque inicial (compras antes de {inicioBR}) do estoque comprado depois.
+                        Opcional: dá para completar depois.
+                      </span>
+                    </div>
+                    <div className="field">
+                      <label>Data da compra</label>
+                      <input
+                        type="date"
+                        value={form.purchase_date}
+                        onChange={(e) => set("purchase_date", e.target.value)}
+                      />
+                      {form.purchase_date && (
+                        <span className="hint">
+                          {form.purchase_date < partnershipStart
+                            ? "Estoque inicial (a Fernanda paga essa fatura)."
+                            : `Compra da sociedade (a partir de ${inicioBR}).`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="field">
+                      <label>Quantidade comprada</label>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="Ex: 10"
+                        value={form.purchase_qty}
+                        onChange={(e) => set("purchase_qty", e.target.value)}
+                      />
+                      <span className="hint">Diferente do estoque atual: é quanto veio na compra.</span>
+                    </div>
+                    <div className="field field--full">
+                      <label>Forma de pagamento da compra</label>
+                      <div className="radio-row">
+                        {[...PURCHASE_PAYMENT_METHODS, "Outro"].map((m) => (
+                          <button
+                            type="button"
+                            key={m}
+                            className={
+                              "radio-chip" +
+                              ((m === "Outro"
+                                ? form.purchasePaymentOther
+                                : form.purchase_payment_method === m && !form.purchasePaymentOther)
+                                ? " selected"
+                                : "")
+                            }
+                            onClick={() =>
+                              m !== "Outro" && form.purchase_payment_method === m && !form.purchasePaymentOther
+                                ? set("purchase_payment_method", "")
+                                : selectPurchasePayment(m)
+                            }
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                      {form.purchasePaymentOther && (
+                        <input
+                          type="text"
+                          placeholder="Qual forma de pagamento?"
+                          value={form.purchase_payment_method}
+                          onChange={(e) => set("purchase_payment_method", e.target.value)}
+                          style={{ marginTop: 8 }}
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="modal-actions">

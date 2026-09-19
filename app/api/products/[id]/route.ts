@@ -10,6 +10,15 @@ function numOrNull(v: unknown): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+function intOrNull(v: unknown): number | null {
+  const n = numOrNull(v);
+  return n === null ? null : Math.max(0, Math.trunc(n));
+}
+
+function dateOrNull(v: unknown): string | null {
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -31,8 +40,9 @@ export async function PATCH(
         category=$1, subtype=$2, jewelry_type=$3, name=$4, manufacturer_id=$5,
         supplier_id=$6, cost=$7, price=$8, stock_qty=$9, warranty=$10,
         photo_url=$11, active=$12, material=$13, gemstone=$14, age_group=$15, gender=$16,
-        karat=$17
-      WHERE id=$18
+        karat=$17, purchase_date=$18, purchase_payment_method=$19, purchase_qty=$20,
+        sale_channel=$21
+      WHERE id=$22
       RETURNING *`,
       [
         body.category || null,
@@ -52,6 +62,10 @@ export async function PATCH(
         body.age_group || null,
         body.gender || null,
         body.karat || null,
+        dateOrNull(body.purchase_date),
+        body.purchase_payment_method || null,
+        intOrNull(body.purchase_qty),
+        body.sale_channel === "atacado" ? "atacado" : "varejo",
         id,
       ]
     );

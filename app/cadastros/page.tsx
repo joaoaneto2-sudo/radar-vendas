@@ -4,6 +4,7 @@ import { useState } from "react";
 import ProdutosTab from "./produtos-tab";
 import ClientesTab from "./clientes-tab";
 import SimpleListTab from "./simple-list-tab";
+import FabricantesTab from "./fabricantes-tab";
 
 const TABS = ["Produtos", "Clientes", "Fabricantes", "Fornecedores", "Vendedoras"] as const;
 type Tab = (typeof TABS)[number];
@@ -33,9 +34,7 @@ export default function CadastrosPage() {
 
       {tab === "Produtos" && <ProdutosTab />}
       {tab === "Clientes" && <ClientesTab />}
-      {tab === "Fabricantes" && (
-        <SimpleListTab title="Fabricantes" endpoint="manufacturers" placeholder="Nome do fabricante" />
-      )}
+      {tab === "Fabricantes" && <FabricantesTab />}
       {tab === "Fornecedores" && (
         <SimpleListTab title="Fornecedores" endpoint="suppliers" placeholder="Nome do fornecedor" />
       )}
