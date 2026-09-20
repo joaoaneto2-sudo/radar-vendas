@@ -522,6 +522,30 @@ export const MIGRATIONS: Migration[] = [
          ON CONFLICT (key) DO NOTHING`,
     ],
   },
+  {
+    id: "012",
+    name: "vitrine do site: vagas de foto (carrossel e categorias)",
+    statements: [
+      // Cada vaga guarda uma foto escolhida pelo João para uma área do site. A foto tem de ser uma foto da
+      // peça: quem confere isso é a API (o banco não consegue ver os dois lugares onde as fotos ficam).
+      `CREATE TABLE IF NOT EXISTS site_slots (
+        id SERIAL PRIMARY KEY,
+        area TEXT NOT NULL CHECK (area IN ('carrossel', 'categoria')),
+        category TEXT,
+        position INT NOT NULL DEFAULT 0,
+        product_id INT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        photo_url TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CHECK (
+          (area = 'categoria' AND category IS NOT NULL AND btrim(category) <> '')
+          OR (area = 'carrossel' AND category IS NULL)
+        )
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS site_slots_carrossel_peca_idx ON site_slots (product_id) WHERE area = 'carrossel'`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS site_slots_categoria_idx ON site_slots (category) WHERE area = 'categoria'`,
+      `CREATE INDEX IF NOT EXISTS site_slots_area_posicao_idx ON site_slots (area, position)`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
