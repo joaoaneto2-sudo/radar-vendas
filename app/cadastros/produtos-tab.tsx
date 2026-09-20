@@ -21,6 +21,7 @@ import {
 } from "@/lib/format";
 import Combobox, { ComboboxOption } from "@/app/combobox";
 import LojaOnlineSection from "@/app/cadastros/loja-online-section";
+import { faltaParaPublicar, mensagemDeFalta } from "@/lib/store-rules";
 import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
 
@@ -278,11 +279,12 @@ export default function ProdutosTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+      const dados = await res.json().catch(() => ({}));
       if (res.ok) {
         setEditing(null);
         load();
+        if (Array.isArray(dados.notes) && dados.notes.length > 0) window.alert(dados.notes.join("\n"));
       } else {
-        const dados = await res.json().catch(() => ({}));
         window.alert(dados.message || "Não foi possível salvar. Tente novamente.");
       }
     } finally {
@@ -310,6 +312,7 @@ export default function ProdutosTab() {
       return;
     }
     setItems((prev) => prev.map((i) => (i.id === p.id ? { ...i, ...dados.item } : i)));
+    if (Array.isArray(dados.notes) && dados.notes.length > 0) window.alert(dados.notes.join("\n"));
   }
 
   const visibleItems = items.filter((p) =>
@@ -499,6 +502,15 @@ export default function ProdutosTab() {
                         Carrossel
                       </button>
                     </div>
+                    {p.sale_channel !== "atacado" &&
+                      (() => {
+                        const falta = faltaParaPublicar({ photoUrl: p.photo_url, price: p.price, description: p.public_description });
+                        return falta.length > 0 ? (
+                          <div className="hint" title={mensagemDeFalta(falta)}>
+                            <span className="stock-pill out">Incompleta</span> {falta.join(", ")}
+                          </div>
+                        ) : null;
+                      })()}
                   </td>
                   <td>
                     <div className="row-actions">
@@ -933,6 +945,8 @@ export default function ProdutosTab() {
                 channel={form.sale_channel}
                 price={form.price}
                 productId={editing !== "new" && editing !== null ? editing.id : null}
+                mainPhoto={form.photo_url}
+                onMainPhotoChange={(url) => setForm((f) => ({ ...f, photo_url: url }))}
               />
 
               <div className="modal-actions">
