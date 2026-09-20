@@ -13,6 +13,7 @@ export interface StoreState {
 export interface StoreContext {
   saleChannel: string | null | undefined; // "varejo" ou "atacado"
   price: number | null; // preço normal da peça
+  photoUrl: string | null | undefined; // foto principal da peça
 }
 
 export type StoreResult =
@@ -39,6 +40,25 @@ function flag(v: unknown, atual: boolean): boolean {
 }
 
 const tem = (obj: Record<string, unknown>, chave: string) => Object.prototype.hasOwnProperty.call(obj, chave);
+
+/** O que falta para a peça poder ir para o site: foto principal, preço maior que zero e descrição. */
+export function faltaParaPublicar(p: {
+  photoUrl?: string | null;
+  price?: number | string | null;
+  description?: string | null;
+}): string[] {
+  const falta: string[] = [];
+  if (!p.photoUrl || String(p.photoUrl).trim() === "") falta.push("foto principal");
+  const preco = p.price === null || p.price === undefined || p.price === "" ? null : Number(p.price);
+  if (preco === null || !Number.isFinite(preco) || preco <= 0) falta.push("preço");
+  if (!p.description || p.description.trim() === "") falta.push("descrição");
+  return falta;
+}
+
+export function mensagemDeFalta(falta: string[]): string {
+  const lista = falta.length <= 1 ? falta.join("") : `${falta.slice(0, -1).join(", ")} e ${falta[falta.length - 1]}`;
+  return `${falta.length === 1 ? "Falta" : "Faltam"}: ${lista} para ir para o site.`;
+}
 
 /**
  * Junta o que veio da tela com o que a peça já tem e aplica as regras.
@@ -104,6 +124,12 @@ export function resolveStoreFields(
   if (tem(input, "public_description")) {
     const texto = typeof input.public_description === "string" ? input.public_description.trim() : "";
     description = texto === "" ? null : texto;
+  }
+
+  // Só vai para o site peça com foto principal, preço e descrição (vale também ao editar peça já publicada).
+  if (showOnline) {
+    const falta = faltaParaPublicar({ photoUrl: ctx.photoUrl, price: ctx.price, description });
+    if (falta.length > 0) return { ok: false, error: "incomplete_for_site", message: mensagemDeFalta(falta) };
   }
 
   return { ok: true, value: { show_online: showOnline, featured, sale_price: salePrice, public_description: description }, notes };

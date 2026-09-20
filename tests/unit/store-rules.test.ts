@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   WHOLESALE_BLOCK_MESSAGE,
+  faltaParaPublicar,
+  mensagemDeFalta,
   parseStoreSettings,
   readMoneyOrNull,
   resolveStoreFields,
@@ -9,9 +11,11 @@ import {
   type StoreState,
 } from "../../lib/store-rules";
 
+const TEXTO = "Solitário delicado com zircônia.";
 const FORA: StoreState = { show_online: false, featured: false, sale_price: null, public_description: null };
-const NO_SITE: StoreState = { show_online: true, featured: false, sale_price: null, public_description: null };
-const VAREJO = { saleChannel: "varejo", price: 200 };
+const PRONTA_FORA: StoreState = { ...FORA, public_description: TEXTO };
+const NO_SITE: StoreState = { show_online: true, featured: false, sale_price: null, public_description: TEXTO };
+const VAREJO = { saleChannel: "varejo", price: 200, photoUrl: "https://x/a.jpg" };
 
 describe("valor vazio é 'sem valor', nunca zero", () => {
   it("vazio, espaços e nulo viram null", () => {
@@ -37,7 +41,7 @@ describe("valor vazio é 'sem valor', nunca zero", () => {
 
 describe("No site e Carrossel", () => {
   it("liga e desliga o site", () => {
-    const r = resolveStoreFields({ show_online: true }, FORA, VAREJO);
+    const r = resolveStoreFields({ show_online: true }, PRONTA_FORA, VAREJO);
     expect(r).toMatchObject({ ok: true, value: { show_online: true, featured: false } });
   });
 
@@ -45,7 +49,7 @@ describe("No site e Carrossel", () => {
     expect(resolveStoreFields({ featured: true }, FORA, VAREJO)).toMatchObject({ ok: false, error: "featured_needs_online" });
     expect(resolveStoreFields({ featured: true }, NO_SITE, VAREJO)).toMatchObject({ ok: true, value: { featured: true } });
     // ligando os dois juntos, vale
-    expect(resolveStoreFields({ show_online: true, featured: true }, FORA, VAREJO)).toMatchObject({
+    expect(resolveStoreFields({ show_online: true, featured: true }, PRONTA_FORA, VAREJO)).toMatchObject({
       ok: true,
       value: { show_online: true, featured: true },
     });
@@ -70,19 +74,19 @@ describe("No site e Carrossel", () => {
 
 describe("peça de atacado (do fabricante)", () => {
   it("não vai para o site", () => {
-    const r = resolveStoreFields({ show_online: true }, FORA, { saleChannel: "atacado", price: 200 });
+    const r = resolveStoreFields({ show_online: true }, FORA, { saleChannel: "atacado", price: 200, photoUrl: "https://x/a.jpg" });
     expect(r).toEqual({ ok: false, error: "wholesale_not_allowed", message: WHOLESALE_BLOCK_MESSAGE });
   });
 
   it("nem vira atacado com o site ligado", () => {
-    expect(resolveStoreFields({}, NO_SITE, { saleChannel: "atacado", price: 200 })).toMatchObject({
+    expect(resolveStoreFields({}, NO_SITE, { saleChannel: "atacado", price: 200, photoUrl: "https://x/a.jpg" })).toMatchObject({
       ok: false,
       error: "wholesale_not_allowed",
     });
   });
 
   it("atacado fora do site salva normalmente", () => {
-    expect(resolveStoreFields({ public_description: "x" }, FORA, { saleChannel: "atacado", price: 200 })).toMatchObject({ ok: true });
+    expect(resolveStoreFields({ public_description: "x" }, FORA, { saleChannel: "atacado", price: 200, photoUrl: null })).toMatchObject({ ok: true });
   });
 });
 
@@ -106,7 +110,7 @@ describe("preço promocional", () => {
   });
 
   it("sem preço normal não dá para ter promoção", () => {
-    expect(resolveStoreFields({ sale_price: "50" }, FORA, { saleChannel: "varejo", price: null })).toMatchObject({
+    expect(resolveStoreFields({ sale_price: "50" }, FORA, { saleChannel: "varejo", price: null, photoUrl: null })).toMatchObject({
       ok: false,
       error: "sale_price_needs_price",
     });
@@ -114,7 +118,7 @@ describe("preço promocional", () => {
 
   it("subir o preço promocional que já existe acima de um novo preço normal é recusado", () => {
     // A peça tinha promoção de 150; o preço normal foi baixado para 140.
-    expect(resolveStoreFields({}, { ...FORA, sale_price: 150 }, { saleChannel: "varejo", price: 140 })).toMatchObject({
+    expect(resolveStoreFields({}, { ...FORA, sale_price: 150 }, { saleChannel: "varejo", price: 140, photoUrl: null })).toMatchObject({
       ok: false,
       error: "sale_price_not_lower",
     });
@@ -209,5 +213,42 @@ describe("ajustes da loja: ida e volta para chave e valor", () => {
     expect(rowsToSettings([])).toEqual({ delivery_salvador: null, shipping_correios: null, installment_fee: null, max_installments: null });
     expect(rowsToSettings([{ key: "max_parcelas", value: "99" }]).max_installments).toBeNull();
     expect(rowsToSettings([{ key: "max_parcelas", value: "2.5" }]).max_installments).toBeNull();
+  });
+});
+
+describe("regra de publicar: foto principal, preço e descrição", () => {
+  it("lista o que falta, sempre na mesma ordem", () => {
+    expect(faltaParaPublicar({ photoUrl: null, price: null, description: null })).toEqual(["foto principal", "preço", "descrição"]);
+    expect(faltaParaPublicar({ photoUrl: "https://x/a.jpg", price: 0, description: "  " })).toEqual(["preço", "descrição"]);
+    expect(faltaParaPublicar({ photoUrl: "  ", price: "89.90", description: "ok" })).toEqual(["foto principal"]);
+    expect(faltaParaPublicar({ photoUrl: "https://x/a.jpg", price: "89.90", description: "ok" })).toEqual([]);
+  });
+
+  it("mensagem em português, no singular e no plural", () => {
+    expect(mensagemDeFalta(["descrição"])).toBe("Falta: descrição para ir para o site.");
+    expect(mensagemDeFalta(["foto principal", "descrição"])).toBe("Faltam: foto principal e descrição para ir para o site.");
+    expect(mensagemDeFalta(["foto principal", "preço", "descrição"])).toBe("Faltam: foto principal, preço e descrição para ir para o site.");
+  });
+
+  it("bloqueia ligar o site sem foto, preço ou descrição", () => {
+    const r = resolveStoreFields({ show_online: true }, FORA, VAREJO);
+    expect(r).toEqual({ ok: false, error: "incomplete_for_site", message: "Falta: descrição para ir para o site." });
+    const semFoto = resolveStoreFields({ show_online: true }, PRONTA_FORA, { ...VAREJO, photoUrl: null });
+    expect(semFoto).toMatchObject({ ok: false, error: "incomplete_for_site" });
+    const semPreco = resolveStoreFields({ show_online: true }, PRONTA_FORA, { ...VAREJO, price: null });
+    expect(semPreco).toMatchObject({ ok: false, error: "incomplete_for_site" });
+  });
+
+  it("peça já publicada também não pode ficar sem descrição ou foto", () => {
+    expect(resolveStoreFields({ public_description: "" }, NO_SITE, VAREJO)).toMatchObject({ ok: false, error: "incomplete_for_site" });
+    expect(resolveStoreFields({}, NO_SITE, { ...VAREJO, photoUrl: null })).toMatchObject({ ok: false, error: "incomplete_for_site" });
+  });
+
+  it("tirar do site nunca é bloqueado, mesmo incompleta", () => {
+    expect(resolveStoreFields({ show_online: false }, NO_SITE, { ...VAREJO, photoUrl: null })).toMatchObject({ ok: true, value: { show_online: false } });
+  });
+
+  it("descrição e foto completas deixam publicar", () => {
+    expect(resolveStoreFields({ show_online: true }, PRONTA_FORA, VAREJO)).toMatchObject({ ok: true, value: { show_online: true } });
   });
 });

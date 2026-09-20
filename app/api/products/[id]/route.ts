@@ -53,7 +53,7 @@ export async function PATCH(
         sale_price: antes.sale_price === null ? null : Number(antes.sale_price),
         public_description: antes.public_description,
       },
-      { saleChannel, price }
+      { saleChannel, price, photoUrl: body.photo_url || null }
     );
     if (!loja.ok) return NextResponse.json({ error: loja.error, message: loja.message }, { status: 400 });
 

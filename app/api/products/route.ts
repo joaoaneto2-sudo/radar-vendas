@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   const saleChannel = body.sale_channel === "atacado" ? "atacado" : "varejo";
 
   // Regras da loja online (site, carrossel, promoção). Recusa com mensagem clara em vez de salvar errado.
-  const loja = resolveStoreFields(body, LOJA_INICIAL, { saleChannel, price });
+  const loja = resolveStoreFields(body, LOJA_INICIAL, { saleChannel, price, photoUrl: body.photo_url || null });
   if (!loja.ok) return NextResponse.json({ error: loja.error, message: loja.message }, { status: 400 });
 
   try {

@@ -22,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     await ensureSchema();
     const { rows: atual } = await db.query(
-      `SELECT show_online, featured, sale_price, public_description, sale_channel, price FROM products WHERE id = $1`,
+      `SELECT show_online, featured, sale_price, public_description, sale_channel, price, photo_url FROM products WHERE id = $1`,
       [id]
     );
     if (atual.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         sale_price: p.sale_price === null ? null : Number(p.sale_price),
         public_description: p.public_description,
       },
-      { saleChannel: p.sale_channel, price: p.price === null ? null : Number(p.price) }
+      { saleChannel: p.sale_channel, price: p.price === null ? null : Number(p.price), photoUrl: p.photo_url }
     );
     if (!r.ok) return NextResponse.json({ error: r.error, message: r.message }, { status: 400 });
 
