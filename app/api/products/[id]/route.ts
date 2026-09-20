@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { resolveStoreFields } from "@/lib/store-rules";
+import { MENSAGEM_CARROSSEL_CHEIO, carrosselCheio, reconciliarPeca } from "@/lib/vitrine-db";
+import { avisoDeVagasRemovidas } from "@/lib/vitrine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +58,9 @@ export async function PATCH(
       { saleChannel, price, photoUrl: body.photo_url || null }
     );
     if (!loja.ok) return NextResponse.json({ error: loja.error, message: loja.message }, { status: 400 });
+    if (loja.value.featured && (await carrosselCheio(db, id))) {
+      return NextResponse.json({ error: "carousel_full", message: MENSAGEM_CARROSSEL_CHEIO }, { status: 400 });
+    }
 
     const { rows } = await db.query(
       `UPDATE products SET
@@ -96,7 +101,9 @@ export async function PATCH(
       ]
     );
     if (rows.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    return NextResponse.json({ item: rows[0], notes: loja.notes });
+    const { removidas } = await reconciliarPeca(db, id);
+    const aviso = avisoDeVagasRemovidas(removidas);
+    return NextResponse.json({ item: rows[0], notes: [...loja.notes, ...(aviso ? [aviso] : [])] });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });

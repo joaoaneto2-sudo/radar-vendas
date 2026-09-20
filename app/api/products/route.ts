@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { resolveStoreFields, type StoreState } from "@/lib/store-rules";
+import { MENSAGEM_CARROSSEL_CHEIO, carrosselCheio, reconciliarPeca } from "@/lib/vitrine-db";
+import { avisoDeVagasRemovidas } from "@/lib/vitrine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +69,10 @@ export async function POST(req: NextRequest) {
 
   try {
     await ensureSchema();
+    // Carrossel cheio: recusa antes de salvar a peça.
+    if (loja.value.featured && (await carrosselCheio(db, 0))) {
+      return NextResponse.json({ error: "carousel_full", message: MENSAGEM_CARROSSEL_CHEIO }, { status: 400 });
+    }
     const { rows } = await db.query(
       `INSERT INTO products (
         category, subtype, jewelry_type, name, manufacturer_id, supplier_id,
@@ -104,7 +110,9 @@ export async function POST(req: NextRequest) {
         loja.value.public_description,
       ]
     );
-    return NextResponse.json({ item: rows[0] }, { status: 201 });
+    const { removidas } = await reconciliarPeca(db, rows[0].id);
+    const aviso = avisoDeVagasRemovidas(removidas);
+    return NextResponse.json({ item: rows[0], notes: aviso ? [aviso] : [] }, { status: 201 });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "insert_failed" }, { status: 500 });

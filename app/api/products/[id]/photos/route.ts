@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
+import { reconciliarPeca } from "@/lib/vitrine-db";
+import { avisoDeVagasRemovidas } from "@/lib/vitrine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,7 +105,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     await ensureSchema();
     await db.query(`DELETE FROM product_photos WHERE id = $1 AND product_id = $2`, [photoId, id]);
-    return NextResponse.json({ ok: true });
+    const { removidas } = await reconciliarPeca(db, id);
+    const aviso = avisoDeVagasRemovidas(removidas);
+    return NextResponse.json({ ok: true, notes: aviso ? [aviso] : [] });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "delete_failed" }, { status: 500 });
