@@ -30,9 +30,9 @@
   --radius-md: 12px;
   --radius-sm: 8px;
   --shadow: 0 1px 2px rgba(90, 47, 23, 0.06), 0 10px 28px rgba(90, 47, 23, 0.08);
-  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
-  --font-body: "Work Sans", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Sora", "Manrope", system-ui, sans-serif; /* valores em dinheiro: Sora com algarismos de largura igual */
 }
 
 * {
@@ -1664,4 +1664,36 @@ a.btn {
 
 .brand-name {
   white-space: nowrap;
+}
+
+
+/* Tipografia: Sora (títulos, números) e Manrope (texto). Números sempre com algarismos de largura igual. */
+.num,
+.stat-tile .value,
+.money-input input,
+td.num,
+.value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+h1,
+h2,
+h3,
+.brand-name {
+  letter-spacing: -0.01em;
+}
+
+.page-head h1 {
+  font-size: 1.65rem;
+  font-weight: 600;
+}
+
+.eyebrow {
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+
+.stat-tile .label {
+  letter-spacing: 0.08em;
 }
