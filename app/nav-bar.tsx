@@ -29,6 +29,7 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
     itens: [
       { href: "/financeiro", rotulo: "Painel", icone: "financeiro" },
       { href: "/financeiro/recebimentos", rotulo: "Recebimentos", icone: "receber" },
+      { href: "/financeiro/fundo", rotulo: "Fundo de reposição", icone: "financeiro" },
       { href: "/financeiro/despesas", rotulo: "Despesas e faturas", icone: "despesas" },
     ],
   },
@@ -50,6 +51,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
   "/financeiro": ["Financeiro", "Painel"],
   "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
+  "/financeiro/fundo": ["Financeiro", "Fundo de reposição"],
   "/financeiro/despesas": ["Financeiro", "Despesas e faturas"],
   "/loja-online": ["Loja", "Loja online"],
   "/loja-online/vitrine": ["Loja", "Vitrine do site"],
@@ -66,6 +68,7 @@ const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
 const MAIS = [
   { href: "/financeiro", rotulo: "Painel financeiro" },
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
+  { href: "/financeiro/fundo", rotulo: "Fundo de reposição" },
   { href: "/financeiro/despesas", rotulo: "Despesas e faturas" },
   { href: "/loja-online", rotulo: "Loja online" },
   { href: "/loja-online/vitrine", rotulo: "Vitrine do site" },
