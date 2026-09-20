@@ -5,17 +5,43 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LEGACY_BASELINE_STATEMENTS, runMigrations } from "../../lib/migrations";
 import { bancoDeTesteDisponivel, criarBancoDescartavel } from "./helpers";
 
-// Loja online: colunas novas, regras do banco, visões públicas e o usuário somente leitura.
+// Loja online: colunas novas, regras do banco, ajustes em chave e valor, visões e o usuário somente leitura.
 
 const disponivel = await bancoDeTesteDisponivel();
 
-// Colunas que a loja pode ver de cada peça. Se alguém acrescentar uma coluna aqui sem querer,
-// este teste falha: custo, compra, fornecedor e fabricante nunca podem aparecer.
-const COLUNAS_PUBLICAS_DA_PECA = [
+// Colunas de products que o usuário da loja pode ler (pedido do João). Nada de custo, compra,
+// fornecedor ou fabricante. Se o script liberar uma coluna a mais, o teste falha.
+const COLUNAS_LIBERADAS = {
+  products: [
+    "id", "name", "category", "subtype", "jewelry_type", "material", "karat", "gemstone",
+    "warranty", "public_description", "price", "sale_price", "stock_qty", "featured",
+    "photo_url", "created_at", "sale_channel", "active", "show_online",
+  ],
+  product_photos: ["id", "product_id", "url", "position"],
+  store_settings: ["key", "value"],
+};
+
+// Colunas das visões (que continuam no banco, sem uso pela loja).
+const COLUNAS_DA_VISAO = [
   "id", "category", "subtype", "jewelry_type", "name", "material", "karat", "gemstone",
   "age_group", "gender", "price", "sale_price", "stock_qty", "warranty", "photo_url",
   "featured", "public_description",
 ];
+
+// Consultas da loja (copiadas de loja-fernanda-brilhante/lib/dados/postgres.ts). Se a loja
+// mudar as dela, copie de novo aqui: este teste prova que o usuário de leitura consegue rodá-las.
+const COLUNAS_DA_LOJA = `
+  p.id, p.name, p.category, p.subtype, p.jewelry_type, p.material, p.karat, p.gemstone,
+  p.warranty, p.public_description, p.price::text AS price, p.sale_price::text AS sale_price,
+  p.stock_qty, p.featured, p.photo_url, p.created_at,
+  COALESCE(
+    (SELECT json_agg(f.url ORDER BY f.position, f.id) FROM product_photos f WHERE f.product_id = p.id),
+    '[]'::json
+  ) AS extras`;
+const VISIVEL_NA_LOJA = `p.sale_channel = 'varejo' AND p.active = true AND p.show_online = true AND p.price > 0`;
+const SQL_PECAS = `SELECT ${COLUNAS_DA_LOJA} FROM products p WHERE ${VISIVEL_NA_LOJA} ORDER BY p.created_at DESC, p.id DESC`;
+const SQL_PECA = `SELECT ${COLUNAS_DA_LOJA} FROM products p WHERE ${VISIVEL_NA_LOJA} AND p.id = $1`;
+const SQL_CONFIG = `SELECT key, value::text AS value FROM store_settings`;
 
 describe.skipIf(!disponivel)("loja online no banco", () => {
   let pool: Pool;
@@ -89,16 +115,46 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
     expect((await pool.query(`SELECT count(*)::int AS n FROM product_photos`)).rows[0].n).toBe(0);
   });
 
-  it("ajustes da loja: uma linha só, com os padrões combinados", async () => {
-    const { rows } = await pool.query(`SELECT * FROM store_settings`);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].delivery_salvador).toBeNull(); // ainda não definido, não zero
-    expect(rows[0].shipping_correios).toBeNull();
-    expect(Number(rows[0].installment_fee)).toBe(10);
-    expect(rows[0].max_installments).toBe(12);
-    await expect(pool.query(`INSERT INTO store_settings (id) VALUES (2)`)).rejects.toThrow();
-    await expect(pool.query(`UPDATE store_settings SET max_installments = 25`)).rejects.toThrow();
-    await expect(pool.query(`UPDATE store_settings SET delivery_salvador = -1`)).rejects.toThrow();
+  describe("ajustes da loja em chave e valor (migração 011)", () => {
+    it("num banco novo: tabela chave e valor, com os padrões (entrega e Correios ficam de fora)", async () => {
+      const { rows: colunas } = await pool.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'store_settings' ORDER BY column_name`
+      );
+      expect(colunas.map((c) => c.column_name)).toEqual(["key", "value"]);
+      const { rows } = await pool.query(`SELECT key, value FROM store_settings ORDER BY key`);
+      expect(rows).toEqual([
+        { key: "acrescimo_parcela", value: "10.00" },
+        { key: "max_parcelas", value: "12" },
+      ]);
+      // A chave é única.
+      await expect(pool.query(`INSERT INTO store_settings (key, value) VALUES ('max_parcelas', '6')`)).rejects.toThrow();
+    });
+
+    it("num banco que já estava na 010, com valores salvos: nada se perde", async () => {
+      const banco = await criarBancoDescartavel();
+      try {
+        await runMigrations(banco.pool, { ate: "010" });
+        await banco.pool.query(
+          `UPDATE store_settings SET delivery_salvador = 15, shipping_correios = 25.5, installment_fee = 12.5, max_installments = 10`
+        );
+        expect(await runMigrations(banco.pool)).toEqual(["011"]);
+
+        const { rows } = await banco.pool.query(`SELECT key, value FROM store_settings ORDER BY key`);
+        expect(rows).toEqual([
+          { key: "acrescimo_parcela", value: "12.50" },
+          { key: "correios", value: "25.50" },
+          { key: "entrega_salvador", value: "15.00" },
+          { key: "max_parcelas", value: "10" },
+        ]);
+        // A tabela antiga fica guardada com os valores.
+        const { rows: antiga } = await banco.pool.query(`SELECT delivery_salvador, max_installments FROM store_settings_v1`);
+        expect(antiga).toEqual([{ delivery_salvador: "15.00", max_installments: 10 }]);
+        // Rodar de novo não faz nada.
+        expect(await runMigrations(banco.pool)).toEqual([]);
+      } finally {
+        await banco.apagar();
+      }
+    });
   });
 
   it("visão da loja: só peças no site, ativas e não de atacado, e só as colunas públicas", async () => {
@@ -114,7 +170,7 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
     );
     const { rows } = await pool.query(`SELECT * FROM store_products`);
     expect(rows.map((r) => r.name)).toEqual(["No site"]);
-    expect(Object.keys(rows[0]).sort()).toEqual([...COLUNAS_PUBLICAS_DA_PECA].sort());
+    expect(Object.keys(rows[0]).sort()).toEqual([...COLUNAS_DA_VISAO].sort());
     expect(rows[0]).toMatchObject({ price: "100.00", sale_price: "80.00", featured: true, stock_qty: 3 });
 
     const { rows: cols } = await pool.query(
@@ -148,7 +204,7 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
         "loja_leitura",
         papel
       );
-      // Sem trocar a senha de exemplo, o script se recusa a criar o usuario.
+      // Sem trocar a senha de exemplo, o script se recusa a criar o usuário.
       await expect(pool.query(original)).rejects.toThrow(/Troque a senha/);
       await expect(pool.query(original.replace("senha text := 'TROQUE_ESTA_SENHA'", "senha text := 'curta'"))).rejects.toThrow(/Troque a senha/);
       expect((await pool.query(`SELECT 1 FROM pg_roles WHERE rolname = $1`, [papel])).rowCount).toBe(0);
@@ -157,10 +213,17 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
       await pool.query(script);
       await pool.query(script); // pode rodar de novo sem estragar
 
+      // Dados de teste: uma peça à venda na loja, uma escondida, uma de atacado, e dados privados.
       await pool.query(`DELETE FROM products`);
-      await pool.query(
-        `INSERT INTO products (name, price, cost, show_online) VALUES ('Peça pública', 100, 40, true), ('Peça escondida', 100, 40, false)`
+      const { rows } = await pool.query(
+        `INSERT INTO products (name, price, sale_price, cost, purchase_qty, show_online, featured, stock_qty, photo_url) VALUES
+           ('Peça pública', 100, 80, 40, 10, true, true, 3, 'https://x/p.jpg'),
+           ('Peça escondida', 100, NULL, 40, 10, false, false, 1, NULL)
+         RETURNING id`
       );
+      await pool.query(`INSERT INTO products (name, price, sale_channel) VALUES ('Peça da Bia', 100, 'atacado')`);
+      await pool.query(`INSERT INTO product_photos (product_id, url, position) VALUES ($1, 'https://x/2.jpg', 2), ($1, 'https://x/1.jpg', 1)`, [rows[0].id]);
+      await pool.query(`INSERT INTO store_settings (key, value) VALUES ('entrega_salvador', '15.00'), ('correios', '25.00') ON CONFLICT (key) DO NOTHING`);
       await pool.query(`INSERT INTO sales (sale_date, sale_value, client_name) VALUES ('2026-09-01', 100, 'Cliente secreto')`);
       await pool.query(`INSERT INTO clients (full_name) VALUES ('Cliente secreto')`);
 
@@ -177,56 +240,80 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
       await admin.query(`DROP ROLE IF EXISTS ${papel}`);
     });
 
-    it("lê as peças do site, as fotos e os ajustes da loja", async () => {
-      const pecas = await loja.query(`SELECT name FROM store_products`);
-      expect(pecas.rows).toEqual([{ name: "Peça pública" }]);
-      await expect(loja.query(`SELECT * FROM store_product_photos`)).resolves.toBeDefined();
-      const ajustes = await loja.query(`SELECT installment_fee, max_installments FROM store_settings`);
-      expect(ajustes.rows).toHaveLength(1);
+    it("roda as consultas da própria loja (peças, peça e ajustes)", async () => {
+      const pecas = await loja.query(SQL_PECAS);
+      expect(pecas.rows.map((r) => r.name)).toEqual(["Peça pública"]); // a loja filtra: escondida e de atacado ficam fora
+      expect(pecas.rows[0]).toMatchObject({ price: "100.00", sale_price: "80.00", featured: true, stock_qty: 3 });
+      expect(pecas.rows[0].extras).toEqual(["https://x/1.jpg", "https://x/2.jpg"]); // na ordem de position
+
+      const uma = await loja.query(SQL_PECA, [pecas.rows[0].id]);
+      expect(uma.rows).toHaveLength(1);
+
+      const config = await loja.query(SQL_CONFIG);
+      const mapa = Object.fromEntries(config.rows.map((r) => [r.key, r.value]));
+      expect(mapa).toMatchObject({ entrega_salvador: "15.00", correios: "25.00", acrescimo_parcela: "10.00", max_parcelas: "12" });
     });
 
-    it("não consegue ler custo, compra, vendas, clientes nem o financeiro", async () => {
-      await expect(loja.query(`SELECT cost FROM products`)).rejects.toThrow(/permission denied/);
+    it("não consegue ler custo, compra, fornecedor, fabricante, vendas, clientes nem o financeiro", async () => {
+      for (const coluna of ["cost", "purchase_date", "purchase_qty", "purchase_payment_method", "supplier_id", "manufacturer_id", "age_group"]) {
+        await expect(loja.query(`SELECT ${coluna} FROM products`), coluna).rejects.toThrow(/permission denied/);
+      }
       await expect(loja.query(`SELECT * FROM products`)).rejects.toThrow(/permission denied/);
-      await expect(loja.query(`SELECT purchase_qty FROM products`)).rejects.toThrow(/permission denied/);
       await expect(loja.query(`SELECT * FROM sales`)).rejects.toThrow(/permission denied/);
       await expect(loja.query(`SELECT * FROM clients`)).rejects.toThrow(/permission denied/);
-      for (const tabela of ["receipts", "expenses", "card_invoices", "stock_purchases", "liabilities", "users", "agreement_settings", "manufacturers", "suppliers", "product_photos"]) {
-        await expect(loja.query(`SELECT * FROM ${tabela}`)).rejects.toThrow(/permission denied/);
+      await expect(loja.query(`SELECT created_at FROM product_photos`)).rejects.toThrow(/permission denied/);
+      for (const tabela of [
+        "receipts", "expenses", "card_invoices", "card_invoice_parts", "stock_purchases", "fund_payments", "liabilities",
+        "users", "agreement_settings", "manufacturers", "suppliers", "sellers", "sale_payments", "store_settings_v1",
+        "store_products", "store_product_photos", "schema_migrations",
+      ]) {
+        await expect(loja.query(`SELECT * FROM ${tabela}`), tabela).rejects.toThrow(/permission denied/);
       }
     });
 
     it("não consegue escrever em nada, nem criar tabela", async () => {
-      await expect(loja.query(`UPDATE store_settings SET installment_fee = 0`)).rejects.toThrow();
-      await expect(loja.query(`INSERT INTO store_settings (id) VALUES (3)`)).rejects.toThrow();
-      await expect(loja.query(`DELETE FROM store_products`)).rejects.toThrow();
+      await expect(loja.query(`UPDATE store_settings SET value = '0' WHERE key = 'correios'`)).rejects.toThrow();
+      await expect(loja.query(`INSERT INTO store_settings (key, value) VALUES ('x', 'y')`)).rejects.toThrow();
+      await expect(loja.query(`DELETE FROM store_settings`)).rejects.toThrow();
       await expect(loja.query(`UPDATE products SET price = 1`)).rejects.toThrow();
+      await expect(loja.query(`INSERT INTO product_photos (product_id, url) VALUES (1, 'x')`)).rejects.toThrow();
       await expect(loja.query(`CREATE TABLE lixo (id int)`)).rejects.toThrow();
       // Mesmo pedindo para sair do modo somente leitura, continua sem permissão.
       await loja.query(`SET default_transaction_read_only = off`);
-      await expect(loja.query(`UPDATE store_settings SET installment_fee = 0`)).rejects.toThrow(/permission denied/);
+      await expect(loja.query(`UPDATE store_settings SET value = '0' WHERE key = 'correios'`)).rejects.toThrow(/permission denied/);
     });
 
-    it("sem poderes especiais, e só as três leituras combinadas", async () => {
+    it("sem poderes especiais, e só as colunas combinadas em só três tabelas", async () => {
       const { rows: papeis } = await admin.query(
         `SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication FROM pg_roles WHERE rolname = $1`,
         [papel]
       );
       expect(papeis[0]).toEqual({ rolsuper: false, rolcreatedb: false, rolcreaterole: false, rolbypassrls: false, rolreplication: false });
 
-      const { rows } = await admin.query(
+      const { rows: tabelas } = await admin.query(
         `SELECT c.relname FROM pg_class c
           WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'v', 'm')
-            AND has_table_privilege($1, c.oid, 'SELECT')
+            AND has_any_column_privilege($1, c.oid, 'SELECT')
           ORDER BY c.relname`,
         [papel]
       );
-      expect(rows.map((r) => r.relname)).toEqual(["store_product_photos", "store_products", "store_settings"]);
-      const { rows: cols } = await admin.query(
-        `SELECT has_column_privilege($1, 'products', 'cost', 'SELECT') AS custo, has_column_privilege($1, 'sales', 'sale_value', 'SELECT') AS vendas`,
+      expect(tabelas.map((r) => r.relname)).toEqual(["product_photos", "products", "store_settings"]);
+
+      // Coluna por coluna, nas três tabelas.
+      for (const [tabela, esperadas] of Object.entries(COLUNAS_LIBERADAS)) {
+        const { rows } = await admin.query(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = $2 AND has_column_privilege($1, table_name, column_name, 'SELECT')`,
+          [papel, tabela]
+        );
+        expect(rows.map((r) => r.column_name).sort(), tabela).toEqual([...esperadas].sort());
+      }
+      const { rows: escreve } = await admin.query(
+        `SELECT bool_or(has_table_privilege($1, c.oid, 'INSERT') OR has_table_privilege($1, c.oid, 'UPDATE') OR has_table_privilege($1, c.oid, 'DELETE')) AS pode
+           FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'`,
         [papel]
       );
-      expect(cols[0]).toEqual({ custo: false, vendas: false });
+      expect(escreve[0].pode).toBe(false);
     });
   });
 });

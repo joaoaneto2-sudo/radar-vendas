@@ -492,6 +492,36 @@ export const MIGRATIONS: Migration[] = [
           WHERE p.show_online AND p.active AND p.sale_channel <> 'atacado'`,
     ],
   },
+  {
+    id: "011",
+    name: "ajustes da loja em formato chave e valor (contrato com a loja online)",
+    statements: [
+      // A tabela de uma linha da migracao 010 passa a se chamar store_settings_v1 (os valores ficam
+      // guardados, nada e apagado) e nasce a store_settings em chave e valor, que e o que a loja le.
+      `DO $$ BEGIN
+         IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_schema = 'public' AND table_name = 'store_settings' AND column_name = 'delivery_salvador') THEN
+           ALTER TABLE store_settings RENAME TO store_settings_v1;
+           ALTER TABLE store_settings_v1 RENAME CONSTRAINT store_settings_pkey TO store_settings_v1_pkey;
+         END IF;
+       END $$`,
+      // Chave ausente = a loja usa o padrao dela (R$ 10 por parcela, 12x, entrega "a combinar").
+      `CREATE TABLE IF NOT EXISTS store_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      )`,
+      // Copia o que ja estava salvo: entrega_salvador, correios, acrescimo_parcela, max_parcelas.
+      `INSERT INTO store_settings (key, value)
+         SELECT 'entrega_salvador', to_char(delivery_salvador, 'FM99999999990.00') FROM store_settings_v1 WHERE delivery_salvador IS NOT NULL
+         UNION ALL
+         SELECT 'correios', to_char(shipping_correios, 'FM99999999990.00') FROM store_settings_v1 WHERE shipping_correios IS NOT NULL
+         UNION ALL
+         SELECT 'acrescimo_parcela', to_char(installment_fee, 'FM99999999990.00') FROM store_settings_v1 WHERE installment_fee IS NOT NULL
+         UNION ALL
+         SELECT 'max_parcelas', max_installments::text FROM store_settings_v1 WHERE max_installments IS NOT NULL
+         ON CONFLICT (key) DO NOTHING`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
