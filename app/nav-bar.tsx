@@ -5,34 +5,78 @@ import { usePathname } from "next/navigation";
 
 const PAGINAS_DE_ENTRADA = ["/login", "/primeiro-acesso"];
 
-// Menu do computador (todas as páginas) e barra de baixo do celular (as principais + "Mais").
-const MENU_DO_COMPUTADOR = [
-  { href: "/", rotulo: "Nova venda" },
-  { href: "/cadastros", rotulo: "Cadastros" },
-  { href: "/relatorio", rotulo: "Relatório" },
-  { href: "/financeiro", rotulo: "Financeiro" },
-  { href: "/financeiro/despesas", rotulo: "Despesas" },
-  { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
-  { href: "/loja-online", rotulo: "Loja online" },
+type Icone = "inicio" | "venda" | "relatorio" | "cadastros" | "financeiro" | "receber" | "despesas" | "loja" | "mais";
+
+// Menu lateral (computador): páginas agrupadas por assunto.
+const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Icone }[] }[] = [
+  {
+    titulo: "Início",
+    itens: [{ href: "/", rotulo: "Visão geral", icone: "inicio" }],
+  },
+  {
+    titulo: "Vendas",
+    itens: [
+      { href: "/nova-venda", rotulo: "Nova venda", icone: "venda" },
+      { href: "/relatorio", rotulo: "Relatório", icone: "relatorio" },
+    ],
+  },
+  {
+    titulo: "Cadastros",
+    itens: [{ href: "/cadastros", rotulo: "Produtos e cadastros", icone: "cadastros" }],
+  },
+  {
+    titulo: "Financeiro",
+    itens: [
+      { href: "/financeiro", rotulo: "Painel", icone: "financeiro" },
+      { href: "/financeiro/recebimentos", rotulo: "Recebimentos", icone: "receber" },
+      { href: "/financeiro/despesas", rotulo: "Despesas e faturas", icone: "despesas" },
+    ],
+  },
+  {
+    titulo: "Loja",
+    itens: [{ href: "/loja-online", rotulo: "Loja online", icone: "loja" }],
+  },
 ];
 
-type Icone = "venda" | "relatorio" | "cadastros" | "financeiro" | "mais";
+// Caminho mostrado no alto da página: grupo e página.
+const CAMINHOS: Record<string, [string, string]> = {
+  "/": ["Início", "Visão geral"],
+  "/nova-venda": ["Vendas", "Nova venda"],
+  "/relatorio": ["Vendas", "Relatório"],
+  "/cadastros": ["Cadastros", "Produtos e cadastros"],
+  "/importar-catalogo": ["Cadastros", "Importar catálogo"],
+  "/financeiro": ["Financeiro", "Painel"],
+  "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
+  "/financeiro/despesas": ["Financeiro", "Despesas e faturas"],
+  "/loja-online": ["Loja", "Loja online"],
+};
 
+// Barra de baixo do celular: as principais e o menu "Mais".
 const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
-  { href: "/", rotulo: "Venda", icone: "venda" },
+  { href: "/", rotulo: "Início", icone: "inicio" },
+  { href: "/nova-venda", rotulo: "Venda", icone: "venda" },
   { href: "/relatorio", rotulo: "Relatório", icone: "relatorio" },
   { href: "/cadastros", rotulo: "Cadastros", icone: "cadastros" },
-  { href: "/financeiro", rotulo: "Financeiro", icone: "financeiro" },
 ];
 
 const MAIS = [
-  { href: "/financeiro/despesas", rotulo: "Despesas e faturas" },
+  { href: "/financeiro", rotulo: "Painel financeiro" },
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
+  { href: "/financeiro/despesas", rotulo: "Despesas e faturas" },
   { href: "/loja-online", rotulo: "Loja online" },
 ];
 
 function Desenho({ nome }: { nome: Icone }) {
   switch (nome) {
+    case "inicio":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="3" width="7.5" height="9" rx="2" />
+          <rect x="13.5" y="3" width="7.5" height="5" rx="2" />
+          <rect x="13.5" y="11" width="7.5" height="10" rx="2" />
+          <rect x="3" y="15" width="7.5" height="6" rx="2" />
+        </svg>
+      );
     case "venda":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -59,6 +103,27 @@ function Desenho({ nome }: { nome: Icone }) {
           <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
         </svg>
       );
+    case "receber":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="6" width="18" height="12" rx="2" />
+          <circle cx="12" cy="12" r="2.5" />
+          <path d="M6 9v.01M18 15v.01" />
+        </svg>
+      );
+    case "despesas":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" />
+          <path d="M9 8h6M9 12h6" />
+        </svg>
+      );
+    case "loja":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9c0 1.7 1.3 3 3 3s3-1.3 3-3c0 1.7 1.3 3 3 3s3-1.3 3-3c0 1.7 1.3 3 3 3" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -68,6 +133,12 @@ function Desenho({ nome }: { nome: Icone }) {
         </svg>
       );
   }
+}
+
+function iniciais(nome: string | null): string {
+  if (!nome) return "?";
+  const partes = nome.trim().split(/\s+/);
+  return ((partes[0]?.[0] ?? "") + (partes.length > 1 ? partes[partes.length - 1][0] : "")).toUpperCase() || "?";
 }
 
 export default function NavBar() {
@@ -99,7 +170,7 @@ export default function NavBar() {
 
   if (naEntrada) {
     return (
-      <div className="topbar">
+      <div className="topbar topbar--entrada">
         <div className="brand">
           <img className="brand-logo" src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
           <span className="brand-name">Radar de Vendas</span>
@@ -109,28 +180,69 @@ export default function NavBar() {
   }
 
   const maisAtivo = MAIS.some((m) => ativa(m.href));
+  const caminho = CAMINHOS[pathname];
 
   return (
     <>
-      <div className="topbar">
-        <div className="brand">
-          <img className="brand-logo" src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
-          <span className="brand-name">Radar de Vendas</span>
-        </div>
-        <div className="topbar-right">
-          <nav className="nav" aria-label="Páginas">
-            {MENU_DO_COMPUTADOR.map((item) => (
-              <a key={item.href} href={item.href} className={ativa(item.href) ? "active" : ""}>
-                {item.rotulo}
-              </a>
-            ))}
-          </nav>
-          <div className="nav-user">
-            {nome && <span>{nome}</span>}
-            <button type="button" className="icon-btn" onClick={sair}>
+      {/* Computador: menu lateral */}
+      <aside className="sidebar" aria-label="Menu principal">
+        <a className="sidebar-brand" href="/" aria-label="Radar de Vendas, página inicial">
+          <img src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
+          <span>Radar de Vendas</span>
+        </a>
+
+        <nav className="sidebar-nav">
+          {GRUPOS.map((grupo) => (
+            <div className="sidebar-group" key={grupo.titulo}>
+              <div className="sidebar-title">{grupo.titulo}</div>
+              {grupo.itens.map((item) => (
+                <a key={item.href} href={item.href} className={ativa(item.href) ? "active" : ""}>
+                  <Desenho nome={item.icone} />
+                  <span>{item.rotulo}</span>
+                </a>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="sidebar-user">
+          <div className="avatar" aria-hidden="true">
+            {iniciais(nome)}
+          </div>
+          <div className="sidebar-user-text">
+            <strong>{nome ?? "Entrando..."}</strong>
+            <button type="button" onClick={sair}>
               Sair
             </button>
           </div>
+        </div>
+      </aside>
+
+      {/* Computador: barra no alto do conteúdo, com o caminho da página */}
+      <div className="contentbar">
+        <div className="breadcrumb">
+          {caminho ? (
+            <>
+              <span>{caminho[0]}</span>
+              <span aria-hidden="true">/</span>
+              <strong>{caminho[1]}</strong>
+            </>
+          ) : (
+            <strong>Radar de Vendas</strong>
+          )}
+        </div>
+        {pathname !== "/nova-venda" && (
+          <a className="btn btn-primary btn-small" href="/nova-venda">
+            + Nova venda
+          </a>
+        )}
+      </div>
+
+      {/* Celular: barra do alto (só a marca) */}
+      <div className="topbar topbar--mobile">
+        <div className="brand">
+          <img className="brand-logo" src="/marca/logo-banner.jpg" alt="Fernanda Brilhante" />
+          <span className="brand-name">Radar de Vendas</span>
         </div>
       </div>
 
