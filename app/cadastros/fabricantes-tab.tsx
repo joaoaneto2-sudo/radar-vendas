@@ -127,7 +127,7 @@ export default function FabricantesTab() {
       ) : items.length === 0 ? (
         <div className="empty-state">Nenhum fabricante cadastrado ainda.</div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap tabela-cabe">
           <table>
             <thead>
               <tr>

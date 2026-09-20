@@ -97,7 +97,7 @@ export default function ClientesTab() {
       ) : items.length === 0 ? (
         <div className="empty-state">Nenhum cliente cadastrado ainda.</div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap tabela-cabe">
           <table>
             <thead>
               <tr>

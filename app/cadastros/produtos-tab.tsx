@@ -401,7 +401,7 @@ export default function ProdutosTab() {
       ) : items.length === 0 ? (
         <div className="empty-state">Nenhum produto cadastrado ainda.</div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap tabela-cabe">
           <table>
             <thead>
               <tr>
