@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { WHOLESALE_BLOCK_MESSAGE, parseStoreSettings, readMoneyOrNull, resolveStoreFields, type StoreState } from "../../lib/store-rules";
+import {
+  WHOLESALE_BLOCK_MESSAGE,
+  parseStoreSettings,
+  readMoneyOrNull,
+  resolveStoreFields,
+  rowsToSettings,
+  settingsToRows,
+  type StoreState,
+} from "../../lib/store-rules";
 
 const FORA: StoreState = { show_online: false, featured: false, sale_price: null, public_description: null };
 const NO_SITE: StoreState = { show_online: true, featured: false, sale_price: null, public_description: null };
@@ -148,12 +156,58 @@ describe("ajustes da loja", () => {
     expect(parseStoreSettings({ ...BOM, shipping_correios: "xx" })).toMatchObject({ ok: false, error: "invalid_shipping_correios" });
   });
 
-  it("acréscimo por parcela é obrigatório (pode ser 0) e o máximo é de 1 a 24", () => {
-    expect(parseStoreSettings({ ...BOM, installment_fee: "" })).toMatchObject({ ok: false, error: "invalid_installment_fee" });
+  it("acréscimo por parcela e máximo em branco valem 'a loja usa o padrão' (nulo, nunca zero)", () => {
+    expect(parseStoreSettings({ ...BOM, installment_fee: "", max_installments: "" })).toMatchObject({
+      ok: true,
+      value: { installment_fee: null, max_installments: null },
+    });
+    // zero de propósito continua sendo zero
     expect(parseStoreSettings({ ...BOM, installment_fee: "0" })).toMatchObject({ ok: true, value: { installment_fee: 0 } });
-    for (const ruim of ["", "0", "25", "2,5", "abc"]) {
+  });
+
+  it("acréscimo inválido ou negativo e máximo fora de 1 a 24 são recusados", () => {
+    expect(parseStoreSettings({ ...BOM, installment_fee: "abc" })).toMatchObject({ ok: false, error: "invalid_installment_fee" });
+    expect(parseStoreSettings({ ...BOM, installment_fee: "-1" })).toMatchObject({ ok: false, error: "invalid_installment_fee" });
+    for (const ruim of ["0", "25", "2,5", "abc"]) {
       expect(parseStoreSettings({ ...BOM, max_installments: ruim })).toMatchObject({ ok: false, error: "invalid_max_installments" });
     }
     expect(parseStoreSettings({ ...BOM, max_installments: 6 })).toMatchObject({ ok: true, value: { max_installments: 6 } });
+  });
+});
+
+describe("ajustes da loja: ida e volta para chave e valor", () => {
+  it("vira texto no formato da loja: dinheiro com 2 casas e parcelas inteiras", () => {
+    expect(
+      settingsToRows({ delivery_salvador: 15, shipping_correios: 25.5, installment_fee: 10, max_installments: 12 })
+    ).toEqual([
+      { key: "entrega_salvador", value: "15.00" },
+      { key: "correios", value: "25.50" },
+      { key: "acrescimo_parcela", value: "10.00" },
+      { key: "max_parcelas", value: "12" },
+    ]);
+  });
+
+  it("valor em branco vira nulo (a chave será apagada), zero continua zero", () => {
+    const linhas = settingsToRows({ delivery_salvador: null, shipping_correios: 0, installment_fee: null, max_installments: null });
+    expect(linhas).toEqual([
+      { key: "entrega_salvador", value: null },
+      { key: "correios", value: "0.00" },
+      { key: "acrescimo_parcela", value: null },
+      { key: "max_parcelas", value: null },
+    ]);
+  });
+
+  it("lê de volta; chave ausente ou valor estranho vira vazio", () => {
+    expect(
+      rowsToSettings([
+        { key: "entrega_salvador", value: "15.00" },
+        { key: "correios", value: "" },
+        { key: "acrescimo_parcela", value: "abc" },
+        { key: "max_parcelas", value: "12" },
+      ])
+    ).toEqual({ delivery_salvador: 15, shipping_correios: null, installment_fee: null, max_installments: 12 });
+    expect(rowsToSettings([])).toEqual({ delivery_salvador: null, shipping_correios: null, installment_fee: null, max_installments: null });
+    expect(rowsToSettings([{ key: "max_parcelas", value: "99" }]).max_installments).toBeNull();
+    expect(rowsToSettings([{ key: "max_parcelas", value: "2.5" }]).max_installments).toBeNull();
   });
 });

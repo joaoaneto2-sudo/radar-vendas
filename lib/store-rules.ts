@@ -112,11 +112,52 @@ export function resolveStoreFields(
 // ---------------------------------------------------------------------------
 // Ajustes da loja (entrega e parcelamento)
 
+// Cada valor em branco (nulo) significa "a chave não existe": a loja usa o padrão dela
+// (R$ 10 por parcela, 12x) e mostra a entrega como "a combinar".
 export interface StoreSettingsValues {
-  delivery_salvador: number | null; // vazio = ainda não definido
+  delivery_salvador: number | null;
   shipping_correios: number | null;
-  installment_fee: number;
-  max_installments: number;
+  installment_fee: number | null;
+  max_installments: number | null;
+}
+
+// Chaves da tabela store_settings (chave e valor em texto) que a loja lê.
+export const STORE_SETTING_KEYS = {
+  delivery_salvador: "entrega_salvador",
+  shipping_correios: "correios",
+  installment_fee: "acrescimo_parcela",
+  max_installments: "max_parcelas",
+} as const;
+
+/** Como cada valor vira texto na tabela: dinheiro com 2 casas ("15.00") e número inteiro ("12"). */
+export function settingsToRows(v: StoreSettingsValues): { key: string; value: string | null }[] {
+  const dinheiro = (n: number | null) => (n === null ? null : n.toFixed(2));
+  return [
+    { key: STORE_SETTING_KEYS.delivery_salvador, value: dinheiro(v.delivery_salvador) },
+    { key: STORE_SETTING_KEYS.shipping_correios, value: dinheiro(v.shipping_correios) },
+    { key: STORE_SETTING_KEYS.installment_fee, value: dinheiro(v.installment_fee) },
+    { key: STORE_SETTING_KEYS.max_installments, value: v.max_installments === null ? null : String(v.max_installments) },
+  ];
+}
+
+/** Lê as linhas da tabela (chave e valor em texto) de volta para os campos da tela. Valor estranho vira vazio. */
+export function rowsToSettings(rows: { key: string; value: string | null }[]): StoreSettingsValues {
+  const mapa = new Map(rows.map((r) => [r.key, r.value]));
+  const dinheiro = (k: string) => {
+    const lido = readMoneyOrNull(mapa.get(k) ?? null);
+    return lido === "invalido" || lido === null || lido < 0 ? null : lido;
+  };
+  const inteiro = (k: string) => {
+    const texto = (mapa.get(k) ?? "").trim();
+    const n = /^[0-9]+$/.test(texto) ? Number(texto) : NaN;
+    return Number.isInteger(n) && n >= 1 && n <= 24 ? n : null;
+  };
+  return {
+    delivery_salvador: dinheiro(STORE_SETTING_KEYS.delivery_salvador),
+    shipping_correios: dinheiro(STORE_SETTING_KEYS.shipping_correios),
+    installment_fee: dinheiro(STORE_SETTING_KEYS.installment_fee),
+    max_installments: inteiro(STORE_SETTING_KEYS.max_installments),
+  };
 }
 
 export type StoreSettingsResult =
@@ -138,14 +179,19 @@ export function parseStoreSettings(body: Record<string, unknown>): StoreSettings
   }
 
   const taxa = readMoneyOrNull(body.installment_fee);
-  if (taxa === null || taxa === "invalido" || taxa < 0) {
-    return { ok: false, error: "invalid_installment_fee", message: "Informe o acréscimo por parcela (pode ser 0)." };
+  if (taxa === "invalido" || (taxa !== null && taxa < 0)) {
+    return {
+      ok: false,
+      error: "invalid_installment_fee",
+      message: "O acréscimo por parcela precisa ser um valor válido (0 ou mais), ou ficar em branco.",
+    };
   }
 
   const bruto = typeof body.max_installments === "string" ? body.max_installments.trim() : body.max_installments;
-  const maximo = bruto === "" || bruto === null || bruto === undefined ? NaN : Number(bruto);
-  if (!Number.isInteger(maximo) || maximo < 1 || maximo > 24) {
-    return { ok: false, error: "invalid_max_installments", message: "O máximo de parcelas precisa ser um número de 1 a 24." };
+  const vazio = bruto === "" || bruto === null || bruto === undefined;
+  const maximo = vazio ? null : Number(bruto);
+  if (maximo !== null && (!Number.isInteger(maximo) || maximo < 1 || maximo > 24)) {
+    return { ok: false, error: "invalid_max_installments", message: "O máximo de parcelas precisa ser um número de 1 a 24, ou ficar em branco." };
   }
 
   return {

@@ -1,10 +1,13 @@
 -- USUARIO SOMENTE LEITURA PARA A LOJA ONLINE
 --
--- O que este arquivo faz: cria o usuario "loja_leitura", que so consegue LER tres coisas:
---   1. store_products        (pecas marcadas "No site", so com as colunas publicas)
---   2. store_product_photos  (fotos extras dessas pecas)
---   3. store_settings        (valores de entrega e parcelamento)
--- Ele NAO consegue ler custo, compras, fornecedor, fabricante, vendas, clientes, financeiro
+-- O que este arquivo faz: cria o usuario "loja_leitura", que so consegue LER estas colunas:
+--   products:         id, name, category, subtype, jewelry_type, material, karat, gemstone, warranty,
+--                     public_description, price, sale_price, stock_qty, featured, photo_url,
+--                     created_at, sale_channel, active, show_online
+--   product_photos:   id, product_id, url, position
+--   store_settings:   key, value
+-- Ele NAO consegue ler custo (cost), dados de compra (purchase_date, purchase_qty,
+-- purchase_payment_method), fornecedor, fabricante, vendas, clientes, recebimentos, financeiro
 -- nem nenhuma outra tabela, e NAO consegue escrever nada.
 --
 -- COMO USAR (voce faz sozinho, no painel do Neon):
@@ -17,6 +20,8 @@
 --   4. Guarde a senha no cofre de senhas e cole so na Vercel da loja.
 --
 -- Pode rodar de novo sem estragar nada (se o usuario ja existe, a senha nao e alterada).
+-- Coluna nova de products NAO fica liberada sozinha: se a loja precisar de uma, acrescente-a
+-- aqui no PASSO B, de proposito.
 
 -- ====================== PASSO A: criar o usuario ======================
 -- Criado por SQL de proposito: usuarios criados pela tela "Roles" do Neon podem receber
@@ -40,32 +45,45 @@ END $$;
 ALTER ROLE loja_leitura SET default_transaction_read_only = on;
 
 -- ====================== PASSO B: permissoes ======================
--- Comeca do zero: tira qualquer permissao que ele possa ter em tabelas e visoes.
+-- Comeca do zero: tira qualquer permissao que ele possa ter em tabelas e visoes
+-- (isso tira tambem as permissoes de colunas).
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM loja_leitura;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM loja_leitura;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM loja_leitura;
 
 GRANT USAGE ON SCHEMA public TO loja_leitura;
 
--- So estas tres. As visoes ja filtram as pecas e as colunas.
-GRANT SELECT ON store_products, store_product_photos, store_settings TO loja_leitura;
+-- So estas colunas, e mais nenhuma.
+GRANT SELECT (
+  id, name, category, subtype, jewelry_type, material, karat, gemstone, warranty,
+  public_description, price, sale_price, stock_qty, featured, photo_url,
+  created_at, sale_channel, active, show_online
+) ON products TO loja_leitura;
+
+GRANT SELECT (id, product_id, url, position) ON product_photos TO loja_leitura;
+
+GRANT SELECT (key, value) ON store_settings TO loja_leitura;
 
 -- ====================== PASSO C: conferencia (nao precisa da senha) ======================
 -- 1) O usuario nao tem nenhum poder especial. Tudo abaixo deve ser "false":
 SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication
   FROM pg_roles WHERE rolname = 'loja_leitura';
 
--- 2) Onde ele consegue LER. Deve aparecer "true" SOMENTE nestas tres linhas:
---    store_product_photos, store_products, store_settings.
+-- 2) Em quais tabelas ele consegue ler ALGUMA coluna. Deve aparecer "true" SOMENTE em:
+--    product_photos, products, store_settings.
 SELECT c.relname AS tabela_ou_visao,
-       has_table_privilege('loja_leitura', c.oid, 'SELECT') AS consegue_ler
+       has_any_column_privilege('loja_leitura', c.oid, 'SELECT') AS consegue_ler_alguma_coluna
   FROM pg_class c
  WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'v', 'm')
- ORDER BY consegue_ler DESC, c.relname;
+ ORDER BY consegue_ler_alguma_coluna DESC, c.relname;
 
--- 3) Colunas protegidas. As duas devem ser "false":
-SELECT has_column_privilege('loja_leitura', 'products', 'cost', 'SELECT') AS pode_ler_custo,
-       has_column_privilege('loja_leitura', 'sales', 'sale_value', 'SELECT') AS pode_ler_vendas;
+-- 3) Colunas de products que ele consegue ler. Devem ser "true" so as 19 combinadas;
+--    cost, purchase_date, purchase_qty, purchase_payment_method e o resto devem ser "false".
+SELECT column_name AS coluna_de_products,
+       has_column_privilege('loja_leitura', 'products', column_name, 'SELECT') AS consegue_ler
+  FROM information_schema.columns
+ WHERE table_schema = 'public' AND table_name = 'products'
+ ORDER BY consegue_ler DESC, column_name;
 
 -- 4) Ele nao pode escrever em nada. Deve ser "false":
 SELECT has_table_privilege('loja_leitura', 'products', 'INSERT, UPDATE, DELETE') AS pode_escrever;

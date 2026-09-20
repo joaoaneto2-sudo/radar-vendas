@@ -86,7 +86,7 @@ export default function LojaOnlinePage() {
                     onChange={(e) => set("delivery_salvador", e.target.value)}
                   />
                 </div>
-                <span className="hint">Feita pela Fernanda ou por motoboy. Em branco = ainda não definido. 0 = entrega grátis.</span>
+                <span className="hint">Feita pela Fernanda ou por motoboy. Em branco = a loja mostra "a combinar". 0 = entrega grátis.</span>
               </div>
               <div className="field">
                 <label htmlFor="shipping_correios">Envio pelos Correios (resto do Brasil)</label>
@@ -101,7 +101,7 @@ export default function LojaOnlinePage() {
                     onChange={(e) => set("shipping_correios", e.target.value)}
                   />
                 </div>
-                <span className="hint">Em branco = ainda não definido.</span>
+                <span className="hint">Em branco = a loja mostra "a combinar".</span>
               </div>
             </div>
           </div>
@@ -120,11 +120,12 @@ export default function LojaOnlinePage() {
                     id="installment_fee"
                     type="text"
                     inputMode="decimal"
+                    placeholder="Padrão: 10,00"
                     value={form.installment_fee}
                     onChange={(e) => set("installment_fee", e.target.value)}
                   />
                 </div>
-                <span className="hint">Pode ser 0.</span>
+                <span className="hint">Pode ser 0. Em branco = a loja usa R$ 10,00 por parcela.</span>
               </div>
               <div className="field">
                 <label htmlFor="max_installments">Máximo de parcelas</label>
@@ -134,10 +135,11 @@ export default function LojaOnlinePage() {
                   min="1"
                   max="24"
                   inputMode="numeric"
+                  placeholder="Padrão: 12"
                   value={form.max_installments}
                   onChange={(e) => set("max_installments", e.target.value)}
                 />
-                <span className="hint">De 1 a 24.</span>
+                <span className="hint">De 1 a 24. Em branco = a loja usa 12x.</span>
               </div>
             </div>
           </div>
