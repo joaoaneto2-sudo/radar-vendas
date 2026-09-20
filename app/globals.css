@@ -2971,3 +2971,182 @@ a.tab-btn {
 .row-cancelada td:last-child {
   opacity: 1;
 }
+
+/* Atalhos da loja (no alto de Produtos e cadastros) */
+.qv {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 16px 18px 18px;
+  margin-bottom: 18px;
+}
+
+.qv-topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.qv-topo h2 {
+  font-size: 1.05rem;
+  color: var(--accent-strong);
+}
+
+.qv-grade {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.qv-col,
+.qv-atencao {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  min-width: 0;
+}
+
+.qv-atencao {
+  margin-top: 12px;
+  background: rgba(248, 228, 223, 0.55);
+  border-color: #efc7bd;
+}
+
+.qv-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 4px 8px;
+}
+
+.qv-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qv-title h3 {
+  font-size: 0.95rem;
+  color: var(--accent-strong);
+}
+
+.qv-count {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.qv-count--alerta {
+  background: var(--danger-soft);
+  border-color: #efc7bd;
+  color: var(--danger);
+}
+
+.qv-nota {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.qv-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.qv-lista--larga {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-height: 420px;
+}
+
+.qv-card {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.qv-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.qv-thumb--vazia {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  color: var(--ink-faint);
+}
+
+.qv-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.qv-info strong {
+  font-size: 0.88rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qv-sub {
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+.qv-dica {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.qv-acoes {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.qv-vazio {
+  padding: 14px 6px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+@media (max-width: 1100px) {
+  .qv-grade {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qv-lista--larga {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

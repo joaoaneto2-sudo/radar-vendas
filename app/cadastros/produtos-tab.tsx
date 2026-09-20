@@ -21,6 +21,7 @@ import {
 } from "@/lib/format";
 import Combobox, { ComboboxOption } from "@/app/combobox";
 import LojaOnlineSection from "@/app/cadastros/loja-online-section";
+import QuadroDaVitrine from "@/app/cadastros/quadro-da-vitrine";
 import { faltaParaPublicar, mensagemDeFalta } from "@/lib/store-rules";
 import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
@@ -357,6 +358,8 @@ export default function ProdutosTab() {
           + Novo produto
         </button>
       </div>
+
+      {!loading && items.length > 0 && <QuadroDaVitrine items={items} aoAlternar={toggleStore} aoEditar={openEdit} />}
 
       {!loading && items.length > 0 && (
         <div className="stat-grid" style={{ marginBottom: 12 }}>
