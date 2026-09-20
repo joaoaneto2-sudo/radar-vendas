@@ -55,7 +55,7 @@ export function BarrasVerticais({
   return (
     <>
       <div className="dash-svg-desk">
-        <DesenhoDeBarras pontos={pontos} cor={cor} descricao={descricao} largura={860} />
+        <DesenhoDeBarras pontos={pontos} cor={cor} descricao={descricao} largura={720} />
       </div>
       <div className="dash-svg-mob">
         <DesenhoDeBarras pontos={pontos} cor={cor} descricao={descricao} largura={460} />
@@ -281,5 +281,144 @@ export function BarraDupla({
         <span className="dot dot-a" /> {`${rotuloA}: ${reais(a)}`} <span className="dot dot-b" /> {`${rotuloB}: ${reais(b)}`}
       </div>
     </div>
+  );
+}
+
+/** Linha do dinheiro que entrou no mês (acumulado), com a projeção pontilhada e a linha da meta. */
+export function LinhaDaMeta({
+  pontos,
+  metaCents,
+  descricao,
+  largura = 460,
+}: {
+  pontos: { dia: number; real: number | null; projetado: number | null }[];
+  metaCents: number;
+  descricao: string;
+  largura?: number;
+}) {
+  const topo = Math.max(metaCents, ...pontos.map((p) => Math.max(p.real ?? 0, p.projetado ?? 0)), 0);
+  if (pontos.length === 0 || topo <= 0) return <SemDados texto="Sem meta nem entradas neste mês." />;
+
+  const L = largura;
+  const A = 200;
+  const margemEsq = 58;
+  const margemBase = 26;
+  const areaL = L - margemEsq - 12;
+  const areaA = A - margemBase - 14;
+  const x = (dia: number) => margemEsq + (areaL * (dia - 1)) / Math.max(pontos.length - 1, 1);
+  const y = (c: number) => 10 + areaA - (areaA * c) / (topo * 1.05);
+  const caminho = (valor: (p: (typeof pontos)[number]) => number | null) =>
+    pontos
+      .filter((p) => valor(p) !== null)
+      .map((p, i) => `${i === 0 ? "M" : "L"}${x(p.dia).toFixed(1)} ${y(valor(p) as number).toFixed(1)}`)
+      .join(" ");
+  const ultimoReal = [...pontos].reverse().find((p) => p.real !== null);
+  const de = Math.max(1, Math.ceil(pontos.length / 10));
+
+  return (
+    <svg viewBox={`0 0 ${L} ${A}`} role="img" aria-label={descricao} className="dash-svg">
+      <title>{descricao}</title>
+      {[0, 0.5, 1].map((f) => (
+        <g key={f}>
+          <line x1={margemEsq} x2={L - 12} y1={y(topo * f)} y2={y(topo * f)} stroke="#ecdfcb" strokeWidth="1" />
+          <text x={margemEsq - 6} y={y(topo * f) + 4} textAnchor="end" fontSize="10" fill="#9b846f">
+            {reaisCurto(topo * f)}
+          </text>
+        </g>
+      ))}
+      {metaCents > 0 && (
+        <g>
+          <line x1={margemEsq} x2={L - 12} y1={y(metaCents)} y2={y(metaCents)} stroke="#b04a3a" strokeWidth="1.6" strokeDasharray="5 4" />
+          <text x={L - 14} y={y(metaCents) - 5} textAnchor="end" fontSize="10" fontWeight="700" fill="#b04a3a">
+            {`Meta ${reaisCurto(metaCents)}`}
+          </text>
+        </g>
+      )}
+      <path d={caminho((p) => p.projetado)} fill="none" stroke="#e8b253" strokeWidth="2.2" strokeDasharray="2 5" strokeLinecap="round" />
+      <path d={caminho((p) => p.real)} fill="none" stroke="#5a2f17" strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" />
+      {ultimoReal && ultimoReal.real !== null && <circle cx={x(ultimoReal.dia)} cy={y(ultimoReal.real)} r="4.5" fill="#5a2f17" stroke="#fffcf8" strokeWidth="2" />}
+      {pontos.map((p, i) =>
+        i % de === 0 || p.dia === pontos.length ? (
+          <text key={p.dia} x={x(p.dia)} y={A - 8} textAnchor="middle" fontSize="10" fill="#9b846f">
+            {p.dia}
+          </text>
+        ) : null
+      )}
+    </svg>
+  );
+}
+
+/** Barras lado a lado por mês: duas séries (ex.: meta e entrou). */
+export function BarrasDuplas({
+  grupos,
+  nomeA,
+  nomeB,
+  descricao,
+  largura = 460,
+}: {
+  grupos: { rotulo: string; a: number; b: number }[];
+  nomeA: string;
+  nomeB: string;
+  descricao: string;
+  largura?: number;
+}) {
+  const maximo = Math.max(...grupos.flatMap((g) => [g.a, g.b]), 0);
+  if (grupos.length === 0 || maximo <= 0) return <SemDados />;
+
+  const L = largura;
+  const A = 210;
+  const margemEsq = 58;
+  const margemBase = 26;
+  const areaL = L - margemEsq - 8;
+  const areaA = A - margemBase - 30;
+  const passo = areaL / grupos.length;
+  const barra = Math.max(Math.min(passo * 0.34, 26), 4);
+
+  return (
+    <svg viewBox={`0 0 ${L} ${A}`} role="img" aria-label={descricao} className="dash-svg">
+      <title>{descricao}</title>
+      <rect x={margemEsq} y={2} width="9" height="9" rx="2" fill="#e8b253" />
+      <text x={margemEsq + 13} y={10} fontSize="10" fill="#715a48">{nomeA}</text>
+      <rect x={margemEsq + 13 + nomeA.length * 5.6 + 14} y={2} width="9" height="9" rx="2" fill="#5a2f17" />
+      <text x={margemEsq + 13 + nomeA.length * 5.6 + 27} y={10} fontSize="10" fill="#715a48">{nomeB}</text>
+      {[0, 0.5, 1].map((f) => {
+        const yy = 26 + areaA - areaA * f;
+        return (
+          <g key={f}>
+            <line x1={margemEsq} x2={L - 8} y1={yy} y2={yy} stroke="#ecdfcb" strokeWidth="1" />
+            <text x={margemEsq - 6} y={yy + 4} textAnchor="end" fontSize="10" fill="#9b846f">
+              {reaisCurto(maximo * f)}
+            </text>
+          </g>
+        );
+      })}
+      {grupos.map((g, i) => {
+        const x0 = margemEsq + passo * i + (passo - barra * 2 - 3) / 2;
+        const altura = (v: number) => (v / maximo) * areaA;
+        return (
+          <g key={g.rotulo}>
+            <rect x={x0} y={26 + areaA - altura(g.a)} width={barra} height={Math.max(altura(g.a), g.a > 0 ? 2 : 0)} rx="3" fill="#e8b253">
+              <title>{`${nomeA} em ${g.rotulo}: ${reais(g.a)}`}</title>
+            </rect>
+            <rect x={x0 + barra + 3} y={26 + areaA - altura(g.b)} width={barra} height={Math.max(altura(g.b), g.b > 0 ? 2 : 0)} rx="3" fill="#5a2f17">
+              <title>{`${nomeB} em ${g.rotulo}: ${reais(g.b)}`}</title>
+            </rect>
+            <text x={margemEsq + passo * i + passo / 2} y={A - 8} textAnchor="middle" fontSize="10" fill="#9b846f">
+              {g.rotulo}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** Desenha o mesmo gráfico em duas larguras: a larga (computador) e a estreita (celular). */
+export function DuasLarguras({ desenhar }: { desenhar: (largura: number) => React.ReactNode }) {
+  return (
+    <>
+      <div className="dash-svg-desk">{desenhar(720)}</div>
+      <div className="dash-svg-mob">{desenhar(460)}</div>
+    </>
   );
 }

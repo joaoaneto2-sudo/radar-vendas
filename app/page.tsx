@@ -22,6 +22,8 @@ import {
   type VendaLinha,
 } from "@/lib/dashboard";
 import { NAO_INFORMADA } from "@/lib/sale-finance";
+import { acumuladoDoMes, comparativoAteHoje, resumoMensal, ritmoDoMes, tendenciaDasVendas, type DadosDaMeta } from "@/lib/meta-mensal";
+import MetaDoMes from "./meta-do-mes";
 import { BarraDupla, BarrasHorizontais, BarrasVerticais, CORES, Progresso, Quadro, Rosca } from "./charts";
 
 export const dynamic = "force-dynamic";
@@ -57,14 +59,18 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
   const periodo = parsePeriodo(searchParams.periodo);
   const intervalo = periodRange(periodo, hoje);
 
-  const [vendasRes, despesasRes, parcelasRes, produtosRes, resumo] = await Promise.all([
+  const [vendasRes, despesasRes, parcelasRes, produtosRes, resumo, partesRes, recebidasRes, comissoesRes] = await Promise.all([
     db.query(
       `SELECT to_char(s.sale_date, 'YYYY-MM-DD') AS sale_date, s.sale_value, s.price_tier, s.status,
               s.payment_method, s.seller, s.product_type, s.client_name,
               CASE WHEN m.represented THEN m.commission_pct END AS commission_pct
          FROM sales s LEFT JOIN manufacturers m ON m.id = s.manufacturer_id`
     ),
-    db.query(`SELECT to_char(expense_date, 'YYYY-MM-DD') AS expense_date, category, amount FROM expenses`),
+    db.query(
+      `SELECT to_char(expense_date, 'YYYY-MM-DD') AS expense_date, category, amount,
+              NOT EXISTS (SELECT 1 FROM card_invoice_parts cp WHERE cp.expense_id = expenses.id) AS avulsa
+         FROM expenses`
+    ),
     db.query(
       `SELECT to_char(p.due_date, 'YYYY-MM-DD') AS due_date, p.amount
          FROM sale_payments p JOIN sales s ON s.id = p.sale_id
@@ -72,6 +78,22 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
     ),
     db.query(`SELECT category, stock_qty, show_online, sale_channel, active FROM products WHERE active`),
     getFinanceSummary(db),
+    // Meta do mês: partes das faturas do cartão, e o dinheiro que já entrou (parcelas recebidas e comissões)
+    db.query(
+      `SELECT to_char(i.due_date, 'YYYY-MM-DD') AS due_date, i.status, p.nature, p.amount
+         FROM card_invoices i JOIN card_invoice_parts p ON p.invoice_id = i.id`
+    ),
+    db.query(
+      `SELECT to_char(p.received_date, 'YYYY-MM-DD') AS date, p.amount
+         FROM sale_payments p JOIN sales s ON s.id = p.sale_id
+        WHERE p.status = 'recebida' AND p.received_date IS NOT NULL AND s.status = 'ativa'
+          AND COALESCE(s.price_tier, 'varejo') <> 'atacado'`
+    ),
+    db.query(
+      `SELECT to_char(received_date, 'YYYY-MM-DD') AS date, amount
+         FROM receipts
+        WHERE kind = 'comissao_fabricante' AND status = 'recebida' AND received_date IS NOT NULL`
+    ),
   ]);
 
   const todas = vendasRes.rows as VendaLinha[];
@@ -121,6 +143,17 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
     .sort((a, b) => b.quantidade - a.quantidade);
 
   const semana = receberPorSemana(parcelas, hoje, 6);
+
+  // Meta do mês (não depende do período escolhido no alto)
+  const dadosDaMeta: DadosDaMeta = {
+    hoje,
+    partes: partesRes.rows,
+    despesas: despesasRes.rows.map((d) => ({ expense_date: d.expense_date, amount: d.amount, avulsa: d.avulsa })),
+    vendas: todas,
+    entradas: [...recebidasRes.rows, ...comissoesRes.rows],
+  };
+  const ticketDoMes = ticketMedio(vendasDoPeriodo(todas, periodRange("mes", hoje)));
+  const ritmo = ritmoDoMes(dadosDaMeta, ticketDoMes);
   const dividaTotal = cascade.debt.totalCents;
 
   return (
@@ -139,6 +172,17 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
           ))}
         </nav>
       </div>
+
+      <MetaDoMes
+        ritmo={ritmo}
+        resumo={resumoMensal(dadosDaMeta)}
+        acumulado={acumuladoDoMes(dadosDaMeta, ritmo)}
+        comparativo={comparativoAteHoje(dadosDaMeta)}
+        tendencia={tendenciaDasVendas(todas, hoje)}
+        ticketMedio={ticketDoMes}
+      />
+
+      <h2 className="dash-section">Vendas e movimento do período</h2>
 
       <div className="stat-grid auto dash-kpis">
         <Numero rotulo="Vendido" valor={reais(faturamento)} nota="Varejo e consignado, no período" tom="accent" />
