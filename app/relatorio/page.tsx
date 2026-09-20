@@ -456,6 +456,30 @@ export default function RelatorioPage() {
     }
   }
 
+  // Cancelar não apaga: a venda sai das contas, a peça volta ao estoque e dá para reativar.
+  async function mudarStatus(s: Sale, novo: "ativa" | "cancelada") {
+    const recebido = (s.payments ?? []).filter((p) => p.status === "recebida").reduce((t, p) => t + centsOrZero(p.amount), 0);
+    const texto =
+      novo === "cancelada"
+        ? `Cancelar a venda de "${s.client_name}" (${formatDateBR(s.sale_date)})? Ela sai das contas e a peça volta ao estoque. Dá para reativar depois.` +
+          (recebido > 0
+            ? `\n\nAtenção: já foram recebidos ${formatCentsBRL(recebido)} desta venda. Esse valor sai das contas junto. Se o dinheiro não foi devolvido ao cliente, lance como "Outra receita" em Recebimentos.`
+            : "")
+        : `Reativar a venda de "${s.client_name}" (${formatDateBR(s.sale_date)})? Ela volta para as contas e a peça sai do estoque de novo.`;
+    if (!window.confirm(texto)) return;
+    const res = await fetch(`/api/sales/${s.id}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: novo }),
+    });
+    const dados = await res.json().catch(() => ({}));
+    if (res.ok && dados.item) {
+      setSales((prev) => prev.map((x) => (x.id === s.id ? (dados.item as Sale) : x)));
+    } else {
+      window.alert(dados.message || "Não foi possível mudar a venda. Tente novamente.");
+    }
+  }
+
   return (
     <main className="shell shell--wide">
       <div className="page-head">
@@ -580,7 +604,7 @@ export default function RelatorioPage() {
           {filtered.length === 0 ? (
             <div className="empty-state">Nenhuma venda encontrada para esse filtro.</div>
           ) : (
-            <div className="table-wrap">
+            <div className="table-wrap tabela-cabe">
               <table>
                 <thead>
                   <tr>
@@ -603,7 +627,7 @@ export default function RelatorioPage() {
                       ? commissionCents(s.sale_value ?? 0, s.commission_pct === null || s.commission_pct === undefined ? null : Number(s.commission_pct)) / 100
                       : (Number(s.sale_value) || 0) - (Number(s.cost) || 0);
                     return (
-                      <tr key={s.id}>
+                      <tr key={s.id} className={s.status === "cancelada" ? "row-cancelada" : undefined}>
                         <td>{formatDateBR(s.sale_date)}</td>
                         <td>{s.seller || "-"}</td>
                         <td>
@@ -639,6 +663,15 @@ export default function RelatorioPage() {
                             <button className="icon-btn" onClick={() => setEditing(s)}>
                               Editar
                             </button>
+                            {s.status === "cancelada" ? (
+                              <button className="icon-btn" onClick={() => mudarStatus(s, "ativa")}>
+                                Reativar
+                              </button>
+                            ) : (
+                              <button className="icon-btn" onClick={() => mudarStatus(s, "cancelada")}>
+                                Cancelar venda
+                              </button>
+                            )}
                             <button
                               className="icon-btn danger"
                               onClick={() => handleDelete(s)}

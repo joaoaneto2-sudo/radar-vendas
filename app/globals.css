@@ -2962,3 +2962,12 @@ a.tab-btn {
   border-color: var(--gold-bright);
   background: var(--gold-soft);
 }
+
+/* Venda cancelada no relatório: fica na lista, esmaecida */
+.row-cancelada td {
+  opacity: 0.55;
+}
+
+.row-cancelada td:last-child {
+  opacity: 1;
+}
