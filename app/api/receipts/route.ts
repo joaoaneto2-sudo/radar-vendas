@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseReceiptBody } from "@/lib/receipts";
+import { getFinanceSummary } from "@/lib/finance/load";
+import { previsoesDeAtacado } from "@/lib/recebimentos-quadro";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +58,15 @@ export async function GET() {
       b.id - a.id
     );
 
-    return NextResponse.json({ items });
+    // Comissões de atacado previstas pelas vendas: só para o quadro "A receber" (não entram em items).
+    let previsoes: ReturnType<typeof previsoesDeAtacado> = [];
+    try {
+      previsoes = previsoesDeAtacado((await getFinanceSummary(db)).wholesale);
+    } catch (err) {
+      console.error(err);
+    }
+
+    return NextResponse.json({ items, previsoes });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "query_failed" }, { status: 500 });

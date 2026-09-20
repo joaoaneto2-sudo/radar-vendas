@@ -2487,3 +2487,207 @@ a.tab-btn {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Quadro "A receber" (página Recebimentos) */
+.toolbar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rq {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.rq-col {
+  background: rgba(248, 239, 227, 0.7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  min-width: 0;
+}
+
+.rq-col--atrasadas {
+  background: rgba(248, 228, 223, 0.7);
+  border-color: #efc7bd;
+}
+
+.rq-col--recebidas {
+  background: rgba(231, 238, 223, 0.7);
+  border-color: #cddbbd;
+}
+
+.rq-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 4px 10px;
+}
+
+.rq-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rq-title h3 {
+  font-size: 0.95rem;
+  color: var(--accent-strong);
+}
+
+.rq-count {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.rq-total {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.rq-col--atrasadas .rq-total {
+  color: var(--danger);
+}
+
+.rq-col--recebidas .rq-total {
+  color: var(--sage);
+}
+
+.rq-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rq-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+}
+
+.rq-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 11px 12px;
+  box-shadow: 0 1px 2px rgba(90, 47, 23, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+
+.rq-card--atrasadas {
+  border-left: 4px solid var(--danger);
+}
+
+.rq-card--semana {
+  border-left: 4px solid var(--gold-bright);
+}
+
+.rq-card--proximas {
+  border-left: 4px solid var(--border-strong);
+}
+
+.rq-card--recebidas {
+  border-left: 4px solid #a9c08f;
+}
+
+.rq-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rq-quem {
+  font-size: 0.9rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.rq-valor {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--accent-strong);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rq-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rq-chip {
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.rq-prazo {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.rq-prazo--late {
+  color: var(--danger);
+}
+
+.rq-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}
+
+.rq-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+/* Celular e tablet pequeno: uma coluna por vez, deslizando para o lado */
+@media (max-width: 1100px) {
+  .rq {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding-bottom: 8px;
+    margin: 0 -4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .rq-col {
+    flex: 0 0 min(320px, 86%);
+    scroll-snap-align: start;
+  }
+}

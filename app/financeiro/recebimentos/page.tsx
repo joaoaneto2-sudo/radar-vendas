@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDateBR, Manufacturer } from "@/lib/format";
 import { formatCentsBRL, toCents } from "@/lib/finance/money";
 import { RECEIPT_KIND_LABELS, RECEIPT_PAYMENT_METHODS, type ReceiptFormKind } from "@/lib/receipts";
+import QuadroDeRecebimentos from "./quadro";
 
 type Linha = {
-  source: "livro" | "parcela";
+  source: "livro" | "parcela" | "atacado";
   id: number;
   kind: ReceiptFormKind;
   status: "prevista" | "recebida";
@@ -83,9 +84,11 @@ function linhaParaForm(l: Linha): Form {
 
 export default function RecebimentosPage() {
   const [linhas, setLinhas] = useState<Linha[]>([]);
+  const [previsoes, setPrevisoes] = useState<Linha[]>([]); // comissões de atacado previstas pelas vendas (só no quadro)
   const [fabricantes, setFabricantes] = useState<Manufacturer[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [aba, setAba] = useState<"recebidos" | "a_receber">("recebidos");
+  const [visao, setVisao] = useState<"quadro" | "lista">("quadro");
   const [editando, setEditando] = useState<Linha | "novo" | null>(null);
   const [form, setForm] = useState<Form>(formVazio());
   const [salvando, setSalvando] = useState(false);
@@ -95,6 +98,7 @@ export default function RecebimentosPage() {
     Promise.all([fetch("/api/receipts").then((r) => r.json()), fetch("/api/manufacturers").then((r) => r.json())])
       .then(([r, m]) => {
         setLinhas(r.items || []);
+        setPrevisoes(r.previsoes || []);
         setFabricantes(m.items || []);
       })
       .finally(() => setCarregando(false));
@@ -236,13 +240,25 @@ export default function RecebimentosPage() {
       )}
 
       <div className="toolbar" style={{ marginBottom: 12 }}>
-        <div className="tabs" style={{ marginBottom: 0 }}>
-          <button className={"tab-btn" + (aba === "recebidos" ? " active" : "")} onClick={() => setAba("recebidos")}>
-            Recebidos ({recebidos.length})
-          </button>
-          <button className={"tab-btn" + (aba === "a_receber" ? " active" : "")} onClick={() => setAba("a_receber")}>
-            A receber ({aReceber.length})
-          </button>
+        <div className="toolbar-tabs">
+          <div className="tabs" style={{ marginBottom: 0 }} aria-label="Modo de ver">
+            <button className={"tab-btn" + (visao === "quadro" ? " active" : "")} onClick={() => setVisao("quadro")}>
+              Quadro
+            </button>
+            <button className={"tab-btn" + (visao === "lista" ? " active" : "")} onClick={() => setVisao("lista")}>
+              Lista
+            </button>
+          </div>
+          {visao === "lista" && (
+            <div className="tabs" style={{ marginBottom: 0 }}>
+              <button className={"tab-btn" + (aba === "recebidos" ? " active" : "")} onClick={() => setAba("recebidos")}>
+                Recebidos ({recebidos.length})
+              </button>
+              <button className={"tab-btn" + (aba === "a_receber" ? " active" : "")} onClick={() => setAba("a_receber")}>
+                A receber ({aReceber.length})
+              </button>
+            </div>
+          )}
         </div>
         <button className="btn btn-primary" onClick={() => abrirNovo()}>
           + Lançar recebimento
@@ -251,6 +267,28 @@ export default function RecebimentosPage() {
 
       {carregando ? (
         <div className="loading-state">Carregando...</div>
+      ) : visao === "quadro" ? (
+        <QuadroDeRecebimentos
+          linhas={[...linhas, ...previsoes]}
+          hoje={hoje}
+          aoReceber={(c) => {
+            if (c.source === "parcela") return receberParcela(c as Linha);
+            // Comissão prevista pelas vendas: abre o lançamento da comissão já preenchido.
+            if (c.source === "atacado") {
+              return abrirNovo({
+                kind: "comissao_fabricante",
+                status: "recebida",
+                manufacturer_id: c.manufacturer_id ? String(c.manufacturer_id) : "",
+                amount: String(Number(c.amount)),
+                from_name: c.from_name ?? "",
+                reason: c.reason ?? "",
+              });
+            }
+            return abrirEdicao(c as Linha, true);
+          }}
+          aoEditar={(c) => abrirEdicao(c as Linha)}
+          aoDesfazer={(c) => apagar(c as Linha)}
+        />
       ) : lista.length === 0 ? (
         <div className="empty-state">
           {aba === "recebidos" ? "Nenhum recebimento lançado ainda." : "Nada a receber lançado."}
