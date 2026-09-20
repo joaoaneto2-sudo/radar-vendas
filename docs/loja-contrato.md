@@ -1,7 +1,7 @@
 # Contrato do Radar com a loja online
 
 O que a loja pode ler no banco do Radar, com os nomes exatos. Tudo abaixo existe depois das
-migrações 010 e 011. O usuário `loja_leitura` (criado por `scripts/loja-usuario-leitura.sql`) só lê
+migrações 010, 011 e 012. O usuário `loja_leitura` (criado por `scripts/loja-usuario-leitura.sql`) só lê
 estas colunas, e não escreve em nada.
 
 ## products (só estas 19 colunas)
@@ -50,6 +50,36 @@ A coluna `created_at` existe, mas NÃO é liberada para a loja.
 
 `0.00` é entrega grátis (valor de propósito). Campo em branco no Radar APAGA a chave.
 
+## site_slots (vitrine do site: as fotos que o João escolhe no Radar)
+
+Só estas 5 colunas são liberadas: `area`, `category`, `position`, `product_id`, `photo_url`.
+As colunas `id` e `created_at` existem, mas NÃO são liberadas (por isso a ordenação usa `position` e `product_id`).
+
+| area | category | O que é |
+|---|---|---|
+| carrossel | nulo | Um destaque do carrossel do topo. `position` é a ordem (menor primeiro). `product_id` é a peça e `photo_url` a foto escolhida (uma foto dessa peça). |
+| categoria | nome da categoria | A foto do quadrado dessa categoria na página inicial. Uma por categoria. |
+
+Consultas da loja (as duas já devolvem só vagas de peças ainda publicadas):
+
+```sql
+-- carrossel: só o que o João escolheu, na ordem dele. Sem linhas = o carrossel não aparece.
+SELECT s.product_id, s.photo_url, s.position
+  FROM site_slots s JOIN products p ON p.id = s.product_id
+ WHERE s.area = 'carrossel'
+   AND p.sale_channel = 'varejo' AND p.active = true AND p.show_online = true AND p.price > 0
+ ORDER BY s.position, s.product_id;
+
+-- foto de cada categoria. Sem linha para a categoria = usar a foto automática (peça mais nova).
+SELECT s.category, s.photo_url
+  FROM site_slots s JOIN products p ON p.id = s.product_id
+ WHERE s.area = 'categoria'
+   AND p.sale_channel = 'varejo' AND p.active = true AND p.show_online = true AND p.price > 0;
+```
+
+Regras: no máximo 8 destaques no carrossel; a foto de uma vaga é sempre uma foto da peça (a principal ou uma extra);
+peça que sai do site some sozinha das duas consultas; uma peça publicada só existe com foto principal, preço e descrição.
+
 ## Diferenças em relação ao pedido original
 
 Nenhuma nos nomes. Extras que o Radar acrescentou, sem efeito para a loja:
@@ -61,5 +91,5 @@ Nenhuma nos nomes. Extras que o Radar acrescentou, sem efeito para a loja:
 
 ## Conferência
 
-`tests/db/store.db.test.ts` roda as consultas `SQL_PECAS`, `SQL_PECA` e `SQL_CONFIG` da loja com o
-usuário de leitura e confirma que ler `cost`, dados de compra, vendas e clientes é recusado.
+`tests/db/store.db.test.ts` roda as consultas `SQL_PECAS`, `SQL_PECA`, `SQL_CONFIG`, `SQL_VITRINE_CARROSSEL` e
+`SQL_VITRINE_CATEGORIAS` da loja com o usuário de leitura e confirma que ler `cost`, dados de compra, vendas e clientes é recusado.

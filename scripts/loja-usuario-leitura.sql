@@ -6,6 +6,7 @@
 --                     created_at, sale_channel, active, show_online
 --   product_photos:   id, product_id, url, position
 --   store_settings:   key, value
+--   site_slots:       area, category, position, product_id, photo_url
 -- Ele NAO consegue ler custo (cost), dados de compra (purchase_date, purchase_qty,
 -- purchase_payment_method), fornecedor, fabricante, vendas, clientes, recebimentos, financeiro
 -- nem nenhuma outra tabela, e NAO consegue escrever nada.
@@ -64,13 +65,15 @@ GRANT SELECT (id, product_id, url, position) ON product_photos TO loja_leitura;
 
 GRANT SELECT (key, value) ON store_settings TO loja_leitura;
 
+GRANT SELECT (area, category, position, product_id, photo_url) ON site_slots TO loja_leitura;
+
 -- ====================== PASSO C: conferencia (nao precisa da senha) ======================
 -- 1) O usuario nao tem nenhum poder especial. Tudo abaixo deve ser "false":
 SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls, rolreplication
   FROM pg_roles WHERE rolname = 'loja_leitura';
 
 -- 2) Em quais tabelas ele consegue ler ALGUMA coluna. Deve aparecer "true" SOMENTE em:
---    product_photos, products, store_settings.
+--    product_photos, products, site_slots, store_settings.
 SELECT c.relname AS tabela_ou_visao,
        has_any_column_privilege('loja_leitura', c.oid, 'SELECT') AS consegue_ler_alguma_coluna
   FROM pg_class c

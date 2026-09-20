@@ -19,6 +19,7 @@ const COLUNAS_LIBERADAS = {
   ],
   product_photos: ["id", "product_id", "url", "position"],
   store_settings: ["key", "value"],
+  site_slots: ["area", "category", "position", "product_id", "photo_url"],
 };
 
 // Colunas das visões (que continuam no banco, sem uso pela loja).
@@ -42,6 +43,8 @@ const VISIVEL_NA_LOJA = `p.sale_channel = 'varejo' AND p.active = true AND p.sho
 const SQL_PECAS = `SELECT ${COLUNAS_DA_LOJA} FROM products p WHERE ${VISIVEL_NA_LOJA} ORDER BY p.created_at DESC, p.id DESC`;
 const SQL_PECA = `SELECT ${COLUNAS_DA_LOJA} FROM products p WHERE ${VISIVEL_NA_LOJA} AND p.id = $1`;
 const SQL_CONFIG = `SELECT key, value::text AS value FROM store_settings`;
+const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL_NA_LOJA} ORDER BY s.position, s.product_id`;
+const SQL_VITRINE_CATEGORIAS = `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND ${VISIVEL_NA_LOJA}`;
 
 describe.skipIf(!disponivel)("loja online no banco", () => {
   let pool: Pool;
@@ -254,6 +257,33 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
       expect(mapa).toMatchObject({ entrega_salvador: "15.00", correios: "25.00", acrescimo_parcela: "10.00", max_parcelas: "12" });
     });
 
+    it("roda as consultas da vitrine (só vagas de peças publicadas) e não lê o resto de site_slots", async () => {
+      const { rows: pub } = await admin.query(`SELECT id FROM products WHERE name = 'Peça pública'`);
+      const { rows: esc } = await admin.query(`SELECT id FROM products WHERE name = 'Peça escondida'`);
+      await admin.query(`DELETE FROM site_slots`);
+      await admin.query(
+        `INSERT INTO site_slots (area, position, product_id, photo_url) VALUES ('carrossel', 0, $1, 'https://x/car.jpg'), ('carrossel', 1, $2, 'https://x/esc.jpg')`,
+        [pub[0].id, esc[0].id]
+      );
+      await admin.query(
+        `INSERT INTO site_slots (area, category, position, product_id, photo_url) VALUES ('categoria', 'Anéis', 0, $1, 'https://x/cat.jpg'), ('categoria', 'Brincos', 0, $2, 'https://x/esc2.jpg')`,
+        [pub[0].id, esc[0].id]
+      );
+
+      const carrossel = await loja.query(SQL_VITRINE_CARROSSEL);
+      expect(carrossel.rows.map((r) => [r.product_id, r.photo_url])).toEqual([[pub[0].id, "https://x/car.jpg"]]); // a escondida fica de fora
+      const categorias = await loja.query(SQL_VITRINE_CATEGORIAS);
+      expect(categorias.rows).toEqual([{ category: "Anéis", photo_url: "https://x/cat.jpg" }]);
+
+      await expect(loja.query(`SELECT id FROM site_slots`)).rejects.toThrow(/permission denied/);
+      await expect(loja.query(`SELECT created_at FROM site_slots`)).rejects.toThrow(/permission denied/);
+      await expect(loja.query(`SELECT * FROM site_slots`)).rejects.toThrow(/permission denied/);
+      await expect(
+        loja.query(`INSERT INTO site_slots (area, position, product_id, photo_url) VALUES ('carrossel', 9, ${pub[0].id}, 'x')`)
+      ).rejects.toThrow();
+      await admin.query(`DELETE FROM site_slots`);
+    });
+
     it("não consegue ler custo, compra, fornecedor, fabricante, vendas, clientes nem o financeiro", async () => {
       for (const coluna of ["cost", "purchase_date", "purchase_qty", "purchase_payment_method", "supplier_id", "manufacturer_id", "age_group"]) {
         await expect(loja.query(`SELECT ${coluna} FROM products`), coluna).rejects.toThrow(/permission denied/);
@@ -297,7 +327,7 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
           ORDER BY c.relname`,
         [papel]
       );
-      expect(tabelas.map((r) => r.relname)).toEqual(["product_photos", "products", "store_settings"]);
+      expect(tabelas.map((r) => r.relname)).toEqual(["product_photos", "products", "site_slots", "store_settings"]);
 
       // Coluna por coluna, nas três tabelas.
       for (const [tabela, esperadas] of Object.entries(COLUNAS_LIBERADAS)) {

@@ -1795,7 +1795,7 @@ git commit -m "Tela Vitrine do site: carrossel e foto de cada categoria"
 
 **Interfaces:**
 - Produces: `loja_leitura` lê `site_slots(area, category, position, product_id, photo_url)` e nada mais dessa tabela. Consultas da loja:
-  - `SQL_VITRINE_CARROSSEL`: `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND <VISIVEL> ORDER BY s.position, s.id`
+  - `SQL_VITRINE_CARROSSEL`: `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND <VISIVEL> ORDER BY s.position, s.product_id`
   - `SQL_VITRINE_CATEGORIAS`: `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND <VISIVEL>`
 
 - [ ] **Step 1: Atualizar o teste do contrato (falha)**
@@ -1806,7 +1806,7 @@ Em `tests/db/store.db.test.ts`:
 2. Junto das outras consultas da loja (perto de `SQL_CONFIG`), acrescentar:
 
 ```ts
-const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL_NA_LOJA} ORDER BY s.position, s.id`;
+const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL_NA_LOJA} ORDER BY s.position, s.product_id`;
 const SQL_VITRINE_CATEGORIAS = `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND ${VISIVEL_NA_LOJA}`;
 ```
 
@@ -1863,7 +1863,7 @@ Expected: PASS.
 Junto das outras consultas, acrescentar:
 
 ```js
-const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL_NA_LOJA} ORDER BY s.position, s.id`;
+const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL_NA_LOJA} ORDER BY s.position, s.product_id`;
 const SQL_VITRINE_CATEGORIAS = `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND ${VISIVEL_NA_LOJA}`;
 ```
 
@@ -1991,7 +1991,7 @@ export type Vitrine = { carrossel: VagaCarrossel[]; categorias: Record<string, s
 Em `COLUNAS_LIBERADAS` acrescentar `site_slots: ["area", "category", "position", "product_id", "photo_url"],`. Depois de `SQL_CONFIG` acrescentar:
 
 ```ts
-export const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL} ORDER BY s.position, s.id`;
+export const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL} ORDER BY s.position, s.product_id`;
 export const SQL_VITRINE_CATEGORIAS = `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND ${VISIVEL}`;
 ```
 

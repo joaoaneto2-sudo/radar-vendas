@@ -32,6 +32,8 @@ const VISIVEL_NA_LOJA = `p.sale_channel = 'varejo' AND p.active = true AND p.sho
 const SQL_PECAS = `SELECT ${COLUNAS_DA_LOJA} FROM products p WHERE ${VISIVEL_NA_LOJA} ORDER BY p.created_at DESC, p.id DESC`;
 const SQL_PECA = `SELECT ${COLUNAS_DA_LOJA} FROM products p WHERE ${VISIVEL_NA_LOJA} AND p.id = $1`;
 const SQL_CONFIG = `SELECT key, value::text AS value FROM store_settings`;
+const SQL_VITRINE_CARROSSEL = `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND ${VISIVEL_NA_LOJA} ORDER BY s.position, s.product_id`;
+const SQL_VITRINE_CATEGORIAS = `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND ${VISIVEL_NA_LOJA}`;
 
 const client = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false } });
 
@@ -96,12 +98,18 @@ try {
   }
   const config = await deveLer("configuracoes da loja", SQL_CONFIG);
   console.log(`           chaves lidas: ${config.map((c) => c.key).join(", ") || "(nenhuma: a loja usa os valores padrao)"}`);
+  const carrossel = await deveLer("vagas do carrossel", SQL_VITRINE_CARROSSEL);
+  console.log(`           ${carrossel.length} destaque(s) no carrossel`);
+  const categoriasEscolhidas = await deveLer("fotos escolhidas das categorias", SQL_VITRINE_CATEGORIAS);
+  console.log(`           ${categoriasEscolhidas.length} categoria(s) com foto escolhida`);
 
   console.log("\n3) O que NAO pode ler");
   for (const coluna of ["cost", "purchase_date", "purchase_qty", "purchase_payment_method", "supplier_id", "manufacturer_id"]) {
     await deveSerNegado(`products.${coluna}`, `SELECT ${coluna} FROM products LIMIT 1`);
   }
   await deveSerNegado("products (todas as colunas)", "SELECT * FROM products LIMIT 1");
+  await deveSerNegado("site_slots.id", "SELECT id FROM site_slots LIMIT 1");
+  await deveSerNegado("site_slots.created_at", "SELECT created_at FROM site_slots LIMIT 1");
   for (const tabela of ["sales", "clients", "receipts", "expenses", "card_invoices", "stock_purchases", "users", "agreement_settings", "manufacturers", "sale_payments"]) {
     await deveSerNegado(tabela, `SELECT * FROM ${tabela} LIMIT 1`);
   }

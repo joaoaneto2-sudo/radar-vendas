@@ -55,7 +55,7 @@ Nenhuma coluna existente muda. A coluna `products.featured` continua existindo (
   `scripts/loja-usuario-leitura.sql`. O script continua podendo ser rodado de novo sem estragar nada.
 - Duas consultas novas para a loja (as duas só devolvem vagas de peças **ainda publicadas**, com a mesma regra de
   visibilidade das peças, isto é `p.sale_channel = 'varejo' AND p.active = true AND p.show_online = true AND p.price > 0`):
-  - carrossel: `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND (regra de visibilidade acima) ORDER BY s.position, s.id`
+  - carrossel: `SELECT s.product_id, s.photo_url, s.position FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'carrossel' AND (regra de visibilidade acima) ORDER BY s.position, s.product_id`
   - categorias: `SELECT s.category, s.photo_url FROM site_slots s JOIN products p ON p.id = s.product_id WHERE s.area = 'categoria' AND (regra de visibilidade acima)`
 - `docs/loja-contrato.md` e o teste `tests/db/store.db.test.ts` passam a incluir essas consultas, rodadas **com o usuário de
   leitura**, junto com a recusa de ler qualquer outra coisa.
