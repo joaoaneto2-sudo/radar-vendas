@@ -34,7 +34,10 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
   },
   {
     titulo: "Loja",
-    itens: [{ href: "/loja-online", rotulo: "Loja online", icone: "loja" }],
+    itens: [
+      { href: "/loja-online", rotulo: "Loja online", icone: "loja" },
+      { href: "/loja-online/vitrine", rotulo: "Vitrine do site", icone: "loja" },
+    ],
   },
 ];
 
@@ -49,6 +52,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
   "/financeiro/despesas": ["Financeiro", "Despesas e faturas"],
   "/loja-online": ["Loja", "Loja online"],
+  "/loja-online/vitrine": ["Loja", "Vitrine do site"],
 };
 
 // Barra de baixo do celular: as principais e o menu "Mais".
@@ -64,6 +68,7 @@ const MAIS = [
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
   { href: "/financeiro/despesas", rotulo: "Despesas e faturas" },
   { href: "/loja-online", rotulo: "Loja online" },
+  { href: "/loja-online/vitrine", rotulo: "Vitrine do site" },
 ];
 
 function Desenho({ nome }: { nome: Icone }) {
