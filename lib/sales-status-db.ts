@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { Cents, toCents } from "./finance/money";
+import { marcarQuem, NINGUEM, type Quem } from "./audit";
 
 // Cancelar e reativar uma venda. Cancelar não apaga: a venda fica no relatório como "cancelada",
 // sai de todas as contas, e a peça volta ao estoque. Dá para reativar depois.
@@ -11,10 +12,11 @@ export type ResultadoDoStatus =
   | { ok: true; mudou: boolean; recebidoCents: Cents }
   | { ok: false; error: "not_found" };
 
-export async function mudarStatusDaVenda(pool: Pool, id: number, novo: NovoStatus): Promise<ResultadoDoStatus> {
+export async function mudarStatusDaVenda(pool: Pool, id: number, novo: NovoStatus, quem: Quem = NINGUEM): Promise<ResultadoDoStatus> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await marcarQuem(client, quem);
     const { rows } = await client.query(`SELECT status, product_id, price_tier FROM sales WHERE id = $1 FOR UPDATE`, [id]);
     if (rows.length === 0) {
       await client.query("ROLLBACK");

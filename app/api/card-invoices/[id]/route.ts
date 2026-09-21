@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseInvoiceBody } from "@/lib/expenses";
 import { InvoiceConflict, deleteInvoice, listInvoices, saveInvoice } from "@/lib/invoices-db";
+import { marcarQuem } from "@/lib/audit";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   try {
     await ensureSchema();
     await client.query("BEGIN");
+    await marcarQuem(client, await quemFez());
     await saveInvoice(client, id, dados);
     await client.query("COMMIT");
     const [item] = await listInvoices(db, id);
@@ -45,6 +48,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
   try {
     await ensureSchema();
     await client.query("BEGIN");
+    await marcarQuem(client, await quemFez());
     const apagou = await deleteInvoice(client, id);
     await client.query("COMMIT");
     if (!apagou) return NextResponse.json({ error: "not_found" }, { status: 404 });

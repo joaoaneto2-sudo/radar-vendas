@@ -32,6 +32,7 @@ export interface Relacionado {
   tabela: string; // nome em português
   acao: string;
   titulo: string;
+  alteracoes: Alteracao[]; // só nas edições
 }
 
 export interface Evento {
@@ -91,9 +92,9 @@ const NOME_DA_TABELA: Record<string, string> = {
 // Qual linha manda no título quando várias mudam juntas (apagar uma venda leva as parcelas junto).
 const PRIORIDADE = [
   "sales",
+  "card_invoices",
   "receipts",
   "expenses",
-  "card_invoices",
   "fund_payments",
   "liabilities",
   "sale_payments",
@@ -165,6 +166,8 @@ const DINHEIRO = new Set([
   "total_amount",
 ]);
 const PORCENTAGEM = new Set(["discount_pct", "cashback_pct"]);
+// Campos que guardam uma opção (recebida, outra_receita, ...): mostrados como texto normal.
+const ROTULOS_DE_LISTA = new Set(["status", "price_tier", "kind", "nature", "partner"]);
 const IGNORADOS = new Set(["id", "created_at", "updated_at"]);
 
 export function tipoDaTabela(tabela: string): TipoDeRegistro | null {
@@ -194,12 +197,18 @@ export function valorLegivel(campo: string, valor: unknown): string {
   if (typeof valor === "string" && /^\d{4}-\d{2}-\d{2}/.test(valor)) return dataBR(valor);
   if (typeof valor === "boolean") return valor ? "sim" : "não";
   const texto = typeof valor === "object" ? JSON.stringify(valor) : String(valor);
-  if (campo === "status" || campo === "price_tier") return texto.charAt(0).toUpperCase() + texto.slice(1);
+  if (ROTULOS_DE_LISTA.has(campo)) {
+    const legivel = texto.replace(/_/g, " ");
+    return legivel.charAt(0).toUpperCase() + legivel.slice(1);
+  }
   return texto;
 }
 
 const texto = (v: unknown) => (v === null || v === undefined || v === "" ? "" : String(v));
-const dinheiro = (linha: Linha, campo: string) => valorLegivel(campo, linha[campo]);
+// Valor em reais, ou nada quando o campo está vazio (o título não mostra "R$ vazio").
+const dinheiro = (linha: Linha, campo: string) => (texto(linha[campo]) ? valorLegivel(campo, linha[campo]) : "");
+const junta = (...partes: string[]) => partes.filter(Boolean).join(", ");
+const em = (linha: Linha, campo: string, prefixo: string) => (linha[campo] ? `${prefixo} ${valorLegivel(campo, linha[campo])}` : "");
 
 /** Frase curta que identifica a linha ("Despesa "Frete", R$ 30,00"). */
 export function tituloDaLinha(tabela: string, l: Linha): string {
@@ -207,30 +216,28 @@ export function tituloDaLinha(tabela: string, l: Linha): string {
   switch (tabela) {
     case "sales": {
       const cliente = texto(l.client_name);
-      const data = l.sale_date ? `, em ${valorLegivel("sale_date", l.sale_date)}` : "";
-      return `${nome}${cliente ? ` de ${cliente}` : ""}, ${dinheiro(l, "sale_value")}${data}`;
+      return junta(`${nome}${cliente ? ` de ${cliente}` : ""}`, dinheiro(l, "sale_value"), em(l, "sale_date", "em"));
     }
     case "sale_payments":
-      return `${nome} de ${dinheiro(l, "amount")}${l.due_date ? `, vence em ${valorLegivel("due_date", l.due_date)}` : ""}`;
+      return junta(`${nome}${dinheiro(l, "amount") ? ` de ${dinheiro(l, "amount")}` : ""}`, em(l, "due_date", "vence em"));
     case "receipts": {
       const quem = texto(l.from_name);
-      return `${nome}${quem ? ` de ${quem}` : ""}, ${dinheiro(l, "amount")}`;
+      return junta(`${nome}${quem ? ` de ${quem}` : ""}`, dinheiro(l, "amount"));
     }
     case "expenses":
     case "stock_purchases":
     case "card_invoice_parts":
     case "liabilities": {
       const descricao = texto(l.description);
-      const valor = tabela === "liabilities" ? dinheiro(l, "total_amount") : dinheiro(l, "amount");
-      return `${nome}${descricao ? ` "${descricao}"` : ""}, ${valor}`;
+      return junta(`${nome}${descricao ? ` "${descricao}"` : ""}`, dinheiro(l, tabela === "liabilities" ? "total_amount" : "amount"));
     }
     case "card_invoices": {
       const descricao = texto(l.description);
-      return `${nome}${descricao ? ` "${descricao}"` : ""}, ${dinheiro(l, "total_amount")}`;
+      return junta(`${nome}${descricao ? ` "${descricao}"` : ""}`, dinheiro(l, "total_amount"));
     }
     case "fund_payments":
     case "liability_payments":
-      return `${nome}, ${dinheiro(l, "amount")}${l.paid_date ? `, em ${valorLegivel("paid_date", l.paid_date)}` : ""}`;
+      return junta(nome, dinheiro(l, "amount"), em(l, "paid_date", "em"));
     default:
       return nome;
   }
@@ -238,7 +245,7 @@ export function tituloDaLinha(tabela: string, l: Linha): string {
 
 /** O que mudou de um estado para o outro (só os campos que realmente mudaram). */
 export function alteracoesEntre(antes: Linha, depois: Linha): Alteracao[] {
-  const chaves = Array.from(new Set([...Object.keys(antes), ...Object.keys(depois)])).filter((c) => !IGNORADOS.has(c));
+  const chaves = Array.from(new Set([...Object.keys(antes), ...Object.keys(depois)])).filter((c) => !IGNORADOS.has(c) && !c.endsWith("_id"));
   const lista: Alteracao[] = [];
   for (const campo of chaves) {
     const a = valorLegivel(campo, antes[campo]);
@@ -282,31 +289,47 @@ export function agruparEventos(linhas: LinhaDoLog[]): Evento[] {
     else grupos.set(l.txId, [l]);
   }
 
+  const mudancasDe = (l: LinhaDoLog): Alteracao[] => (l.op === "UPDATE" && l.after ? alteracoesEntre(l.before, l.after) : []);
+
   const eventos: Evento[] = [];
   for (const grupo of grupos.values()) {
     const ordenado = [...grupo].sort((a, b) => prioridade(a.table) - prioridade(b.table) || a.id - b.id);
     const [principal, ...resto] = ordenado;
     const tipo = tipoDaTabela(principal.table);
     if (!tipo) continue;
-    const acao = acaoDe(principal);
+
+    // Só mudou uma ligação interna (ex.: a fatura ligou uma despesa à sua parte): não é algo que o João fez, não aparece.
+    const algoVisivel = grupo.some((l) => l.op === "DELETE" || mudancasDe(l).length > 0);
+    if (!algoVisivel) continue;
 
     eventos.push({
       txId: principal.txId,
       at: grupo.reduce((mais, l) => (l.at > mais ? l.at : mais), principal.at),
-      userName: principal.userName,
+      userName: grupo.find((l) => l.userName)?.userName ?? null,
       table: principal.table,
       tipo,
-      acao,
+      acao: acaoDe(principal),
       titulo: tituloDaLinha(principal.table, principal.op === "DELETE" ? principal.before : principal.after ?? principal.before),
-      alteracoes: principal.op === "UPDATE" && principal.after ? alteracoesEntre(principal.before, principal.after) : [],
+      alteracoes: mudancasDe(principal),
       apagado: principal.op === "DELETE" ? camposDaLinha(principal.before) : [],
-      relacionados: resto.map((r) => ({
-        tabela: NOME_DA_TABELA[r.table] ?? r.table,
-        // Ao editar uma venda, o sistema apaga as parcelas antigas e grava as novas: aqui elas aparecem como "substituída".
-        acao: principal.op === "UPDATE" && r.op === "DELETE" ? "substituída" : acaoDe(r),
-        titulo: tituloDaLinha(r.table, r.op === "DELETE" ? r.before : r.after ?? r.before),
-      })),
+      relacionados: resto
+        .filter((r) => r.op === "DELETE" || mudancasDe(r).length > 0)
+        .map((r) => ({
+          tabela: NOME_DA_TABELA[r.table] ?? r.table,
+          // Ao editar uma venda, o sistema apaga as parcelas antigas e grava as novas: aqui elas aparecem como "substituída".
+          acao: principal.op === "UPDATE" && r.op === "DELETE" ? "substituída" : acaoDe(r),
+          titulo: tituloDaLinha(r.table, r.op === "DELETE" ? r.before : r.after ?? r.before),
+          alteracoes: mudancasDe(r),
+        })),
     });
   }
   return eventos.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+/** "21/09/2026 às 02:12", no horário da Bahia. */
+export function quandoBR(iso: string): string {
+  const d = new Date(iso);
+  const dia = dataBR(new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString());
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bahia" });
+  return `${dia} às ${hora}`;
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { desfazerPagamento } from "@/lib/fund-db";
+import { comoUsuario } from "@/lib/audit";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +15,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (!Number.isInteger(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   try {
     await ensureSchema();
-    const existia = await desfazerPagamento(db, id);
+    const existia = await desfazerPagamento(comoUsuario(db, await quemFez()), id);
     if (!existia) return NextResponse.json({ error: "not_found", message: "Pagamento não encontrado." }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (err) {

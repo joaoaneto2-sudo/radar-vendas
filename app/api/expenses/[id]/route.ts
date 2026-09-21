@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseExpenseBody } from "@/lib/expenses";
+import { comoUsuario } from "@/lib/audit";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (await veioDeFatura(db, id)) {
       return NextResponse.json({ error: "from_invoice", message: MENSAGEM_DA_FATURA }, { status: 409 });
     }
-    const { rowCount } = await db.query(
+    const { rowCount } = await comoUsuario(db, await quemFez()).query(
       `UPDATE expenses SET expense_date = $1, description = $2, category = $3, amount = $4, notes = $5 WHERE id = $6`,
       [dados.date, dados.description, dados.category, dados.amount, dados.notes, id]
     );
@@ -47,7 +49,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     if (await veioDeFatura(db, id)) {
       return NextResponse.json({ error: "from_invoice", message: MENSAGEM_DA_FATURA }, { status: 409 });
     }
-    await db.query(`DELETE FROM expenses WHERE id = $1`, [id]);
+    await comoUsuario(db, await quemFez()).query(`DELETE FROM expenses WHERE id = $1`, [id]);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(err);

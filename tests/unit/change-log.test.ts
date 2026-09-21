@@ -19,6 +19,8 @@ describe("valores legíveis", () => {
     expect(valorLegivel("client_name", null)).toBe("vazio");
     expect(valorLegivel("client_name", "")).toBe("vazio");
     expect(valorLegivel("status", "cancelada")).toBe("Cancelada");
+    expect(valorLegivel("kind", "outra_receita")).toBe("Outra receita");
+    expect(valorLegivel("nature", "estoque_inicial")).toBe("Estoque inicial");
     expect(valorLegivel("category", "Frete")).toBe("Frete");
   });
 });
@@ -115,5 +117,43 @@ describe("agrupar em eventos", () => {
 
   it("tabela desconhecida é ignorada em vez de quebrar a tela", () => {
     expect(agruparEventos([linha({ table: "outra_coisa", op: "DELETE", before: { id: 1 } })])).toEqual([]);
+  });
+});
+
+describe("títulos com campos vazios", () => {
+  it("não escreve R$ vazio nem data vazia", () => {
+    expect(tituloDaLinha("sales", { client_name: "Kika", sale_value: null, sale_date: "2026-09-06" })).toBe("Venda de Kika, em 06/09/2026");
+    expect(tituloDaLinha("sales", { sale_value: null })).toBe("Venda");
+    expect(tituloDaLinha("fund_payments", { amount: null, paid_date: null })).toBe("Pagamento do fundo");
+    expect(normal(tituloDaLinha("sale_payments", { amount: 100 }))).toBe("Parcela de R$ 100,00");
+  });
+});
+
+describe("fatura do cartão e ruído interno", () => {
+  it("editar uma fatura: o título é da fatura, e a despesa e a parte aparecem como relacionados com o que mudou", () => {
+    const [e] = agruparEventos([
+      linha({ txId: "9", table: "card_invoice_parts", op: "UPDATE", before: { id: 1, description: "parte", amount: 100 }, after: { id: 1, description: "parte", amount: 120 } }),
+      linha({ txId: "9", table: "expenses", op: "UPDATE", before: { id: 2, description: "parte", amount: 100 }, after: { id: 2, description: "parte", amount: 120 } }),
+      linha({ txId: "9", table: "card_invoices", op: "UPDATE", before: { id: 3, description: "Setembro", total_amount: 100 }, after: { id: 3, description: "Setembro", total_amount: 120 } }),
+    ]);
+    expect(e.tipo).toBe("fatura");
+    expect(normal(e.titulo)).toBe('Fatura do cartão "Setembro", R$ 120,00');
+    expect(e.alteracoes.map((a) => a.rotulo)).toEqual(["Total"]);
+    expect(e.relacionados).toHaveLength(2);
+    expect(e.relacionados.every((r) => r.alteracoes.length === 1)).toBe(true);
+  });
+
+  it("quando só mudou uma ligação interna (a fatura ligou a despesa à parte), não aparece", () => {
+    expect(
+      agruparEventos([linha({ table: "card_invoice_parts", op: "UPDATE", before: { id: 1, description: "p", amount: 5, expense_id: null }, after: { id: 1, description: "p", amount: 5, expense_id: 6 } })])
+    ).toEqual([]);
+  });
+
+  it("o nome de quem fez vem de qualquer linha da operação que o tenha", () => {
+    const [e] = agruparEventos([
+      linha({ txId: "5", table: "sales", op: "DELETE", before: { id: 1, client_name: "A", sale_value: 1 }, userName: null }),
+      linha({ txId: "5", table: "sale_payments", op: "DELETE", before: { id: 2, amount: 1 }, userName: "João" }),
+    ]);
+    expect(e.userName).toBe("João");
   });
 });

@@ -3254,3 +3254,55 @@ a.tab-btn {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Histórico de alterações */
+.hist-lista {
+  display: grid;
+  gap: 12px;
+}
+
+.hist-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+
+.hist-item header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.hist-item h3 {
+  font-size: 0.98rem;
+  color: var(--accent-strong);
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+
+.hist-mudancas {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.hist-item details {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.hist-item summary {
+  cursor: pointer;
+  color: var(--gold);
+  font-weight: 600;
+}

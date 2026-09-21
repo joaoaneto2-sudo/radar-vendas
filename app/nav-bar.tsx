@@ -33,6 +33,7 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
       { href: "/financeiro/fundo", rotulo: "Fundo de reposição", icone: "financeiro" },
       { href: "/financeiro/despesas", rotulo: "Despesas e faturas", icone: "despesas" },
       { href: "/financeiro/acordo", rotulo: "Parâmetros do acordo", icone: "financeiro" },
+      { href: "/financeiro/historico", rotulo: "Histórico de alterações", icone: "financeiro" },
     ],
   },
   {
@@ -57,6 +58,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/financeiro/fundo": ["Financeiro", "Fundo de reposição"],
   "/financeiro/despesas": ["Financeiro", "Despesas e faturas"],
   "/financeiro/acordo": ["Financeiro", "Parâmetros do acordo"],
+  "/financeiro/historico": ["Financeiro", "Histórico de alterações"],
   "/loja-online": ["Loja", "Loja online"],
   "/loja-online/vitrine": ["Loja", "Vitrine do site"],
 };
@@ -76,6 +78,7 @@ const MAIS = [
   { href: "/financeiro/fundo", rotulo: "Fundo de reposição" },
   { href: "/financeiro/despesas", rotulo: "Despesas e faturas" },
   { href: "/financeiro/acordo", rotulo: "Parâmetros do acordo" },
+  { href: "/financeiro/historico", rotulo: "Histórico de alterações" },
   { href: "/loja-online", rotulo: "Loja online" },
   { href: "/loja-online/vitrine", rotulo: "Vitrine do site" },
 ];

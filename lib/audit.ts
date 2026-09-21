@@ -35,3 +35,12 @@ export async function comQuem<T>(pool: Pool, quem: Quem, operacao: (client: Pool
     client.release();
   }
 }
+
+/**
+ * Para rotas com uma só instrução por vez: um "db" cujo query já roda dentro de uma transação marcada com quem fez.
+ * Cada chamada é atômica. Para operações com várias instruções juntas, use comQuem ou marcarQuem.
+ */
+export function comoUsuario(pool: Pool, quem: Quem): Pick<Pool, "query"> {
+  const query = (texto: string, valores?: unknown[]) => comQuem(pool, quem, (c) => c.query(texto, valores));
+  return { query } as unknown as Pick<Pool, "query">;
+}

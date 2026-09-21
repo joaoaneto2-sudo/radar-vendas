@@ -3,6 +3,8 @@ import { getPool, ensureSchema } from "@/lib/db";
 import { parseReceiptBody } from "@/lib/receipts";
 import { getFinanceSummary } from "@/lib/finance/load";
 import { previsoesDeAtacado } from "@/lib/recebimentos-quadro";
+import { comoUsuario } from "@/lib/audit";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,7 +87,7 @@ export async function POST(req: NextRequest) {
     await ensureSchema();
 
     if (dados.kind === "parcela_venda") {
-      const { rows } = await db.query(
+      const { rows } = await comoUsuario(db, await quemFez()).query(
         `UPDATE sale_payments sp
             SET status = 'recebida', received_date = $1
            FROM sales s

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseSaleFinance } from "@/lib/sale-finance";
 import { SALE_SELECT, resolveIncentive, savePayments } from "@/lib/sales-query";
+import { comoUsuario, marcarQuem } from "@/lib/audit";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +58,7 @@ export async function PATCH(
   try {
     await ensureSchema();
     await client.query("BEGIN");
+    await marcarQuem(client, await quemFez());
     const atual = await client.query("SELECT client_id, price_tier FROM sales WHERE id = $1", [id]);
     if (atual.rows.length === 0) {
       await client.query("ROLLBACK");
@@ -166,7 +169,7 @@ export async function DELETE(
 
   try {
     await ensureSchema();
-    const { rowCount } = await db.query("DELETE FROM sales WHERE id = $1", [id]);
+    const { rowCount } = await comoUsuario(db, await quemFez()).query("DELETE FROM sales WHERE id = $1", [id]);
     if (rowCount === 0) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }

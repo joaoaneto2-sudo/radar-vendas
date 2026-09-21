@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { SALE_SELECT } from "@/lib/sales-query";
 import { mudarStatusDaVenda } from "@/lib/sales-status-db";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   try {
     await ensureSchema();
-    const r = await mudarStatusDaVenda(db, id, body.status);
+    const r = await mudarStatusDaVenda(db, id, body.status, await quemFez());
     if (!r.ok) return NextResponse.json({ error: "not_found", message: "Venda não encontrada." }, { status: 404 });
     const { rows } = await db.query(`${SALE_SELECT} WHERE s.id = $1`, [id]);
     return NextResponse.json({ item: rows[0], mudou: r.mudou, recebidoCents: r.recebidoCents });

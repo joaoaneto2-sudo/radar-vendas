@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseReceiptBody } from "@/lib/receipts";
+import { comoUsuario } from "@/lib/audit";
+import { quemFez } from "@/lib/audit-request";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
           { status: 400 }
         );
       }
-      const { rows } = await db.query(
+      const { rows } = await comoUsuario(db, await quemFez()).query(
         `UPDATE sale_payments
             SET status = $1,
                 received_date = $2,
@@ -56,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       );
     }
 
-    const { rows } = await db.query(
+    const { rows } = await comoUsuario(db, await quemFez()).query(
       `UPDATE receipts
           SET kind=$1, status=$2, received_date=$3, expected_date=$4, amount=$5, partner=$6,
               manufacturer_id=$7, sale_id=$8, from_name=$9, from_nickname=$10, reason=$11, payment_method=$12
@@ -100,9 +102,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     await ensureSchema();
     if (ehParcela(req)) {
-      await db.query(`UPDATE sale_payments SET status = 'prevista', received_date = NULL WHERE id = $1`, [id]);
+      await comoUsuario(db, await quemFez()).query(`UPDATE sale_payments SET status = 'prevista', received_date = NULL WHERE id = $1`, [id]);
     } else {
-      await db.query(`DELETE FROM receipts WHERE id = $1`, [id]);
+      await comoUsuario(db, await quemFez()).query(`DELETE FROM receipts WHERE id = $1`, [id]);
     }
     return NextResponse.json({ ok: true });
   } catch (err) {
