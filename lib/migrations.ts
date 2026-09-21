@@ -621,6 +621,19 @@ export const MIGRATIONS: Migration[] = [
       ]),
     ],
   },
+  {
+    id: "015",
+    name: "desfazer alteracoes: marca de quem desfez cada mudanca do historico",
+    statements: [
+      // Uma linha por mudanca desfeita (change_log em si nunca e alterado). Serve para nao desfazer duas vezes.
+      `CREATE TABLE IF NOT EXISTS change_undo (
+        change_id BIGINT PRIMARY KEY REFERENCES change_log(id) ON DELETE CASCADE,
+        undone_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        undone_by_id INT,
+        undone_by_name TEXT
+      )`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

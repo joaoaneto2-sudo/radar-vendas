@@ -6,7 +6,7 @@ const normal = (t: string) => t.replace(/ /g, " ");
 let seq = 0;
 function linha(p: Partial<LinhaDoLog> & Pick<LinhaDoLog, "table" | "op" | "before">): LinhaDoLog {
   seq += 1;
-  return { id: seq, at: "2026-09-21T12:00:00.000Z", txId: "100", rowId: 1, after: null, userName: "João", ...p };
+  return { id: seq, at: "2026-09-21T12:00:00.000Z", txId: "100", rowId: 1, after: null, userName: "João", desfeitaEm: null, desfeitaPor: null, ...p };
 }
 
 describe("valores legíveis", () => {

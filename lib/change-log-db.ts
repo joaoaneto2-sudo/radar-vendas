@@ -5,10 +5,12 @@ import { TABELAS_REGISTRADAS, type LinhaDoLog } from "./change-log";
 
 export async function listarRegistro(db: Pick<Pool, "query">, limite = 500): Promise<LinhaDoLog[]> {
   const { rows } = await db.query(
-    `SELECT id, at, tx_id::text AS tx_id, table_name, row_id, op, before, after, user_name
-       FROM change_log
-      WHERE table_name = ANY($2::text[])
-      ORDER BY at DESC, id DESC
+    `SELECT c.id, c.at, c.tx_id::text AS tx_id, c.table_name, c.row_id, c.op, c.before, c.after, c.user_name,
+            u.undone_at, u.undone_by_name
+       FROM change_log c
+       LEFT JOIN change_undo u ON u.change_id = c.id
+      WHERE c.table_name = ANY($2::text[])
+      ORDER BY c.at DESC, c.id DESC
       LIMIT $1`,
     [limite, TABELAS_REGISTRADAS]
   );
@@ -22,5 +24,7 @@ export async function listarRegistro(db: Pick<Pool, "query">, limite = 500): Pro
     before: r.before,
     after: r.after,
     userName: r.user_name,
+    desfeitaEm: r.undone_at ? new Date(r.undone_at).toISOString() : null,
+    desfeitaPor: r.undone_by_name,
   }));
 }

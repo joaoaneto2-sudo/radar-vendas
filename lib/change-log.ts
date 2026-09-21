@@ -15,6 +15,8 @@ export interface LinhaDoLog {
   before: Linha;
   after: Linha | null;
   userName: string | null;
+  desfeitaEm: string | null; // ISO, quando alguém desfez esta mudança
+  desfeitaPor: string | null;
 }
 
 export interface Alteracao {
@@ -36,6 +38,9 @@ export interface Relacionado {
 }
 
 export interface Evento {
+  logId: number; // id da linha principal do registro (é o que o "Desfazer" usa)
+  desfazivel: boolean; // dá para tentar desfazer (o servidor ainda confere se os dados de hoje deixam)
+  desfeita: { em: string; por: string | null } | null;
   txId: string;
   at: string;
   userName: string | null;
@@ -75,6 +80,20 @@ export const ROTULO_DO_TIPO: Record<TipoDeRegistro, string> = {
 };
 
 export const TABELAS_REGISTRADAS = Object.keys(TIPO_DA_TABELA);
+
+// O que dá para desfazer, por enquanto: só os casos simples, em que a operação mexeu numa linha só.
+// Desfazer a exclusão de uma venda ou de uma fatura devolveria também parcelas, despesas e estoque: fica para depois.
+export const DESFAZIVEIS: Record<string, Array<"UPDATE" | "DELETE">> = {
+  expenses: ["UPDATE", "DELETE"],
+  receipts: ["UPDATE", "DELETE"],
+  fund_payments: ["DELETE"],
+  sale_payments: ["UPDATE"], // marcar uma parcela como recebida (ou voltar para a receber)
+};
+
+/** Uma mudança pode ser desfeita se é de um tipo simples, foi a única da operação e ainda não foi desfeita. */
+export function podeDesfazerLinha(l: LinhaDoLog, linhasDaOperacao: number): boolean {
+  return linhasDaOperacao === 1 && !l.desfeitaEm && (DESFAZIVEIS[l.table] ?? []).includes(l.op);
+}
 
 const NOME_DA_TABELA: Record<string, string> = {
   sales: "Venda",
@@ -303,6 +322,9 @@ export function agruparEventos(linhas: LinhaDoLog[]): Evento[] {
     if (!algoVisivel) continue;
 
     eventos.push({
+      logId: principal.id,
+      desfazivel: podeDesfazerLinha(principal, grupo.length),
+      desfeita: principal.desfeitaEm ? { em: principal.desfeitaEm, por: principal.desfeitaPor } : null,
       txId: principal.txId,
       at: grupo.reduce((mais, l) => (l.at > mais ? l.at : mais), principal.at),
       userName: grupo.find((l) => l.userName)?.userName ?? null,
