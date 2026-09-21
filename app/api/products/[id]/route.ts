@@ -3,6 +3,8 @@ import { getPool, ensureSchema } from "@/lib/db";
 import { resolveStoreFields } from "@/lib/store-rules";
 import { MENSAGEM_CARROSSEL_CHEIO, carrosselCheio, reconciliarPeca } from "@/lib/vitrine-db";
 import { avisoDeVagasRemovidas } from "@/lib/vitrine";
+import { lerFotosDoCorpo } from "@/lib/product-photos";
+import { gravarFotos } from "@/lib/product-photos-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +38,8 @@ export async function PATCH(
   const price = numOrNull(body.price);
   const stockQty = Number.isFinite(Number(body.stock_qty)) ? Number(body.stock_qty) : 0;
   const saleChannel = body.sale_channel === "atacado" ? "atacado" : "varejo";
+  const fotos = lerFotosDoCorpo(body);
+  if (!fotos.ok) return NextResponse.json({ error: fotos.error, message: fotos.message }, { status: 400 });
 
   try {
     await ensureSchema();
@@ -101,6 +105,7 @@ export async function PATCH(
       ]
     );
     if (rows.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    await gravarFotos(db, id, fotos.value);
     const { removidas } = await reconciliarPeca(db, id);
     const aviso = avisoDeVagasRemovidas(removidas);
     return NextResponse.json({ item: rows[0], notes: [...loja.notes, ...(aviso ? [aviso] : [])] });

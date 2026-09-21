@@ -3,6 +3,8 @@ import { getPool, ensureSchema } from "@/lib/db";
 import { resolveStoreFields, type StoreState } from "@/lib/store-rules";
 import { MENSAGEM_CARROSSEL_CHEIO, carrosselCheio, reconciliarPeca } from "@/lib/vitrine-db";
 import { avisoDeVagasRemovidas } from "@/lib/vitrine";
+import { lerFotosDoCorpo } from "@/lib/product-photos";
+import { gravarFotos } from "@/lib/product-photos-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,6 +64,8 @@ export async function POST(req: NextRequest) {
   const price = numOrNull(body.price);
   const stockQty = Number.isFinite(Number(body.stock_qty)) ? Number(body.stock_qty) : 0;
   const saleChannel = body.sale_channel === "atacado" ? "atacado" : "varejo";
+  const fotos = lerFotosDoCorpo(body);
+  if (!fotos.ok) return NextResponse.json({ error: fotos.error, message: fotos.message }, { status: 400 });
 
   // Regras da loja online (site, carrossel, promoção). Recusa com mensagem clara em vez de salvar errado.
   const loja = resolveStoreFields(body, LOJA_INICIAL, { saleChannel, price, photoUrl: body.photo_url || null });
@@ -110,6 +114,7 @@ export async function POST(req: NextRequest) {
         loja.value.public_description,
       ]
     );
+    await gravarFotos(db, rows[0].id, fotos.value);
     const { removidas } = await reconciliarPeca(db, rows[0].id);
     const aviso = avisoDeVagasRemovidas(removidas);
     return NextResponse.json({ item: rows[0], notes: aviso ? [aviso] : [] }, { status: 201 });
