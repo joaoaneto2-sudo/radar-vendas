@@ -564,6 +564,63 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS agreement_history_data_idx ON agreement_history (changed_at DESC, id DESC)`,
     ],
   },
+  {
+    id: "014",
+    name: "historico de alteracoes: registro automatico de edicoes e exclusoes",
+    statements: [
+      // Cada edicao ou exclusao nas tabelas do dinheiro deixa uma linha aqui: o que era antes e o que ficou.
+      // tx_id junta o que mudou na mesma operacao (apagar uma venda leva as parcelas junto).
+      `CREATE TABLE IF NOT EXISTS change_log (
+        id BIGSERIAL PRIMARY KEY,
+        at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        tx_id BIGINT NOT NULL,
+        table_name TEXT NOT NULL,
+        row_id BIGINT,
+        op TEXT NOT NULL CHECK (op IN ('UPDATE', 'DELETE')),
+        before JSONB NOT NULL,
+        after JSONB,
+        user_id INT,
+        user_name TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS change_log_data_idx ON change_log (at DESC, id DESC)`,
+      `CREATE INDEX IF NOT EXISTS change_log_tx_idx ON change_log (tx_id)`,
+      // Quem fez vem de app.user_id e app.user_name, que o site define no comeco de cada operacao.
+      // Sem isso (uma importacao, por exemplo), a linha fica sem nome. Edicao que nao muda nada nao e registrada.
+      `CREATE OR REPLACE FUNCTION log_change() RETURNS trigger AS $$
+      DECLARE
+        u_id INT := NULLIF(current_setting('app.user_id', true), '')::int;
+        u_name TEXT := NULLIF(current_setting('app.user_name', true), '');
+      BEGIN
+        IF TG_OP = 'UPDATE' THEN
+          IF to_jsonb(OLD) = to_jsonb(NEW) THEN
+            RETURN NEW;
+          END IF;
+          INSERT INTO change_log (tx_id, table_name, row_id, op, before, after, user_id, user_name)
+          VALUES (txid_current(), TG_TABLE_NAME, (to_jsonb(OLD) ->> 'id')::bigint, 'UPDATE', to_jsonb(OLD), to_jsonb(NEW), u_id, u_name);
+          RETURN NEW;
+        END IF;
+        INSERT INTO change_log (tx_id, table_name, row_id, op, before, after, user_id, user_name)
+        VALUES (txid_current(), TG_TABLE_NAME, (to_jsonb(OLD) ->> 'id')::bigint, 'DELETE', to_jsonb(OLD), NULL, u_id, u_name);
+        RETURN OLD;
+      END
+      $$ LANGUAGE plpgsql`,
+      ...[
+        "sales",
+        "sale_payments",
+        "receipts",
+        "expenses",
+        "card_invoices",
+        "card_invoice_parts",
+        "fund_payments",
+        "liabilities",
+        "liability_payments",
+        "stock_purchases",
+      ].flatMap((tabela) => [
+        `DROP TRIGGER IF EXISTS ${tabela}_log ON ${tabela}`,
+        `CREATE TRIGGER ${tabela}_log AFTER UPDATE OR DELETE ON ${tabela} FOR EACH ROW EXECUTE FUNCTION log_change()`,
+      ]),
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
