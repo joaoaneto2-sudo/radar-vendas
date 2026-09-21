@@ -18,6 +18,7 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
     itens: [
       { href: "/nova-venda", rotulo: "Nova venda", icone: "venda" },
       { href: "/relatorio", rotulo: "Relatório", icone: "relatorio" },
+      { href: "/importar-vendas", rotulo: "Importar vendas", icone: "relatorio" },
     ],
   },
   {
@@ -47,6 +48,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/": ["Início", "Visão geral"],
   "/nova-venda": ["Vendas", "Nova venda"],
   "/relatorio": ["Vendas", "Relatório"],
+  "/importar-vendas": ["Vendas", "Importar vendas"],
   "/cadastros": ["Cadastros", "Produtos e cadastros"],
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
   "/financeiro": ["Financeiro", "Painel"],
@@ -66,6 +68,7 @@ const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
 ];
 
 const MAIS = [
+  { href: "/importar-vendas", rotulo: "Importar vendas" },
   { href: "/financeiro", rotulo: "Painel financeiro" },
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
   { href: "/financeiro/fundo", rotulo: "Fundo de reposição" },

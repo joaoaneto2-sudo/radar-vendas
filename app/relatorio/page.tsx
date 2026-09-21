@@ -486,6 +486,11 @@ export default function RelatorioPage() {
         <p className="eyebrow">Relatório</p>
         <h1>Vendas registradas</h1>
         <p>Acompanhe o que a equipe vendeu, filtrando por período, vendedora, tipo de saída, peça ou pagamento.</p>
+        <p>
+          <a className="btn btn-ghost btn-small" href="/importar-vendas">
+            Importar vendas da planilha
+          </a>
+        </p>
       </div>
 
       {state === "db_missing" && (
