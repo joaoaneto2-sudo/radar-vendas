@@ -140,7 +140,7 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
         await banco.pool.query(
           `UPDATE store_settings SET delivery_salvador = 15, shipping_correios = 25.5, installment_fee = 12.5, max_installments = 10`
         );
-        expect(await runMigrations(banco.pool)).toEqual(["011", "012"]);
+        expect(await runMigrations(banco.pool)).toEqual(["011", "012", "013"]);
 
         const { rows } = await banco.pool.query(`SELECT key, value FROM store_settings ORDER BY key`);
         expect(rows).toEqual([

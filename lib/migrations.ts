@@ -546,6 +546,24 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS site_slots_area_posicao_idx ON site_slots (area, position)`,
     ],
   },
+  {
+    id: "013",
+    name: "historico das mudancas nos parametros do acordo",
+    statements: [
+      // Cada mudanca nos parametros do acordo vira uma linha: quem mudou, quando e o que era antes e depois.
+      // "changes" guarda uma lista de { campo, antes, depois }. Desfazer marca reverted_at (nada e apagado).
+      `CREATE TABLE IF NOT EXISTS agreement_history (
+        id SERIAL PRIMARY KEY,
+        changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        changed_by_id INT,
+        changed_by_name TEXT,
+        changes JSONB NOT NULL,
+        reverted_at TIMESTAMPTZ,
+        reverted_by_name TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS agreement_history_data_idx ON agreement_history (changed_at DESC, id DESC)`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
