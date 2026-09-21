@@ -3150,3 +3150,107 @@ a.tab-btn {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Faixa do acordo entre os sócios (Visão geral, Painel financeiro e Parâmetros do acordo) */
+.acordo-faixa {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 5px solid var(--gold);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+}
+
+.acordo-faixa header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.acordo-faixa h2 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--accent-strong);
+}
+
+.acordo-faixa header a {
+  font-size: 0.8rem;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.acordo-lados {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.acordo-lado {
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.acordo-lado--joao {
+  background: var(--gold-soft);
+}
+
+.acordo-lado span {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.acordo-lado strong {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  color: var(--accent-strong);
+}
+
+.acordo-lado em {
+  font-style: normal;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.acordo-faixa .mini-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 10px;
+}
+
+.acordo-frases {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.acordo-frases li::before {
+  content: "•";
+  color: var(--gold);
+  margin-right: 8px;
+}
+
+.acordo-nota {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  margin-top: 8px;
+}
+
+@media (max-width: 720px) {
+  .acordo-faixa .mini-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

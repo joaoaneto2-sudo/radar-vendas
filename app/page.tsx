@@ -24,6 +24,8 @@ import {
 import { NAO_INFORMADA } from "@/lib/sale-finance";
 import { acumuladoDoMes, comparativoAteHoje, resumoMensal, ritmoDoMes, tendenciaDasVendas, type DadosDaMeta } from "@/lib/meta-mensal";
 import MetaDoMes from "./meta-do-mes";
+import FaixaDoAcordo from "./faixa-do-acordo";
+import { lerAcordo } from "@/lib/agreement-db";
 import { BarraDupla, BarrasHorizontais, BarrasVerticais, CORES, Progresso, Quadro, Rosca } from "./charts";
 
 export const dynamic = "force-dynamic";
@@ -155,6 +157,7 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
   const ticketDoMes = ticketMedio(vendasDoPeriodo(todas, periodRange("mes", hoje)));
   const ritmo = ritmoDoMes(dadosDaMeta, ticketDoMes);
   const dividaTotal = cascade.debt.totalCents;
+  const { valores: acordo } = await lerAcordo(db);
 
   return (
     <main className="shell shell--wide">
@@ -172,6 +175,10 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
           ))}
         </nav>
       </div>
+
+      <FaixaDoAcordo
+        dados={{ joaoSharePct: acordo.joaoSharePct, initialStockCents: acordo.initialStockCents, partnershipStart: acordo.partnershipStart, debt: cascade.debt }}
+      />
 
       <MetaDoMes
         ritmo={ritmo}
