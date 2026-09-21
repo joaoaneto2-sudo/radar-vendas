@@ -3,6 +3,8 @@ import { loadFinanceInputs, summarize } from "@/lib/finance/load";
 import { formatCentsBRL } from "@/lib/finance/money";
 import type { WholesaleStatus } from "@/lib/finance/wholesale";
 import { formatDateBR } from "@/lib/format";
+import { lerAcordo } from "@/lib/agreement-db";
+import FaixaDoAcordo from "../faixa-do-acordo";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +70,7 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
       : entradas.settings.mode;
   const resumo = summarize({ ...entradas, settings: { ...entradas.settings, mode: modo } });
   const { cascade, fund, liabilities, wholesale, invoices } = resumo;
+  const { valores: acordo } = await lerAcordo(db);
   const vendaPorId = new Map(entradas.sales.map((v) => [v.id, v]));
   const despesaPorId = new Map(entradas.expenses.map((d) => [d.id, d]));
   const porcentagemQuitada = (cascade.debt.paidFraction * 100).toFixed(1).replace(".", ",");
@@ -109,6 +112,10 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
           faturas do cartão. Cada número pode ser conferido na tabela do final.
         </p>
       </div>
+
+      <FaixaDoAcordo
+        dados={{ joaoSharePct: acordo.joaoSharePct, initialStockCents: acordo.initialStockCents, partnershipStart: acordo.partnershipStart, debt: cascade.debt }}
+      />
 
       <div className="tabs" aria-label="Como contar">
         <a className={"tab-btn" + (modo === "recebimento" ? " active" : "")} href="/financeiro?modo=recebimento">

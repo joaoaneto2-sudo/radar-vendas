@@ -15,12 +15,15 @@ import {
 import type { LinhaDoHistorico } from "@/lib/agreement-db";
 import { formatDateBR } from "@/lib/format";
 import { formatCentsBRL } from "@/lib/finance/money";
+import FaixaDoAcordo from "../../faixa-do-acordo";
+import type { EntradaDoResumo } from "@/lib/acordo-resumo";
 
 type Apurado = { cents: number; pieces: number; products: number; semData: number; semQuantidade: number; semCusto: number };
 type Dados = {
   valores: AcordoValores;
   cascadeMode: "recebimento" | "venda";
   dividaCents: number;
+  divida: EntradaDoResumo["debt"];
   apurado: Apurado;
   historico: LinhaDoHistorico[];
 };
@@ -156,6 +159,11 @@ export default function AcordoPage() {
           antigas. Toda mudança fica registrada no histórico e pode ser desfeita.
         </p>
       </div>
+
+      <FaixaDoAcordo
+        semLink
+        dados={{ joaoSharePct: valores.joaoSharePct, initialStockCents: valores.initialStockCents, partnershipStart: valores.partnershipStart, debt: dados.divida }}
+      />
 
       {aviso && (
         <div className="banner banner-info" role="status">

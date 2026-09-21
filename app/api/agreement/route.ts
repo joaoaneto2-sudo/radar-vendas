@@ -4,6 +4,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { dividaDoJoao, validarAcordo } from "@/lib/agreement";
 import { lerAcordo, listarHistorico, salvarAcordo } from "@/lib/agreement-db";
 import { productPurchaseTotals } from "@/lib/finance/purchases";
+import { getFinanceSummary } from "@/lib/finance/load";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,15 +17,17 @@ export async function GET() {
   try {
     await ensureSchema();
     const { valores, cascadeMode } = await lerAcordo(db);
-    const [produtos, historico] = await Promise.all([
+    const [produtos, historico, resumo] = await Promise.all([
       db.query(`SELECT to_char(purchase_date, 'YYYY-MM-DD') AS purchase_date, purchase_qty, cost, sale_channel FROM products`),
       listarHistorico(db),
+      getFinanceSummary(db),
     ]);
     const apurado = productPurchaseTotals(produtos.rows, valores.partnershipStart);
     return NextResponse.json({
       valores,
       cascadeMode,
       dividaCents: dividaDoJoao(valores.initialStockCents, valores.joaoSharePct),
+      divida: resumo.cascade.debt, // o que já foi pago e abatido de verdade
       apurado: {
         cents: apurado.initial.cents,
         pieces: apurado.initial.pieces,
