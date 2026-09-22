@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import FotosDaPeca from "./fotos-da-peca";
+import type { Troca } from "@/lib/product-photos";
 import {
   Product,
   Manufacturer,
@@ -42,7 +44,10 @@ type ProductForm = {
   price: string;
   stock_qty: string;
   warranty: string;
-  photo_url: string;
+  photo_url: string; // o destaque
+  extra_photos: string[]; // as fotos que acompanham, na ordem
+  photo_swaps: Troca[]; // fotos giradas ou trocadas (a vaga na vitrine acompanha)
+  fotosProntas: boolean; // as fotos extras já foram carregadas
   material: string;
   materialOther: boolean;
   karat: string;
@@ -74,6 +79,9 @@ const EMPTY: ProductForm = {
   stock_qty: "0",
   warranty: "",
   photo_url: "",
+  extra_photos: [],
+  photo_swaps: [],
+  fotosProntas: true,
   material: "",
   materialOther: false,
   karat: "",
@@ -93,6 +101,12 @@ const EMPTY: ProductForm = {
   public_description: "",
 };
 
+// O que vai para o servidor. Sem as fotos extras carregadas, a lista não é enviada e elas ficam como estão.
+function corpoDoProduto(form: ProductForm) {
+  const { fotosProntas, extra_photos, ...resto } = form;
+  return fotosProntas ? { ...resto, extra_photos } : resto;
+}
+
 function productToForm(p: Product): ProductForm {
   const category = p.category || PRODUCT_CATEGORY_NAMES[0];
   return {
@@ -107,6 +121,9 @@ function productToForm(p: Product): ProductForm {
     stock_qty: String(p.stock_qty ?? 0),
     warranty: p.warranty || "",
     photo_url: p.photo_url || "",
+    extra_photos: [],
+    photo_swaps: [],
+    fotosProntas: false,
     material: p.material || "",
     materialOther: !!(p.material && !MATERIAL_PRESETS.includes(p.material)),
     karat: p.karat || "",
@@ -151,7 +168,7 @@ export default function ProdutosTab() {
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [form, setForm] = useState<ProductForm>(EMPTY);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const fotosPedido = useRef(0);
   const [siteFilter, setSiteFilter] = useState<"todas" | "no_site" | "fora">("todas");
 
   function load() {
@@ -174,13 +191,24 @@ export default function ProdutosTab() {
   }, []);
 
   function openNew() {
+    fotosPedido.current += 1;
     setForm(EMPTY);
     setEditing("new");
   }
 
   function openEdit(p: Product) {
+    const pedido = ++fotosPedido.current;
     setForm(productToForm(p));
     setEditing(p);
+    // As fotos que acompanham o destaque vêm de outra tabela: carrega ao abrir. Só grava se chegaram (senão ficam como estão).
+    fetch(`/api/products/${p.id}/photos`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (fotosPedido.current !== pedido) return;
+        const urls: string[] = (d.items || []).map((f: { url: string }) => f.url);
+        setForm((f) => ({ ...f, extra_photos: urls, fotosProntas: true }));
+      })
+      .catch(() => undefined);
   }
 
   function set<K extends keyof ProductForm>(key: K, value: ProductForm[K]) {
@@ -227,25 +255,6 @@ export default function ProdutosTab() {
     }
   }
 
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (res.ok) {
-        const data = await res.json();
-        set("photo_url", data.url);
-      } else {
-        window.alert("Não foi possível enviar a foto. Verifique se o armazenamento (Vercel Blob) está configurado.");
-      }
-    } finally {
-      setUploading(false);
-    }
-  }
-
   async function createManufacturer(name: string): Promise<ComboboxOption> {
     const res = await fetch("/api/manufacturers", {
       method: "POST",
@@ -278,7 +287,7 @@ export default function ProdutosTab() {
       const res = await fetch(url, {
         method: isNew ? "POST" : "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(corpoDoProduto(form)),
       });
       const dados = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -553,20 +562,19 @@ export default function ProdutosTab() {
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="field field--full" style={{ marginBottom: 18 }}>
-                <label>Foto do produto</label>
-                <div className="photo-upload">
-                  {form.photo_url ? (
-                    <img src={form.photo_url} alt="" className="photo-preview" />
-                  ) : (
-                    <div className="photo-preview-empty">💎</div>
-                  )}
-                  <div>
-                    <input type="file" accept="image/*" onChange={handlePhotoChange} disabled={uploading} />
-                    {uploading && <div className="hint">Enviando...</div>}
-                  </div>
-                </div>
-              </div>
+              <FotosDaPeca
+                destaque={form.photo_url}
+                extras={form.extra_photos}
+                pronto={form.fotosProntas}
+                onChange={(m) =>
+                  setForm((f) => ({
+                    ...f,
+                    photo_url: m.destaque,
+                    extra_photos: m.extras,
+                    photo_swaps: [...f.photo_swaps, ...m.trocas],
+                  }))
+                }
+              />
 
               <div className="form-grid">
                 <div className="field field--full">
@@ -947,9 +955,6 @@ export default function ProdutosTab() {
                 onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
                 channel={form.sale_channel}
                 price={form.price}
-                productId={editing !== "new" && editing !== null ? editing.id : null}
-                mainPhoto={form.photo_url}
-                onMainPhotoChange={(url) => setForm((f) => ({ ...f, photo_url: url }))}
               />
 
               <div className="modal-actions">
