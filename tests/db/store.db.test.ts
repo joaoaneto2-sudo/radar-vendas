@@ -227,6 +227,14 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
       await pool.query(`INSERT INTO products (name, price, sale_channel) VALUES ('Peça da Bia', 100, 'atacado')`);
       await pool.query(`INSERT INTO product_photos (product_id, url, position) VALUES ($1, 'https://x/2.jpg', 2), ($1, 'https://x/1.jpg', 1)`, [rows[0].id]);
       await pool.query(`INSERT INTO store_settings (key, value) VALUES ('entrega_salvador', '15.00'), ('correios', '25.00') ON CONFLICT (key) DO NOTHING`);
+      // Chaves novas (origem, CEPs e caixinha): mesmo formato chave/valor, sem grant novo (pedido do João, 22/09/2026).
+      await pool.query(
+        `INSERT INTO store_settings (key, value) VALUES
+           ('origem_atual', 'recife'), ('cep_origem_salvador', '40015970'), ('cep_origem_recife', '50030230'),
+           ('entrega_recife', '20.00'), ('caixa_comprimento_cm', '20'), ('caixa_largura_cm', '15'),
+           ('caixa_altura_cm', '5'), ('caixa_peso_g', '150')
+         ON CONFLICT (key) DO NOTHING`
+      );
       await pool.query(`INSERT INTO sales (sale_date, sale_value, client_name) VALUES ('2026-09-01', 100, 'Cliente secreto')`);
       await pool.query(`INSERT INTO clients (full_name) VALUES ('Cliente secreto')`);
 
@@ -255,6 +263,17 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
       const config = await loja.query(SQL_CONFIG);
       const mapa = Object.fromEntries(config.rows.map((r) => [r.key, r.value]));
       expect(mapa).toMatchObject({ entrega_salvador: "15.00", correios: "25.00", acrescimo_parcela: "10.00", max_parcelas: "12" });
+      // Chaves novas: o mesmo grant de "key, value" já cobre linhas novas, sem precisar de nenhuma permissão a mais.
+      expect(mapa).toMatchObject({
+        origem_atual: "recife",
+        cep_origem_salvador: "40015970",
+        cep_origem_recife: "50030230",
+        entrega_recife: "20.00",
+        caixa_comprimento_cm: "20",
+        caixa_largura_cm: "15",
+        caixa_altura_cm: "5",
+        caixa_peso_g: "150",
+      });
     });
 
     it("roda as consultas da vitrine (só vagas de peças publicadas) e não lê o resto de site_slots", async () => {

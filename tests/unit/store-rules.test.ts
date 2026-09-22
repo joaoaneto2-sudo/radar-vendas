@@ -4,6 +4,7 @@ import {
   faltaParaPublicar,
   mensagemDeFalta,
   parseStoreSettings,
+  readIntOrNull,
   readMoneyOrNull,
   resolveStoreFields,
   rowsToSettings,
@@ -138,11 +139,21 @@ describe("descrição para o cliente", () => {
 
 describe("ajustes da loja", () => {
   const BOM = { delivery_salvador: "15", shipping_correios: "32,90", installment_fee: "10", max_installments: "12" };
+  const CAMPOS_NOVOS_EM_BRANCO = {
+    origem_atual: "salvador",
+    cep_origem_salvador: null,
+    cep_origem_recife: null,
+    entrega_recife: null,
+    caixa_comprimento_cm: null,
+    caixa_largura_cm: null,
+    caixa_altura_cm: null,
+    caixa_peso_g: null,
+  };
 
   it("valores completos", () => {
     expect(parseStoreSettings(BOM)).toEqual({
       ok: true,
-      value: { delivery_salvador: 15, shipping_correios: 32.9, installment_fee: 10, max_installments: 12 },
+      value: { delivery_salvador: 15, shipping_correios: 32.9, installment_fee: 10, max_installments: 12, ...CAMPOS_NOVOS_EM_BRANCO },
     });
   });
 
@@ -177,27 +188,149 @@ describe("ajustes da loja", () => {
     }
     expect(parseStoreSettings({ ...BOM, max_installments: 6 })).toMatchObject({ ok: true, value: { max_installments: 6 } });
   });
+
+  describe("origem das peças", () => {
+    it("Salvador ou Recife; sem nada, considera Salvador", () => {
+      expect(parseStoreSettings({ ...BOM, origem_atual: "recife" })).toMatchObject({ ok: true, value: { origem_atual: "recife" } });
+      expect(parseStoreSettings({ ...BOM, origem_atual: "salvador" })).toMatchObject({ ok: true, value: { origem_atual: "salvador" } });
+      expect(parseStoreSettings(BOM)).toMatchObject({ ok: true, value: { origem_atual: "salvador" } });
+      expect(parseStoreSettings({ ...BOM, origem_atual: "" })).toMatchObject({ ok: true, value: { origem_atual: "salvador" } });
+    });
+
+    it("aceita espaço em volta (tolerante), mas recusa maiúscula ou outro texto", () => {
+      expect(parseStoreSettings({ ...BOM, origem_atual: " recife " })).toMatchObject({ ok: true, value: { origem_atual: "recife" } });
+      expect(parseStoreSettings({ ...BOM, origem_atual: "Recife" })).toMatchObject({ ok: false, error: "invalid_origem_atual" });
+      expect(parseStoreSettings({ ...BOM, origem_atual: "sao_paulo" })).toMatchObject({ ok: false, error: "invalid_origem_atual" });
+    });
+  });
+
+  describe("CEP de origem", () => {
+    it("em branco fica sem valor; aceita com ou sem traço, sempre 8 números", () => {
+      expect(parseStoreSettings({ ...BOM, cep_origem_salvador: "" })).toMatchObject({ ok: true, value: { cep_origem_salvador: null } });
+      expect(parseStoreSettings({ ...BOM, cep_origem_salvador: "40015-970" })).toMatchObject({
+        ok: true,
+        value: { cep_origem_salvador: "40015970" },
+      });
+      expect(parseStoreSettings({ ...BOM, cep_origem_recife: "50030 230" })).toMatchObject({
+        ok: true,
+        value: { cep_origem_recife: "50030230" },
+      });
+    });
+
+    it("recusa com menos ou mais de 8 números", () => {
+      expect(parseStoreSettings({ ...BOM, cep_origem_salvador: "4001597" })).toMatchObject({ ok: false, error: "invalid_cep_origem_salvador" });
+      expect(parseStoreSettings({ ...BOM, cep_origem_salvador: "400159700" })).toMatchObject({ ok: false, error: "invalid_cep_origem_salvador" });
+      expect(parseStoreSettings({ ...BOM, cep_origem_recife: "abc" })).toMatchObject({ ok: false, error: "invalid_cep_origem_recife" });
+    });
+  });
+
+  describe("entrega em Recife", () => {
+    it("mesma regra da entrega em Salvador: em branco é 'a combinar', pode ser 0, recusa negativo", () => {
+      expect(parseStoreSettings({ ...BOM, entrega_recife: "" })).toMatchObject({ ok: true, value: { entrega_recife: null } });
+      expect(parseStoreSettings({ ...BOM, entrega_recife: "0" })).toMatchObject({ ok: true, value: { entrega_recife: 0 } });
+      expect(parseStoreSettings({ ...BOM, entrega_recife: "12,50" })).toMatchObject({ ok: true, value: { entrega_recife: 12.5 } });
+      expect(parseStoreSettings({ ...BOM, entrega_recife: "-1" })).toMatchObject({ ok: false, error: "invalid_entrega_recife" });
+    });
+  });
+
+  describe("caixinha padrão de envio", () => {
+    it("cada medida é independente; em branco fica sem valor", () => {
+      const r = parseStoreSettings({ ...BOM, caixa_comprimento_cm: "20", caixa_largura_cm: "", caixa_altura_cm: "3", caixa_peso_g: "50" });
+      expect(r).toMatchObject({
+        ok: true,
+        value: { caixa_comprimento_cm: 20, caixa_largura_cm: null, caixa_altura_cm: 3, caixa_peso_g: 50 },
+      });
+    });
+
+    it("recusa abaixo do mínimo dos Correios (16 x 11 x 2 cm)", () => {
+      expect(parseStoreSettings({ ...BOM, caixa_comprimento_cm: "15" })).toMatchObject({ ok: false, error: "invalid_caixa_comprimento_cm" });
+      expect(parseStoreSettings({ ...BOM, caixa_largura_cm: "10" })).toMatchObject({ ok: false, error: "invalid_caixa_largura_cm" });
+      expect(parseStoreSettings({ ...BOM, caixa_altura_cm: "1" })).toMatchObject({ ok: false, error: "invalid_caixa_altura_cm" });
+      expect(parseStoreSettings({ ...BOM, caixa_comprimento_cm: "16" })).toMatchObject({ ok: true, value: { caixa_comprimento_cm: 16 } });
+      expect(parseStoreSettings({ ...BOM, caixa_largura_cm: "11" })).toMatchObject({ ok: true, value: { caixa_largura_cm: 11 } });
+      expect(parseStoreSettings({ ...BOM, caixa_altura_cm: "2" })).toMatchObject({ ok: true, value: { caixa_altura_cm: 2 } });
+    });
+
+    it("recusa medida que não é número inteiro", () => {
+      expect(parseStoreSettings({ ...BOM, caixa_comprimento_cm: "20,5" })).toMatchObject({ ok: false, error: "invalid_caixa_comprimento_cm" });
+      expect(parseStoreSettings({ ...BOM, caixa_comprimento_cm: "abc" })).toMatchObject({ ok: false, error: "invalid_caixa_comprimento_cm" });
+    });
+
+    it("peso: maior que zero; em branco fica sem valor", () => {
+      expect(parseStoreSettings({ ...BOM, caixa_peso_g: "" })).toMatchObject({ ok: true, value: { caixa_peso_g: null } });
+      expect(parseStoreSettings({ ...BOM, caixa_peso_g: "1" })).toMatchObject({ ok: true, value: { caixa_peso_g: 1 } });
+      expect(parseStoreSettings({ ...BOM, caixa_peso_g: "0" })).toMatchObject({ ok: false, error: "invalid_caixa_peso_g" });
+      expect(parseStoreSettings({ ...BOM, caixa_peso_g: "-5" })).toMatchObject({ ok: false, error: "invalid_caixa_peso_g" });
+      expect(parseStoreSettings({ ...BOM, caixa_peso_g: "80,5" })).toMatchObject({ ok: false, error: "invalid_caixa_peso_g" });
+    });
+  });
 });
 
 describe("ajustes da loja: ida e volta para chave e valor", () => {
+  const CAMPOS_NOVOS_EM_BRANCO = {
+    origem_atual: "salvador" as const,
+    cep_origem_salvador: null,
+    cep_origem_recife: null,
+    entrega_recife: null,
+    caixa_comprimento_cm: null,
+    caixa_largura_cm: null,
+    caixa_altura_cm: null,
+    caixa_peso_g: null,
+  };
+
   it("vira texto no formato da loja: dinheiro com 2 casas e parcelas inteiras", () => {
     expect(
-      settingsToRows({ delivery_salvador: 15, shipping_correios: 25.5, installment_fee: 10, max_installments: 12 })
+      settingsToRows({
+        delivery_salvador: 15,
+        shipping_correios: 25.5,
+        installment_fee: 10,
+        max_installments: 12,
+        origem_atual: "recife",
+        cep_origem_salvador: "40015970",
+        cep_origem_recife: "50030230",
+        entrega_recife: 12,
+        caixa_comprimento_cm: 20,
+        caixa_largura_cm: 15,
+        caixa_altura_cm: 5,
+        caixa_peso_g: 150,
+      })
     ).toEqual([
       { key: "entrega_salvador", value: "15.00" },
       { key: "correios", value: "25.50" },
       { key: "acrescimo_parcela", value: "10.00" },
       { key: "max_parcelas", value: "12" },
+      { key: "origem_atual", value: "recife" },
+      { key: "cep_origem_salvador", value: "40015970" },
+      { key: "cep_origem_recife", value: "50030230" },
+      { key: "entrega_recife", value: "12.00" },
+      { key: "caixa_comprimento_cm", value: "20" },
+      { key: "caixa_largura_cm", value: "15" },
+      { key: "caixa_altura_cm", value: "5" },
+      { key: "caixa_peso_g", value: "150" },
     ]);
   });
 
-  it("valor em branco vira nulo (a chave será apagada), zero continua zero", () => {
-    const linhas = settingsToRows({ delivery_salvador: null, shipping_correios: 0, installment_fee: null, max_installments: null });
+  it("valor em branco vira nulo (a chave será apagada), zero continua zero; origem sempre grava um texto", () => {
+    const linhas = settingsToRows({
+      delivery_salvador: null,
+      shipping_correios: 0,
+      installment_fee: null,
+      max_installments: null,
+      ...CAMPOS_NOVOS_EM_BRANCO,
+    });
     expect(linhas).toEqual([
       { key: "entrega_salvador", value: null },
       { key: "correios", value: "0.00" },
       { key: "acrescimo_parcela", value: null },
       { key: "max_parcelas", value: null },
+      { key: "origem_atual", value: "salvador" },
+      { key: "cep_origem_salvador", value: null },
+      { key: "cep_origem_recife", value: null },
+      { key: "entrega_recife", value: null },
+      { key: "caixa_comprimento_cm", value: null },
+      { key: "caixa_largura_cm", value: null },
+      { key: "caixa_altura_cm", value: null },
+      { key: "caixa_peso_g", value: null },
     ]);
   });
 
@@ -209,10 +342,54 @@ describe("ajustes da loja: ida e volta para chave e valor", () => {
         { key: "acrescimo_parcela", value: "abc" },
         { key: "max_parcelas", value: "12" },
       ])
-    ).toEqual({ delivery_salvador: 15, shipping_correios: null, installment_fee: null, max_installments: 12 });
-    expect(rowsToSettings([])).toEqual({ delivery_salvador: null, shipping_correios: null, installment_fee: null, max_installments: null });
+    ).toEqual({ delivery_salvador: 15, shipping_correios: null, installment_fee: null, max_installments: 12, ...CAMPOS_NOVOS_EM_BRANCO });
+    expect(rowsToSettings([])).toEqual({
+      delivery_salvador: null,
+      shipping_correios: null,
+      installment_fee: null,
+      max_installments: null,
+      ...CAMPOS_NOVOS_EM_BRANCO,
+    });
     expect(rowsToSettings([{ key: "max_parcelas", value: "99" }]).max_installments).toBeNull();
     expect(rowsToSettings([{ key: "max_parcelas", value: "2.5" }]).max_installments).toBeNull();
+  });
+
+  it("origem: lê salvador, recife, e qualquer outra coisa (ou ausente) vira salvador", () => {
+    expect(rowsToSettings([{ key: "origem_atual", value: "recife" }]).origem_atual).toBe("recife");
+    expect(rowsToSettings([{ key: "origem_atual", value: "salvador" }]).origem_atual).toBe("salvador");
+    expect(rowsToSettings([{ key: "origem_atual", value: "sao_paulo" }]).origem_atual).toBe("salvador");
+    expect(rowsToSettings([]).origem_atual).toBe("salvador");
+  });
+
+  it("CEP: só volta se tiver exatamente 8 números; senão vira vazio", () => {
+    expect(rowsToSettings([{ key: "cep_origem_salvador", value: "40015970" }]).cep_origem_salvador).toBe("40015970");
+    expect(rowsToSettings([{ key: "cep_origem_salvador", value: "4001597" }]).cep_origem_salvador).toBeNull();
+    expect(rowsToSettings([{ key: "cep_origem_salvador", value: "4001-5970" }]).cep_origem_salvador).toBeNull();
+  });
+
+  it("caixinha: só volta número inteiro de 1 ou mais; senão vira vazio", () => {
+    expect(rowsToSettings([{ key: "caixa_comprimento_cm", value: "20" }]).caixa_comprimento_cm).toBe(20);
+    expect(rowsToSettings([{ key: "caixa_peso_g", value: "0" }]).caixa_peso_g).toBeNull();
+    expect(rowsToSettings([{ key: "caixa_peso_g", value: "12,5" }]).caixa_peso_g).toBeNull();
+  });
+});
+
+describe("números inteiros digitados (readIntOrNull)", () => {
+  it("vazio, espaço e nulo viram null; aceita inteiro positivo e negativo", () => {
+    expect(readIntOrNull("")).toBeNull();
+    expect(readIntOrNull("  ")).toBeNull();
+    expect(readIntOrNull(null)).toBeNull();
+    expect(readIntOrNull(undefined)).toBeNull();
+    expect(readIntOrNull("20")).toBe(20);
+    expect(readIntOrNull("-3")).toBe(-3);
+    expect(readIntOrNull(20)).toBe(20);
+  });
+
+  it("recusa decimal e texto", () => {
+    expect(readIntOrNull("20,5")).toBe("invalido");
+    expect(readIntOrNull("20.5")).toBe("invalido");
+    expect(readIntOrNull("abc")).toBe("invalido");
+    expect(readIntOrNull(20.5)).toBe("invalido");
   });
 });
 

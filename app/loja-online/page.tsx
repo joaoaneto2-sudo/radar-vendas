@@ -1,13 +1,47 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CAIXA_MINIMO_CM } from "@/lib/store-rules";
 
-type Form = { delivery_salvador: string; shipping_correios: string; installment_fee: string; max_installments: string };
+type Form = {
+  delivery_salvador: string;
+  shipping_correios: string;
+  installment_fee: string;
+  max_installments: string;
+  origem_atual: "salvador" | "recife";
+  cep_origem_salvador: string;
+  cep_origem_recife: string;
+  entrega_recife: string;
+  caixa_comprimento_cm: string;
+  caixa_largura_cm: string;
+  caixa_altura_cm: string;
+  caixa_peso_g: string;
+};
+
+const VAZIO: Form = {
+  delivery_salvador: "",
+  shipping_correios: "",
+  installment_fee: "",
+  max_installments: "",
+  origem_atual: "salvador",
+  cep_origem_salvador: "",
+  cep_origem_recife: "",
+  entrega_recife: "",
+  caixa_comprimento_cm: "",
+  caixa_largura_cm: "",
+  caixa_altura_cm: "",
+  caixa_peso_g: "",
+};
 
 const texto = (v: unknown) => (v === null || v === undefined ? "" : String(Number(v)));
+// CEP mostrado na tela como 00000-000, mas o que vale para salvar é só os dígitos.
+const cepParaTela = (v: unknown) => {
+  const digitos = typeof v === "string" ? v.replace(/\D/g, "") : "";
+  return digitos.length === 8 ? `${digitos.slice(0, 5)}-${digitos.slice(5)}` : digitos;
+};
 
 export default function LojaOnlinePage() {
-  const [form, setForm] = useState<Form>({ delivery_salvador: "", shipping_correios: "", installment_fee: "", max_installments: "" });
+  const [form, setForm] = useState<Form>(VAZIO);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
@@ -24,15 +58,30 @@ export default function LojaOnlinePage() {
             shipping_correios: texto(i.shipping_correios),
             installment_fee: texto(i.installment_fee),
             max_installments: texto(i.max_installments),
+            origem_atual: i.origem_atual === "recife" ? "recife" : "salvador",
+            cep_origem_salvador: cepParaTela(i.cep_origem_salvador),
+            cep_origem_recife: cepParaTela(i.cep_origem_recife),
+            entrega_recife: texto(i.entrega_recife),
+            caixa_comprimento_cm: texto(i.caixa_comprimento_cm),
+            caixa_largura_cm: texto(i.caixa_largura_cm),
+            caixa_altura_cm: texto(i.caixa_altura_cm),
+            caixa_peso_g: texto(i.caixa_peso_g),
           });
         }
       })
       .finally(() => setCarregando(false));
   }, []);
 
-  function set<K extends keyof Form>(chave: K, valor: string) {
+  function set<K extends keyof Form>(chave: K, valor: Form[K]) {
     setOk(false);
     setForm((f) => ({ ...f, [chave]: valor }));
+  }
+
+  // Formata como 00000-000 enquanto digita; só os números contam para salvar.
+  function setCep(chave: "cep_origem_salvador" | "cep_origem_recife", digitado: string) {
+    const digitos = digitado.replace(/\D/g, "").slice(0, 8);
+    const formatado = digitos.length > 5 ? `${digitos.slice(0, 5)}-${digitos.slice(5)}` : digitos;
+    set(chave, formatado);
   }
 
   async function salvar(e: React.FormEvent) {
@@ -59,7 +108,7 @@ export default function LojaOnlinePage() {
     <main className="shell">
       <div className="page-head">
         <p className="eyebrow">Loja online</p>
-        <h1>Entrega e parcelamento</h1>
+        <h1>Loja online</h1>
         <p>Estes valores são lidos pela loja online sozinha. Mudou aqui, muda lá.</p>
       </div>
 
@@ -70,11 +119,66 @@ export default function LojaOnlinePage() {
           <div className="section">
             <h2 className="section-title">
               <span className="dot" />
+              Origem das peças
+            </h2>
+            <div className="field field--full">
+              <label>As peças estão saindo de</label>
+              <div className="radio-row">
+                <button
+                  type="button"
+                  className={"radio-chip" + (form.origem_atual === "salvador" ? " selected" : "")}
+                  onClick={() => set("origem_atual", "salvador")}
+                >
+                  Salvador
+                </button>
+                <button
+                  type="button"
+                  className={"radio-chip" + (form.origem_atual === "recife" ? " selected" : "")}
+                  onClick={() => set("origem_atual", "recife")}
+                >
+                  Recife
+                </button>
+              </div>
+              <span className="hint">A loja usa esta origem para calcular o PAC e o SEDEX pelo Melhor Envio.</span>
+            </div>
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="cep_origem_salvador">CEP de origem em Salvador</label>
+                <input
+                  id="cep_origem_salvador"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00000-000"
+                  maxLength={9}
+                  value={form.cep_origem_salvador}
+                  onChange={(e) => setCep("cep_origem_salvador", e.target.value)}
+                />
+                <span className="hint">Os 8 números do CEP de onde as peças saem quando estão em Salvador.</span>
+              </div>
+              <div className="field">
+                <label htmlFor="cep_origem_recife">CEP de origem em Recife</label>
+                <input
+                  id="cep_origem_recife"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="00000-000"
+                  maxLength={9}
+                  value={form.cep_origem_recife}
+                  onChange={(e) => setCep("cep_origem_recife", e.target.value)}
+                />
+                <span className="hint">Os 8 números do CEP de onde as peças saem quando estão no Recife.</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="section">
+            <h2 className="section-title">
+              <span className="dot" />
               Entrega
             </h2>
             <div className="form-grid">
               <div className="field">
-                <label htmlFor="delivery_salvador">Entrega em Salvador</label>
+                <label htmlFor="delivery_salvador">Entrega local em Salvador</label>
                 <div className="money-input">
                   <span className="prefix">R$</span>
                   <input
@@ -84,6 +188,21 @@ export default function LojaOnlinePage() {
                     placeholder="Ainda não definido"
                     value={form.delivery_salvador}
                     onChange={(e) => set("delivery_salvador", e.target.value)}
+                  />
+                </div>
+                <span className="hint">Feita pela Fernanda ou por motoboy. Em branco = a loja mostra "a combinar". 0 = entrega grátis.</span>
+              </div>
+              <div className="field">
+                <label htmlFor="entrega_recife">Entrega local em Recife</label>
+                <div className="money-input">
+                  <span className="prefix">R$</span>
+                  <input
+                    id="entrega_recife"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="Ainda não definido"
+                    value={form.entrega_recife}
+                    onChange={(e) => set("entrega_recife", e.target.value)}
                   />
                 </div>
                 <span className="hint">Feita pela Fernanda ou por motoboy. Em branco = a loja mostra "a combinar". 0 = entrega grátis.</span>
@@ -101,9 +220,71 @@ export default function LojaOnlinePage() {
                     onChange={(e) => set("shipping_correios", e.target.value)}
                   />
                 </div>
-                <span className="hint">Em branco = a loja mostra "a combinar".</span>
+                <span className="hint">Valor fixo de referência. O PAC e o SEDEX de verdade são calculados pelo Melhor Envio.</span>
               </div>
             </div>
+          </div>
+
+          <div className="section">
+            <h2 className="section-title">
+              <span className="dot" style={{ background: "var(--gold)" }} />
+              Caixa padrão de envio
+            </h2>
+            <p className="hint" style={{ marginBottom: 10 }}>
+              Medidas da caixinha usada para enviar uma peça, para o Melhor Envio calcular o frete. Mínimo aceito pelos Correios:{" "}
+              {CAIXA_MINIMO_CM.comprimento} x {CAIXA_MINIMO_CM.largura} x {CAIXA_MINIMO_CM.altura} cm.
+            </p>
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="caixa_comprimento_cm">Comprimento (cm)</label>
+                <input
+                  id="caixa_comprimento_cm"
+                  type="number"
+                  min={CAIXA_MINIMO_CM.comprimento}
+                  inputMode="numeric"
+                  placeholder={`Mínimo: ${CAIXA_MINIMO_CM.comprimento}`}
+                  value={form.caixa_comprimento_cm}
+                  onChange={(e) => set("caixa_comprimento_cm", e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="caixa_largura_cm">Largura (cm)</label>
+                <input
+                  id="caixa_largura_cm"
+                  type="number"
+                  min={CAIXA_MINIMO_CM.largura}
+                  inputMode="numeric"
+                  placeholder={`Mínimo: ${CAIXA_MINIMO_CM.largura}`}
+                  value={form.caixa_largura_cm}
+                  onChange={(e) => set("caixa_largura_cm", e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="caixa_altura_cm">Altura (cm)</label>
+                <input
+                  id="caixa_altura_cm"
+                  type="number"
+                  min={CAIXA_MINIMO_CM.altura}
+                  inputMode="numeric"
+                  placeholder={`Mínimo: ${CAIXA_MINIMO_CM.altura}`}
+                  value={form.caixa_altura_cm}
+                  onChange={(e) => set("caixa_altura_cm", e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="caixa_peso_g">Peso (g)</label>
+                <input
+                  id="caixa_peso_g"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  placeholder="Ex: 100"
+                  value={form.caixa_peso_g}
+                  onChange={(e) => set("caixa_peso_g", e.target.value)}
+                />
+              </div>
+            </div>
+            <span className="hint">Cada medida é opcional; pode preencher aos poucos. Em branco = a loja usa o padrão dela.</span>
           </div>
 
           <div className="section">

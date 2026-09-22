@@ -47,8 +47,21 @@ A coluna `created_at` existe, mas NÃO é liberada para a loja.
 | correios | decimal com ponto | `25.00` | envio "a combinar" |
 | acrescimo_parcela | decimal com ponto | `10.00` | R$ 10,00 por parcela |
 | max_parcelas | inteiro de 1 a 24 | `12` | 12x |
+| origem_atual | `'salvador'` ou `'recife'` | `recife` | considerar `'salvador'` |
+| cep_origem_salvador | 8 números, sem traço | `40015970` | CEP de Salvador não definido |
+| cep_origem_recife | 8 números, sem traço | `50030230` | CEP de Recife não definido |
+| entrega_recife | decimal com ponto | `20.00` | entrega "a combinar" |
+| caixa_comprimento_cm | inteiro, mínimo 16 | `20` | medida não definida |
+| caixa_largura_cm | inteiro, mínimo 11 | `15` | medida não definida |
+| caixa_altura_cm | inteiro, mínimo 2 | `5` | medida não definida |
+| caixa_peso_g | inteiro, maior que 0 | `150` | peso não definido |
 
-`0.00` é entrega grátis (valor de propósito). Campo em branco no Radar APAGA a chave.
+`0.00` é entrega grátis (valor de propósito). Campo em branco no Radar APAGA a chave (exceto
+`origem_atual`, que nunca fica em branco: o Radar sempre grava `salvador` ou `recife`).
+
+As peças viajam juntas, de Salvador ou do Recife (a Fernanda leva o estoque quando viaja). `origem_atual`,
+os dois CEPs e a caixinha padrão servem para a loja calcular PAC e SEDEX pelo Melhor Envio a partir de onde
+as peças estão saindo agora. Pedido do João, 22/09/2026.
 
 ## site_slots (vitrine do site: as fotos que o João escolhe no Radar)
 
