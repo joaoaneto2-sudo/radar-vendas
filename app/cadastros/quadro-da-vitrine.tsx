@@ -82,6 +82,9 @@ export default function QuadroDaVitrine({
         <Coluna titulo="No carrossel" nota="aparecem no topo do site" vazio="Nenhuma peça no carrossel." total={q.carrossel.length}>
           {q.carrossel.map((p) => (
             <Cartao key={p.id} p={p}>
+              <button type="button" className="icon-btn" onClick={() => aoEditar(p)}>
+                Editar
+              </button>
               <button type="button" className="icon-btn" onClick={() => aoAlternar(p, "featured")}>
                 Tirar do carrossel
               </button>
@@ -95,6 +98,9 @@ export default function QuadroDaVitrine({
         <Coluna titulo="No site" nota="publicadas, fora do carrossel" vazio="Nenhuma peça só no site." total={q.noSite.length}>
           {q.noSite.map((p) => (
             <Cartao key={p.id} p={p}>
+              <button type="button" className="icon-btn" onClick={() => aoEditar(p)}>
+                Editar
+              </button>
               <button type="button" className="icon-btn" onClick={() => aoAlternar(p, "featured")}>
                 Colocar no carrossel
               </button>
@@ -108,6 +114,9 @@ export default function QuadroDaVitrine({
         <Coluna titulo="Podem entrar" nota="completas e com estoque" vazio="Nenhuma peça pronta esperando." total={q.podemEntrar.length}>
           {q.podemEntrar.map((p) => (
             <Cartao key={p.id} p={p}>
+              <button type="button" className="icon-btn" onClick={() => aoEditar(p)}>
+                Editar
+              </button>
               <button type="button" className="btn btn-primary btn-small" onClick={() => aoAlternar(p, "show_online")}>
                 Colocar no site
               </button>
