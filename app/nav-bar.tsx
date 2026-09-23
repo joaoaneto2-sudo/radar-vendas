@@ -10,10 +10,6 @@ type Icone = "inicio" | "venda" | "relatorio" | "cadastros" | "financeiro" | "re
 // Menu lateral (computador): páginas agrupadas por assunto.
 const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Icone }[] }[] = [
   {
-    titulo: "Início",
-    itens: [{ href: "/", rotulo: "Visão geral", icone: "inicio" }],
-  },
-  {
     titulo: "Vendas",
     itens: [
       { href: "/nova-venda", rotulo: "Nova venda", icone: "venda" },
@@ -43,11 +39,15 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
       { href: "/loja-online/vitrine", rotulo: "Vitrine do site", icone: "loja" },
     ],
   },
+  {
+    titulo: "Início",
+    itens: [{ href: "/visao-geral", rotulo: "Visão geral", icone: "inicio" }],
+  },
 ];
 
 // Caminho mostrado no alto da página: grupo e página.
 const CAMINHOS: Record<string, [string, string]> = {
-  "/": ["Início", "Visão geral"],
+  "/visao-geral": ["Início", "Visão geral"],
   "/nova-venda": ["Vendas", "Nova venda"],
   "/relatorio": ["Vendas", "Relatório"],
   "/importar-vendas": ["Vendas", "Importar vendas"],
@@ -64,8 +64,8 @@ const CAMINHOS: Record<string, [string, string]> = {
 };
 
 // Barra de baixo do celular: as principais e o menu "Mais".
+// Visão geral não fica na barra visível: ela fica dentro de "Mais" (pedido do João, 23/09/2026).
 const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
-  { href: "/", rotulo: "Início", icone: "inicio" },
   { href: "/nova-venda", rotulo: "Venda", icone: "venda" },
   { href: "/relatorio", rotulo: "Relatório", icone: "relatorio" },
   { href: "/cadastros", rotulo: "Cadastros", icone: "cadastros" },
@@ -81,6 +81,7 @@ const MAIS = [
   { href: "/financeiro/historico", rotulo: "Histórico de alterações" },
   { href: "/loja-online", rotulo: "Loja online" },
   { href: "/loja-online/vitrine", rotulo: "Vitrine do site" },
+  { href: "/visao-geral", rotulo: "Visão geral" },
 ];
 
 function Desenho({ nome }: { nome: Icone }) {
