@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from "pg";
 
 // Catálogo online (migração 017): as consultas ao banco para marcar/desmarcar uma peça no
 // catálogo, mudar a disponibilidade, gravar o código do fabricante e o tipo de cada foto.
-// Sem rotas de API ainda (fase seguinte); aqui só o acesso ao banco.
+// Usado pela rota POST /api/products (Fase 3: tela de importação de peças).
 
 type Consulta = Pick<Pool | PoolClient, "query">;
 
@@ -55,6 +55,18 @@ export async function gravarCodigoFabricante(db: Consulta, productId: number, ma
 export async function gravarTipoDaFoto(db: Consulta, photoId: number, kind: TipoDaFoto | null): Promise<boolean> {
   const { rowCount } = await db.query(`UPDATE product_photos SET kind = $1 WHERE id = $2`, [kind, photoId]);
   return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Próxima posição livre no catálogo dentro da categoria: a maior `catalog_position` já usada
+ * naquela categoria mais 1, ou 1 se for a primeira peça da categoria no catálogo.
+ */
+export async function proximaPosicaoDoCatalogo(db: Consulta, category: string): Promise<number> {
+  const { rows } = await db.query(
+    `SELECT COALESCE(MAX(catalog_position), 0) + 1 AS pos FROM products WHERE category = $1 AND show_catalog = true`,
+    [category]
+  );
+  return Number(rows[0]?.pos ?? 1);
 }
 
 async function pecaExiste(db: Consulta, productId: number): Promise<boolean> {

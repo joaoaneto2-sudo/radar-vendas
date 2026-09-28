@@ -5,6 +5,7 @@ import {
   gravarTipoDaFoto,
   mudarDisponibilidade,
   mudarNoCatalogo,
+  proximaPosicaoDoCatalogo,
 } from "../../lib/catalog-db";
 import { runMigrations } from "../../lib/migrations";
 import { bancoDeTesteDisponivel, criarBancoDescartavel } from "./helpers";
@@ -136,6 +137,29 @@ describe.skipIf(!disponivel)("lib/catalog-db", () => {
 
     it("foto que não existe: devolve false", async () => {
       expect(await gravarTipoDaFoto(pool, 999999, "limpa")).toBe(false);
+    });
+  });
+
+  describe("proximaPosicaoDoCatalogo", () => {
+    it("primeira peça da categoria no catálogo: posição 1", async () => {
+      expect(await proximaPosicaoDoCatalogo(pool, "Anéis")).toBe(1);
+    });
+
+    it("acrescenta depois da maior posição já usada na categoria", async () => {
+      await mudarNoCatalogo(pool, peca, { showCatalog: true, catalogPosition: 3 });
+      await pool.query(`UPDATE products SET category = 'Anéis' WHERE id = $1`, [peca]);
+      expect(await proximaPosicaoDoCatalogo(pool, "Anéis")).toBe(4);
+    });
+
+    it("categorias diferentes têm contagens independentes", async () => {
+      await mudarNoCatalogo(pool, peca, { showCatalog: true, catalogPosition: 5 });
+      await pool.query(`UPDATE products SET category = 'Anéis' WHERE id = $1`, [peca]);
+      expect(await proximaPosicaoDoCatalogo(pool, "Brincos")).toBe(1);
+    });
+
+    it("peça fora do catálogo (show_catalog = false) não conta na posição", async () => {
+      await pool.query(`UPDATE products SET category = 'Anéis', catalog_position = 9, show_catalog = false WHERE id = $1`, [peca]);
+      expect(await proximaPosicaoDoCatalogo(pool, "Anéis")).toBe(1);
     });
   });
 });
