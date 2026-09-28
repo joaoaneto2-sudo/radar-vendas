@@ -321,4 +321,106 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     const { rows } = await pool.query("SELECT count(*)::int AS n FROM sale_payments");
     expect(rows[0].n).toBe(0);
   });
+
+  describe("catálogo online (migração 017)", () => {
+    it("peça nova já nasce com os padrões do catálogo: pronta entrega, fora do catálogo", async () => {
+      const pool = await bancoPronto();
+      await pool.query(`INSERT INTO products (name, price) VALUES ('Peça nova', 100)`);
+      const { rows } = await pool.query(
+        `SELECT availability, manufacturer_code, show_catalog, catalog_position FROM products WHERE name = 'Peça nova'`
+      );
+      expect(rows[0]).toEqual({
+        availability: "pronta_entrega",
+        manufacturer_code: null,
+        show_catalog: false,
+        catalog_position: null,
+      });
+    });
+
+    it("disponibilidade só aceita pronta_entrega ou encomenda", async () => {
+      const pool = await bancoPronto();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, availability) VALUES ('Ruim', 100, 'outra')`)
+      ).rejects.toThrow();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, availability) VALUES ('Encomenda', 100, 'encomenda')`)
+      ).resolves.toBeDefined();
+    });
+
+    it("código do fabricante: único por fabricante, mas pode repetir entre fabricantes diferentes", async () => {
+      const pool = await bancoPronto();
+      const { rows: fabs } = await pool.query(
+        `INSERT INTO manufacturers (name) VALUES ('Fabricante A'), ('Fabricante B') RETURNING id`
+      );
+      const [a, b] = fabs.map((f) => f.id);
+      await pool.query(
+        `INSERT INTO products (name, price, manufacturer_id, manufacturer_code) VALUES ('Peça A1', 100, $1, '023612809015')`,
+        [a]
+      );
+      // Mesmo código, mesmo fabricante: recusado.
+      await expect(
+        pool.query(
+          `INSERT INTO products (name, price, manufacturer_id, manufacturer_code) VALUES ('Peça A1 repetida', 100, $1, '023612809015')`,
+          [a]
+        )
+      ).rejects.toThrow();
+      // Mesmo código, fabricante diferente: permitido (o código é do catálogo de cada fabricante).
+      await expect(
+        pool.query(
+          `INSERT INTO products (name, price, manufacturer_id, manufacturer_code) VALUES ('Peça B1', 100, $1, '023612809015')`,
+          [b]
+        )
+      ).resolves.toBeDefined();
+      // Sem código: várias peças sem problema.
+      await expect(
+        pool.query(`INSERT INTO products (name, price, manufacturer_id) VALUES ('Sem código 1', 100, $1)`, [a])
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, manufacturer_id) VALUES ('Sem código 2', 100, $1)`, [a])
+      ).resolves.toBeDefined();
+    });
+
+    it("peça de atacado nunca entra no catálogo (trava do banco, como já existe para show_online)", async () => {
+      const pool = await bancoPronto();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, sale_channel, show_catalog) VALUES ('Da Bia', 100, 'atacado', true)`)
+      ).rejects.toThrow();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, sale_channel, show_catalog) VALUES ('Da Bia sem catálogo', 100, 'atacado', false)`)
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, show_catalog) VALUES ('Varejo no catálogo', 100, true)`)
+      ).resolves.toBeDefined();
+    });
+
+    it("foto da peça: tipo só limpa ou modelo, e pode ficar sem tipo", async () => {
+      const pool = await bancoPronto();
+      const { rows } = await pool.query(`INSERT INTO products (name, price) VALUES ('Com fotos', 100) RETURNING id`);
+      const id = rows[0].id;
+      await expect(
+        pool.query(`INSERT INTO product_photos (product_id, url, kind) VALUES ($1, 'https://x/1.jpg', 'ruim')`, [id])
+      ).rejects.toThrow();
+      await expect(
+        pool.query(`INSERT INTO product_photos (product_id, url, kind) VALUES ($1, 'https://x/1.jpg', 'limpa')`, [id])
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(`INSERT INTO product_photos (product_id, url, kind) VALUES ($1, 'https://x/2.jpg', 'modelo')`, [id])
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(`INSERT INTO product_photos (product_id, url) VALUES ($1, 'https://x/3.jpg')`, [id])
+      ).resolves.toBeDefined();
+    });
+
+    it("mudar uma peça deixa rastro no histórico de alterações (products ganha o trigger de log)", async () => {
+      const pool = await bancoPronto();
+      const { rows } = await pool.query(`INSERT INTO products (name, price) VALUES ('Rastreada', 100) RETURNING id`);
+      const id = rows[0].id;
+      await pool.query(`UPDATE products SET show_catalog = true WHERE id = $1`, [id]);
+      const { rows: log } = await pool.query(
+        `SELECT table_name, op FROM change_log WHERE table_name = 'products' AND row_id = $1`,
+        [id]
+      );
+      expect(log).toEqual([{ table_name: "products", op: "UPDATE" }]);
+    });
+  });
 });

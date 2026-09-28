@@ -634,6 +634,52 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "017",
+    name: "catalogo online: disponibilidade, codigo do fabricante e vaga no catalogo da peca",
+    statements: [
+      // Disponibilidade: se a peca existe na mao da Fernanda ('pronta_entrega') ou so existe no
+      // catalogo do fabricante ('encomenda'). Uso interno: a loja nunca le esta coluna.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'pronta_entrega'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_availability_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_availability_check
+             CHECK (availability IN ('pronta_entrega', 'encomenda'));
+         END IF;
+       END $$`,
+      // Codigo do fabricante (por exemplo 023612809015). Uso interno: a loja nunca le esta coluna.
+      // Unico por fabricante, nao unico sozinho: o mesmo codigo pode existir no catalogo de dois
+      // fabricantes diferentes (cada um numera do seu jeito), entao o indice e composto com
+      // manufacturer_id. Peca sem codigo (NULL) nunca entra na comparacao.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_code TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS products_manufacturer_code_idx
+         ON products (manufacturer_id, manufacturer_code) WHERE manufacturer_code IS NOT NULL`,
+      // A peca aparece no catalogo online. Independe de show_online (a loja com carrinho).
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS show_catalog BOOLEAN NOT NULL DEFAULT false`,
+      // Ordem dentro da categoria no catalogo. Nulo = ordem de cadastro.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_position INT`,
+      // Peca de atacado (da Bia) nunca entra no catalogo, a mesma trava que ja existe para show_online.
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_catalog_not_wholesale') THEN
+           ALTER TABLE products ADD CONSTRAINT products_catalog_not_wholesale
+             CHECK (NOT show_catalog OR sale_channel <> 'atacado');
+         END IF;
+       END $$`,
+      // Qual foto vai na colagem do cartao do catalogo: a limpa ou a com a modelo. A foto principal
+      // da peca (products.photo_url) e sempre tratada como a limpa, por isso pode ficar sem tipo aqui.
+      `ALTER TABLE product_photos ADD COLUMN IF NOT EXISTS kind TEXT`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_photos_kind_check') THEN
+           ALTER TABLE product_photos ADD CONSTRAINT product_photos_kind_check
+             CHECK (kind IS NULL OR kind IN ('limpa', 'modelo'));
+         END IF;
+       END $$`,
+      // Historico de alteracoes: products ainda nao tinha o gatilho de log_change (so as tabelas do
+      // dinheiro tinham, desde a migracao 014). A funcao ja existe; so falta ligar o gatilho na tabela.
+      `DROP TRIGGER IF EXISTS products_log ON products`,
+      `CREATE TRIGGER products_log AFTER UPDATE OR DELETE ON products FOR EACH ROW EXECUTE FUNCTION log_change()`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem
