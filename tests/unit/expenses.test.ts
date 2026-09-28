@@ -10,6 +10,7 @@ describe("despesa da empresa", () => {
       category: "Marketing",
       amount: 150.5,
       notes: null,
+      fundId: null,
     });
   });
 

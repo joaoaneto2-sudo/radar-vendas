@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseExpenseBody } from "@/lib/expenses";
+import { fundoDisponivel, fundoExiste } from "@/lib/funds-db";
 import { comoUsuario } from "@/lib/audit";
 import { quemFez } from "@/lib/audit-request";
 
@@ -27,9 +28,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (await veioDeFatura(db, id)) {
       return NextResponse.json({ error: "from_invoice", message: MENSAGEM_DA_FATURA }, { status: 409 });
     }
+    if (dados.fundId !== null) {
+      // Manter um fundo já arquivado que a despesa tinha é permitido; escolher um arquivado agora não.
+      const { rows: atual } = await db.query(`SELECT fund_id FROM expenses WHERE id = $1`, [id]);
+      const mesmoDeAntes = atual.length > 0 && atual[0].fund_id === dados.fundId;
+      const valido = mesmoDeAntes ? await fundoExiste(db, dados.fundId) : await fundoDisponivel(db, dados.fundId);
+      if (!valido) {
+        return NextResponse.json({ error: "invalid_fund", message: "Esse fundo não existe ou está arquivado." }, { status: 400 });
+      }
+    }
     const { rowCount } = await comoUsuario(db, await quemFez()).query(
-      `UPDATE expenses SET expense_date = $1, description = $2, category = $3, amount = $4, notes = $5 WHERE id = $6`,
-      [dados.date, dados.description, dados.category, dados.amount, dados.notes, id]
+      `UPDATE expenses SET expense_date = $1, description = $2, category = $3, amount = $4, notes = $5, fund_id = $6 WHERE id = $7`,
+      [dados.date, dados.description, dados.category, dados.amount, dados.notes, dados.fundId, id]
     );
     if (!rowCount) return NextResponse.json({ error: "not_found" }, { status: 404 });
     return NextResponse.json({ ok: true });
