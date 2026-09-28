@@ -422,5 +422,24 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
       );
       expect(log).toEqual([{ table_name: "products", op: "UPDATE" }]);
     });
+
+    it("descontar o estoque numa venda NÃO entra no histórico (senão toda venda viraria uma linha)", async () => {
+      const pool = await bancoPronto();
+      const { rows } = await pool.query(`INSERT INTO products (name, price, stock_qty) VALUES ('Vendida', 100, 5) RETURNING id`);
+      const id = rows[0].id;
+      await pool.query(`UPDATE products SET stock_qty = stock_qty - 1 WHERE id = $1`, [id]);
+      await pool.query(`UPDATE products SET stock_qty = stock_qty + 1 WHERE id = $1`, [id]); // devolver ao cancelar
+      const { rows: log } = await pool.query(`SELECT 1 FROM change_log WHERE table_name = 'products' AND row_id = $1`, [id]);
+      expect(log).toEqual([]);
+    });
+
+    it("apagar uma peça sempre entra no histórico, mesmo sem outra mudança antes", async () => {
+      const pool = await bancoPronto();
+      const { rows } = await pool.query(`INSERT INTO products (name, price) VALUES ('Vai ser apagada', 100) RETURNING id`);
+      const id = rows[0].id;
+      await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
+      const { rows: log } = await pool.query(`SELECT table_name, op FROM change_log WHERE table_name = 'products' AND row_id = $1`, [id]);
+      expect(log).toEqual([{ table_name: "products", op: "DELETE" }]);
+    });
   });
 });

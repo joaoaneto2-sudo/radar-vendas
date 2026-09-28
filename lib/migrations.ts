@@ -676,8 +676,16 @@ export const MIGRATIONS: Migration[] = [
        END $$`,
       // Historico de alteracoes: products ainda nao tinha o gatilho de log_change (so as tabelas do
       // dinheiro tinham, desde a migracao 014). A funcao ja existe; so falta ligar o gatilho na tabela.
+      // O estoque muda sozinho a cada venda (UPDATE products SET stock_qty = ...), entao um gatilho
+      // simples encheria o historico com uma linha por venda. A trava do UPDATE so registra quando
+      // algo ALEM do estoque muda (nome, preco, descricao, os campos do catalogo...); apagar a peca
+      // sempre registra.
       `DROP TRIGGER IF EXISTS products_log ON products`,
-      `CREATE TRIGGER products_log AFTER UPDATE OR DELETE ON products FOR EACH ROW EXECUTE FUNCTION log_change()`,
+      `DROP TRIGGER IF EXISTS products_log_delete ON products`,
+      `CREATE TRIGGER products_log AFTER UPDATE ON products FOR EACH ROW
+         WHEN ((to_jsonb(OLD) - 'stock_qty') IS DISTINCT FROM (to_jsonb(NEW) - 'stock_qty'))
+         EXECUTE FUNCTION log_change()`,
+      `CREATE TRIGGER products_log_delete AFTER DELETE ON products FOR EACH ROW EXECUTE FUNCTION log_change()`,
     ],
   },
 ];
