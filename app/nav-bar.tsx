@@ -53,6 +53,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/importar-vendas": ["Vendas", "Importar vendas"],
   "/cadastros": ["Cadastros", "Produtos e cadastros"],
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
+  "/importar-pecas": ["Cadastros", "Importar peças"],
   "/financeiro": ["Financeiro", "Painel"],
   "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
   "/financeiro/fundo": ["Financeiro", "Fundo de reposição"],
@@ -184,7 +185,9 @@ export default function NavBar() {
   }
 
   const ativa = (href: string) =>
-    href === "/cadastros" ? pathname === "/cadastros" || pathname === "/importar-catalogo" : pathname === href;
+    href === "/cadastros"
+      ? pathname === "/cadastros" || pathname === "/importar-catalogo" || pathname === "/importar-pecas"
+      : pathname === href;
 
   if (naEntrada) {
     return (

@@ -363,6 +363,9 @@ export default function ProdutosTab() {
         <a className="btn btn-ghost" href="/importar-catalogo">
           Importar catálogo Bia Belutti
         </a>
+        <a className="btn btn-ghost" href="/importar-pecas">
+          Importar peças
+        </a>
         <button className="btn btn-primary" onClick={openNew}>
           + Novo produto
         </button>

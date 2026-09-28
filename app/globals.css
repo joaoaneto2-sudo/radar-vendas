@@ -832,6 +832,49 @@ td.profit-neg {
   font-size: 1.1rem;
 }
 
+/* Tela de importação de peças (fotos com nome padronizado) */
+
+.thumb-lg {
+  width: 108px;
+  height: 108px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  border: 1px solid var(--border);
+  display: block;
+  flex: none;
+}
+
+.import-item {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.import-item + .import-item {
+  margin-top: 14px;
+}
+
+.import-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-item-status {
+  flex: none;
+  width: 150px;
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .import-item {
+    flex-wrap: wrap;
+  }
+  .import-item-status {
+    width: 100%;
+    text-align: left;
+  }
+}
+
 .photo-upload {
   display: flex;
   align-items: center;
