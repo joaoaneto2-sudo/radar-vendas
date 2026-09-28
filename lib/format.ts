@@ -91,6 +91,11 @@ export type Product = {
   sale_price?: number | string | null; // preço promocional; vazio = sem promoção
   public_description?: string | null;
   extra_photos?: number;
+  // Catálogo online (migração 017). availability e manufacturer_code são internos: a loja NUNCA lê.
+  availability?: "pronta_entrega" | "encomenda";
+  manufacturer_code?: string | null;
+  show_catalog?: boolean;
+  catalog_position?: number | null;
 };
 
 export type Manufacturer = {
