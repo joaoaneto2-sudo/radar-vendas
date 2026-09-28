@@ -3404,3 +3404,12 @@ a.tab-btn {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Tela Financeiro > Fundos: os cartões usam as mesmas classes da faixa do Painel */
+.fundos-grade--paginas {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.fundo-cartao--pagina:hover {
+  background: var(--surface-soft);
+}
