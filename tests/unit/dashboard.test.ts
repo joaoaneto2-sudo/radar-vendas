@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   comissaoDoAtacado,
+  valorBrutoDoAtacado,
   parsePeriodo,
   periodRange,
   porcentagem,
@@ -55,6 +56,20 @@ describe("o que é vendido e o que é receita da empresa", () => {
     expect(comissaoDoAtacado(atacado)).toBe(30000);
     expect(receitaDaEmpresa(atacado)).toBe(30000);
     expect(receitaDaEmpresa(VENDAS[0])).toBe(59000);
+  });
+
+  it("o total vendido no atacado é o valor bruto, e só conta vendas de atacado", () => {
+    expect(valorBrutoDoAtacado(VENDAS[3])).toBe(150000);
+    expect(valorBrutoDoAtacado(VENDAS[0])).toBe(0); // varejo
+    expect(valorBrutoDoAtacado(VENDAS[2])).toBe(0); // consignado
+    expect(valorBrutoDoAtacado({ sale_date: "2026-09-01", sale_value: null, price_tier: "atacado" })).toBe(0);
+    expect(valorBrutoDoAtacado({ sale_date: "2026-09-01", sale_value: "", price_tier: "atacado" })).toBe(0);
+  });
+
+  it("o bruto do atacado conta mesmo sem fabricante representado (comissão zero)", () => {
+    const semRepresentado: VendaLinha = { sale_date: "2026-09-01", sale_value: "1000", price_tier: "atacado", commission_pct: null };
+    expect(valorBrutoDoAtacado(semRepresentado)).toBe(100000);
+    expect(comissaoDoAtacado(semRepresentado)).toBe(0);
   });
 
   it("atacado de fabricante que não é representado não gera comissão", () => {

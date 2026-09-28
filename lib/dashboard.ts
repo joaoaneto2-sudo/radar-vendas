@@ -69,6 +69,15 @@ export function valorVendido(v: VendaLinha): Cents {
   return v.sale_value === null || v.sale_value === "" ? 0 : toCents(v.sale_value);
 }
 
+/**
+ * Total vendido numa venda de atacado (o valor bruto que o cliente paga ao fabricante).
+ * Não é dinheiro da loja e não entra no faturamento: serve só para mostrar o volume do atacado.
+ */
+export function valorBrutoDoAtacado(v: VendaLinha): Cents {
+  if (!ehAtacado(v)) return 0;
+  return v.sale_value === null || v.sale_value === "" ? 0 : toCents(v.sale_value);
+}
+
 /** Comissão que a empresa ganha numa venda de atacado (0 se o fabricante não é representado). */
 export function comissaoDoAtacado(v: VendaLinha): Cents {
   if (!ehAtacado(v) || v.commission_pct === null || v.commission_pct === undefined) return 0;

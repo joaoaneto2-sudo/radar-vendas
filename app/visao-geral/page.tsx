@@ -5,6 +5,7 @@ import { getFinanceSummary } from "@/lib/finance/load";
 import {
   PERIODOS,
   comissaoDoAtacado,
+  valorBrutoDoAtacado,
   parsePeriodo,
   periodRange,
   porcentagem,
@@ -105,6 +106,8 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
   // Números do topo
   const faturamento = doPeriodo.reduce((t, v) => t + valorVendido(v), 0);
   const comissaoPeriodo = doPeriodo.reduce((t, v) => t + comissaoDoAtacado(v), 0);
+  const atacadoVendido = doPeriodo.reduce((t, v) => t + valorBrutoDoAtacado(v), 0);
+  const vendasDeAtacado = doPeriodo.length - vendas.length;
   const { cascade, fund, wholesale } = resumo;
 
   // A receber: parcelas previstas das vendas + comissão de atacado ainda não paga
@@ -195,6 +198,7 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
         <Numero rotulo="Vendido" valor={reais(faturamento)} nota="Varejo e consignado, no período" tom="accent" />
         <Numero rotulo="Vendas" valor={String(vendas.length)} nota={doPeriodo.length > vendas.length ? `Mais ${doPeriodo.length - vendas.length} de atacado` : "No período"} />
         <Numero rotulo="Ticket médio" valor={reais(ticketMedio(vendas))} nota="Por venda de varejo e consignado" />
+        <Numero rotulo="Atacado vendido" valor={reais(atacadoVendido)} nota={`${vendasDeAtacado} venda(s), pago direto ao fabricante`} />
         <Numero rotulo="Comissão do atacado" valor={reais(comissaoPeriodo)} nota="Prevista, no período" tom="gold" />
         <Numero rotulo="Lucro dividido" valor={reais(cascade.totals.distributableCents)} nota="Desde o início" tom="gold" />
         <Numero rotulo="A receber" valor={reais(totalAReceber)} nota="Parcelas e comissões" tom={totalAReceber > 0 ? "danger" : undefined} />
