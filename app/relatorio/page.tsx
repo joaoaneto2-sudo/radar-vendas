@@ -22,7 +22,7 @@ import {
   type FinanceForm,
 } from "@/app/sale-finance-fields";
 import { NAO_INFORMADA, PIX_A_PRAZO, PIX_DIRETO_AO_FABRICANTE, PRICE_TIERS, centsOrZero, commissionCents } from "@/lib/sale-finance";
-import { formatCentsBRL } from "@/lib/finance/money";
+import { formatCentsBRL, toCents } from "@/lib/finance/money";
 import {
   NO_FILTERS,
   distinctValues,
@@ -424,18 +424,20 @@ export default function RelatorioPage() {
     let value = 0;
     let cost = 0;
     let commission = 0;
+    let wholesaleValue = 0; // total vendido no atacado (bruto, pago direto ao fabricante), em centavos
     let wholesaleCount = 0;
     for (const s of filtered) {
       if (s.status === "cancelada") continue;
       if (s.price_tier === "atacado") {
         wholesaleCount += 1;
+        wholesaleValue += toCents(s.sale_value ?? 0);
         commission += commissionCents(s.sale_value ?? 0, s.commission_pct === null || s.commission_pct === undefined ? null : Number(s.commission_pct));
         continue;
       }
       value += Number(s.sale_value) || 0;
       cost += Number(s.cost) || 0;
     }
-    return { value, cost, profit: value - cost, count: filtered.length, commission, wholesaleCount };
+    return { value, cost, profit: value - cost, count: filtered.length, commission, wholesaleValue, wholesaleCount };
   }, [filtered]);
 
   function handleSaved(updated: Sale) {
@@ -532,6 +534,13 @@ export default function RelatorioPage() {
               <div className="label">Lucro (valor menos custo da peça)</div>
               <div className="value">{formatBRL(totals.profit)}</div>
             </div>
+            {totals.wholesaleCount > 0 && (
+              <div className="stat-tile">
+                <div className="label">Atacado: total vendido</div>
+                <div className="value">{formatCentsBRL(totals.wholesaleValue)}</div>
+                <div className="stat-note">{`${totals.wholesaleCount} venda(s), pago direto ao fabricante`}</div>
+              </div>
+            )}
             {totals.wholesaleCount > 0 && (
               <div className="stat-tile">
                 <div className="label">Atacado: comissão prevista</div>
