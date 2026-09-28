@@ -1,10 +1,10 @@
 # Contrato do Radar com a loja online
 
 O que a loja pode ler no banco do Radar, com os nomes exatos. Tudo abaixo existe depois das
-migrações 010, 011 e 012. O usuário `loja_leitura` (criado por `scripts/loja-usuario-leitura.sql`) só lê
+migrações 010, 011, 012 e 017. O usuário `loja_leitura` (criado por `scripts/loja-usuario-leitura.sql`) só lê
 estas colunas, e não escreve em nada.
 
-## products (só estas 19 colunas)
+## products (só estas 21 colunas)
 
 | Coluna | Tipo | Observação |
 |---|---|---|
@@ -26,15 +26,24 @@ estas colunas, e não escreve em nada.
 | created_at | timestamptz | |
 | sale_channel | text | `'varejo'` ou `'atacado'` |
 | active | boolean | |
-| show_online | boolean, padrão false | a peça aparece na loja; nunca é true para `sale_channel = 'atacado'` |
+| show_online | boolean, padrão false | a peça aparece na loja (com carrinho); nunca é true para `sale_channel = 'atacado'` |
+| show_catalog | boolean, padrão false | a peça aparece no catálogo online (migração 017); independe de `show_online`; nunca é true para `sale_channel = 'atacado'` |
+| catalog_position | int, pode ser nulo | ordem dentro da categoria no catálogo; nulo = ordem de cadastro |
 
 Regra sugerida para a loja (ela já usa): `sale_channel = 'varejo' AND active AND show_online AND price > 0`.
-O usuário de leitura enxerga também as peças que NÃO estão no site (só estas colunas), por isso a
-loja precisa filtrar.
+Regra sugerida para o catálogo: `sale_channel = 'varejo' AND active AND show_catalog AND price > 0`.
+O usuário de leitura enxerga também as peças que NÃO estão no site nem no catálogo (só estas colunas),
+por isso a loja precisa filtrar.
+
+As colunas `availability` (pronta entrega ou encomenda) e `manufacturer_code` (código do fabricante)
+existem em `products`, mas são internas: a loja NUNCA as lê, e NÃO estão liberadas para `loja_leitura`.
+Regra de sigilo do fabricante: nem o nome, nem o código, nem a etiqueta do fabricante podem aparecer no site.
 
 ## product_photos (fotos extras; a principal é `products.photo_url`)
 
-`id`, `product_id`, `url`, `position` (ordem, menor primeiro).
+`id`, `product_id`, `url`, `position` (ordem, menor primeiro), `kind` (`'limpa'`, `'modelo'` ou nulo;
+migração 017 — qual foto vai na colagem do cartão do catálogo; a foto principal da peça é sempre
+tratada como a limpa).
 A coluna `created_at` existe, mas NÃO é liberada para a loja.
 
 ## store_settings (chave e valor, os dois em texto)
@@ -106,3 +115,5 @@ Nenhuma nos nomes. Extras que o Radar acrescentou, sem efeito para a loja:
 
 `tests/db/store.db.test.ts` roda as consultas `SQL_PECAS`, `SQL_PECA`, `SQL_CONFIG`, `SQL_VITRINE_CARROSSEL` e
 `SQL_VITRINE_CATEGORIAS` da loja com o usuário de leitura e confirma que ler `cost`, dados de compra, vendas e clientes é recusado.
+Um teste à parte (migração 017) confirma que `loja_leitura` lê `show_catalog`, `catalog_position` e
+`product_photos.kind`, mas continua sem conseguir ler `availability` nem `manufacturer_code`.

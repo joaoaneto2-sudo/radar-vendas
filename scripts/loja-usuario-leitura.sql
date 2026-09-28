@@ -3,13 +3,14 @@
 -- O que este arquivo faz: cria o usuario "loja_leitura", que so consegue LER estas colunas:
 --   products:         id, name, category, subtype, jewelry_type, material, karat, gemstone, warranty,
 --                     public_description, price, sale_price, stock_qty, featured, photo_url,
---                     created_at, sale_channel, active, show_online
---   product_photos:   id, product_id, url, position
+--                     created_at, sale_channel, active, show_online, show_catalog, catalog_position
+--   product_photos:   id, product_id, url, position, kind
 --   store_settings:   key, value
 --   site_slots:       area, category, position, product_id, photo_url
 -- Ele NAO consegue ler custo (cost), dados de compra (purchase_date, purchase_qty,
--- purchase_payment_method), fornecedor, fabricante, vendas, clientes, recebimentos, financeiro
--- nem nenhuma outra tabela, e NAO consegue escrever nada.
+-- purchase_payment_method), fornecedor, fabricante, vendas, clientes, recebimentos, financeiro,
+-- availability nem manufacturer_code (uso interno do catalogo, sigilo do fabricante: nunca vao para
+-- o site), nem nenhuma outra tabela, e NAO consegue escrever nada.
 --
 -- COMO USAR (voce faz sozinho, no painel do Neon):
 --   1. Neon > seu projeto > SQL Editor. Confira que esta no banco certo, logado como o dono.
@@ -58,10 +59,10 @@ GRANT USAGE ON SCHEMA public TO loja_leitura;
 GRANT SELECT (
   id, name, category, subtype, jewelry_type, material, karat, gemstone, warranty,
   public_description, price, sale_price, stock_qty, featured, photo_url,
-  created_at, sale_channel, active, show_online
+  created_at, sale_channel, active, show_online, show_catalog, catalog_position
 ) ON products TO loja_leitura;
 
-GRANT SELECT (id, product_id, url, position) ON product_photos TO loja_leitura;
+GRANT SELECT (id, product_id, url, position, kind) ON product_photos TO loja_leitura;
 
 GRANT SELECT (key, value) ON store_settings TO loja_leitura;
 
@@ -80,8 +81,9 @@ SELECT c.relname AS tabela_ou_visao,
  WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'v', 'm')
  ORDER BY consegue_ler_alguma_coluna DESC, c.relname;
 
--- 3) Colunas de products que ele consegue ler. Devem ser "true" so as 19 combinadas;
---    cost, purchase_date, purchase_qty, purchase_payment_method e o resto devem ser "false".
+-- 3) Colunas de products que ele consegue ler. Devem ser "true" so as 21 combinadas;
+--    cost, purchase_date, purchase_qty, purchase_payment_method, availability,
+--    manufacturer_code e o resto devem ser "false".
 SELECT column_name AS coluna_de_products,
        has_column_privilege('loja_leitura', 'products', column_name, 'SELECT') AS consegue_ler
   FROM information_schema.columns
