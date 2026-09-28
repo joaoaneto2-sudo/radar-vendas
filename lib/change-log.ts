@@ -54,7 +54,7 @@ export interface Evento {
 }
 
 // O filtro da tela usa estes grupos, não o nome das tabelas.
-export type TipoDeRegistro = "venda" | "recebimento" | "despesa" | "fatura" | "fundo" | "divida" | "compra";
+export type TipoDeRegistro = "venda" | "recebimento" | "despesa" | "fatura" | "fundo" | "fundos" | "divida" | "compra";
 
 const TIPO_DA_TABELA: Record<string, TipoDeRegistro> = {
   sales: "venda",
@@ -67,6 +67,8 @@ const TIPO_DA_TABELA: Record<string, TipoDeRegistro> = {
   liabilities: "divida",
   liability_payments: "divida",
   stock_purchases: "compra",
+  funds: "fundos",
+  fund_rules: "fundos",
 };
 
 export const ROTULO_DO_TIPO: Record<TipoDeRegistro, string> = {
@@ -75,6 +77,7 @@ export const ROTULO_DO_TIPO: Record<TipoDeRegistro, string> = {
   despesa: "Despesas",
   fatura: "Faturas do cartão",
   fundo: "Fundo de reposição",
+  fundos: "Fundos e regras de porcentagem",
   divida: "Dívidas",
   compra: "Compras de estoque",
 };
@@ -106,6 +109,8 @@ const NOME_DA_TABELA: Record<string, string> = {
   liabilities: "Dívida",
   liability_payments: "Pagamento de dívida",
   stock_purchases: "Compra de estoque",
+  funds: "Fundo",
+  fund_rules: "Regra de fundo",
 };
 
 // Qual linha manda no título quando várias mudam juntas (apagar uma venda leva as parcelas junto).
@@ -171,6 +176,12 @@ const ROTULOS: Record<string, string> = {
   nature: "Natureza",
   purchase_date: "Data da compra",
   responsible: "Responsável",
+  fund_id: "Fundo (nº)",
+  name: "Nome",
+  active: "Ativo",
+  pct: "Porcentagem",
+  from_month: "Começa em",
+  to_month: "Termina em",
 };
 
 const DINHEIRO = new Set([
@@ -257,6 +268,16 @@ export function tituloDaLinha(tabela: string, l: Linha): string {
     case "fund_payments":
     case "liability_payments":
       return junta(nome, dinheiro(l, "amount"), em(l, "paid_date", "em"));
+    case "funds":
+      return `${nome} "${texto(l.name)}"`;
+    case "fund_rules": {
+      const pct = texto(l.pct) ? `${String(Number(l.pct)).replace(".", ",")}%` : "";
+      const mes = (v: unknown) => `${String(v).slice(5, 7)}/${String(v).slice(0, 4)}`;
+      const de = texto(l.from_month);
+      const ate = texto(l.to_month);
+      const periodo = !de ? "" : !ate ? `a partir de ${mes(de)}, sem fim` : ate === de ? `só em ${mes(de)}` : `de ${mes(de)} até ${mes(ate)}`;
+      return junta(`${nome} nº ${texto(l.fund_id)}`, pct, periodo);
+    }
     default:
       return nome;
   }
@@ -264,7 +285,9 @@ export function tituloDaLinha(tabela: string, l: Linha): string {
 
 /** O que mudou de um estado para o outro (só os campos que realmente mudaram). */
 export function alteracoesEntre(antes: Linha, depois: Linha): Alteracao[] {
-  const chaves = Array.from(new Set([...Object.keys(antes), ...Object.keys(depois)])).filter((c) => !IGNORADOS.has(c) && !c.endsWith("_id"));
+  const chaves = Array.from(new Set([...Object.keys(antes), ...Object.keys(depois)])).filter(
+    (c) => !IGNORADOS.has(c) && (!c.endsWith("_id") || c === "fund_id")
+  );
   const lista: Alteracao[] = [];
   for (const campo of chaves) {
     const a = valorLegivel(campo, antes[campo]);
@@ -277,7 +300,7 @@ export function alteracoesEntre(antes: Linha, depois: Linha): Alteracao[] {
 /** O que existia numa linha apagada (sem os campos de ligação e os vazios). */
 export function camposDaLinha(l: Linha): Campo[] {
   return Object.keys(l)
-    .filter((c) => !IGNORADOS.has(c) && !c.endsWith("_id"))
+    .filter((c) => !IGNORADOS.has(c) && (!c.endsWith("_id") || c === "fund_id"))
     .filter((c) => l[c] !== null && l[c] !== undefined && l[c] !== "")
     .map((c) => ({ rotulo: rotuloDoCampo(c), valor: valorLegivel(c, l[c]) }));
 }
