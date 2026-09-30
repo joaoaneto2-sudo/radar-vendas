@@ -366,6 +366,9 @@ export default function ProdutosTab() {
         <a className="btn btn-ghost" href="/importar-pecas">
           Importar peças
         </a>
+        <a className="btn btn-ghost" href="/cadastros/catalogo">
+          Gerar catálogo (PDF)
+        </a>
         <button className="btn btn-primary" onClick={openNew}>
           + Novo produto
         </button>
@@ -519,7 +522,11 @@ export default function ProdutosTab() {
                       <button
                         type="button"
                         disabled={p.sale_channel === "atacado"}
-                        title={p.sale_channel === "atacado" ? "Peça do fabricante não vai para o catálogo" : undefined}
+                        title={
+                          p.sale_channel === "atacado"
+                            ? "Peça do fabricante não vai para o catálogo"
+                            : "Aparece na lista pra gerar o catálogo em PDF (varejo ou consignado)"
+                        }
                         className={"toggle-chip" + (p.show_catalog ? " on" : "")}
                         onClick={() => toggleStore(p, "show_catalog")}
                       >

@@ -7,7 +7,7 @@ import { avisoDeVagasRemovidas } from "@/lib/vitrine";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Liga e desliga "No site", "Carrossel" e "No catálogo" direto na lista, sem abrir o cadastro.
+// Liga e desliga "No site", "Carrossel" e "Catálogo" direto na lista, sem abrir o cadastro.
 // Só mexe nos campos que vieram na chamada.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const db = getPool();
@@ -16,7 +16,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!Number.isInteger(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
-  // Só estes dois podem ser mudados por aqui.
+  // Só estes campos podem ser mudados por aqui.
   const entrada: Record<string, unknown> = {};
   if (Object.prototype.hasOwnProperty.call(body, "show_online")) entrada.show_online = body.show_online;
   if (Object.prototype.hasOwnProperty.call(body, "featured")) entrada.featured = body.featured;
@@ -31,6 +31,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
     if (atual.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
     const p = atual[0];
+
+    // "Catálogo" (PDF/consignado) é independente do site: peça de atacado nunca vai (o banco também trava).
+    if (temCatalogo && body.show_catalog === true && p.sale_channel === "atacado") {
+      return NextResponse.json(
+        { error: "wholesale_not_allowed", message: "Peça do fabricante (atacado) não vai para o catálogo." },
+        { status: 400 }
+      );
+    }
 
     const r = resolveStoreFields(
       entrada,
@@ -61,7 +69,10 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
     const { removidas } = await reconciliarPeca(db, id);
     const aviso = avisoDeVagasRemovidas(removidas);
-    return NextResponse.json({ item: rows[0], notes: [...r.notes, ...(aviso ? [aviso] : [])] });
+    return NextResponse.json({
+      item: rows[0],
+      notes: [...r.notes, ...(aviso ? [aviso] : [])],
+    });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
