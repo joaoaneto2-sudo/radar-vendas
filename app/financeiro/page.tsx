@@ -4,7 +4,10 @@ import { formatCentsBRL } from "@/lib/finance/money";
 import type { WholesaleStatus } from "@/lib/finance/wholesale";
 import { formatDateBR } from "@/lib/format";
 import { lerAcordo } from "@/lib/agreement-db";
+import { listarFundos } from "@/lib/funds-db";
+import { cartoesDosFundos } from "@/lib/faixa-dos-fundos";
 import FaixaDoAcordo from "../faixa-do-acordo";
+import FaixaDosFundos from "./faixa-dos-fundos";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +74,12 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
   const resumo = summarize({ ...entradas, settings: { ...entradas.settings, mode: modo } });
   const { cascade, fund, liabilities, wholesale, invoices } = resumo;
   const { valores: acordo } = await lerAcordo(db);
+  const cartoesDeFundos = cartoesDosFundos({
+    reposicao: fund,
+    retailPct: acordo.retailPct,
+    fundos: await listarFundos(db),
+    contas: cascade.funds,
+  });
   const vendaPorId = new Map(entradas.sales.map((v) => [v.id, v]));
   const despesaPorId = new Map(entradas.expenses.map((d) => [d.id, d]));
   const porcentagemQuitada = (cascade.debt.paidFraction * 100).toFixed(1).replace(".", ",");
@@ -112,6 +121,8 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
           faturas do cartão. Cada número pode ser conferido na tabela do final.
         </p>
       </div>
+
+      <FaixaDosFundos cartoes={cartoesDeFundos} />
 
       <FaixaDoAcordo
         dados={{ joaoSharePct: acordo.joaoSharePct, initialStockCents: acordo.initialStockCents, partnershipStart: acordo.partnershipStart, debt: cascade.debt }}
@@ -354,13 +365,14 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
           <div className="empty-state">Ainda não há vendas contadas.</div>
         ) : (
           <div className="table-wrap">
-            <table style={{ minWidth: 1250 }}>
+            <table style={{ minWidth: 1400 }}>
               <thead>
                 <tr>
                   <th>Entrou em</th>
                   <th>Origem</th>
                   <th>Valor que entrou</th>
                   <th>Reposição</th>
+                  <th>Fundos</th>
                   <th>Custos</th>
                   <th>Lucro</th>
                   <th>Descontado (despesas)</th>
@@ -384,8 +396,15 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
                       </td>
                       <td className="num">{e.kind === "despesa" ? "-" : reais(e.baseCents)}</td>
                       <td className="num">{reais(e.replenishCents)}</td>
+                      <td className="num">
+                        {e.kind === "despesa"
+                          ? e.fundCoveredCents > 0
+                            ? `pago pelo fundo ${reais(e.fundCoveredCents)}`
+                            : "-"
+                          : reais(Object.values(e.fundsCents).reduce((total, v) => total + v, 0))}
+                      </td>
                       <td className="num">{reais(e.costsCents)}</td>
-                      <td className="num">{e.kind === "despesa" ? `-${reais(e.expenseCents)}` : reais(e.profitCents)}</td>
+                      <td className="num">{e.kind === "despesa" ? `-${reais(e.expenseCents - e.fundCoveredCents)}` : reais(e.profitCents)}</td>
                       <td className="num">{reais(e.compensatedCents)}</td>
                       <td className="num">{reais(e.distributableCents)}</td>
                       <td className="num">{reais(e.joaoShareCents)}</td>
@@ -402,8 +421,9 @@ export default async function FinanceiroPage({ searchParams }: { searchParams: {
                   <td colSpan={2}>Totais</td>
                   <td className="num">{reais(cascade.totals.countedCents + cascade.totals.wholesaleCommissionCountedCents)}</td>
                   <td className="num">{reais(cascade.totals.replenishCents)}</td>
+                  <td className="num">{reais(cascade.totals.fundsCents)}</td>
                   <td className="num">{reais(cascade.totals.costsCents)}</td>
-                  <td className="num">{reais(cascade.totals.profitCents - cascade.totals.expensesCents)}</td>
+                  <td className="num">{reais(cascade.totals.profitCents - (cascade.totals.expensesCents - cascade.totals.fundCoveredCents))}</td>
                   <td className="num">{reais(cascade.totals.compensatedCents)}</td>
                   <td className="num">{reais(cascade.totals.distributableCents)}</td>
                   <td className="num">{reais(totalDaParteDoJoao)}</td>

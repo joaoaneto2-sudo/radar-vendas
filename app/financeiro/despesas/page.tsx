@@ -20,9 +20,13 @@ type Despesa = {
   category: string | null;
   amount: string;
   notes: string | null;
+  fund_id: number | null;
+  fund_name: string | null;
   invoice_id: number | null;
   invoice_description: string | null;
 };
+
+type FundoOpcao = { id: number; name: string };
 
 type Parte = { id: number; nature: InvoiceNature; description: string | null; amount: string };
 type Fatura = {
@@ -88,13 +92,19 @@ export default function DespesasPage() {
   const [aba, setAba] = useState<"despesas" | "faturas">("despesas");
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [faturas, setFaturas] = useState<Fatura[]>([]);
+  const [fundos, setFundos] = useState<FundoOpcao[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   function carregar() {
-    Promise.all([fetch("/api/expenses").then((r) => r.json()), fetch("/api/card-invoices").then((r) => r.json())])
-      .then(([d, f]) => {
+    Promise.all([
+      fetch("/api/expenses").then((r) => r.json()),
+      fetch("/api/card-invoices").then((r) => r.json()),
+      fetch("/api/funds").then((r) => r.json()),
+    ])
+      .then(([d, f, fu]) => {
         setDespesas(d.items || []);
         setFaturas(f.items || []);
+        setFundos((fu.fundos || []).filter((x: { active: boolean }) => x.active).map((x: { id: number; name: string }) => ({ id: x.id, name: x.name })));
       })
       .finally(() => setCarregando(false));
   }
@@ -126,7 +136,7 @@ export default function DespesasPage() {
       {carregando ? (
         <div className="loading-state">Carregando...</div>
       ) : aba === "despesas" ? (
-        <DespesasAba despesas={despesas} recarregar={carregar} verFaturas={() => setAba("faturas")} />
+        <DespesasAba despesas={despesas} fundos={fundos} recarregar={carregar} verFaturas={() => setAba("faturas")} />
       ) : (
         <FaturasAba faturas={faturas} recarregar={carregar} />
       )}
@@ -136,9 +146,19 @@ export default function DespesasPage() {
 
 // ---------------------------------------------------------------------------
 
-function DespesasAba({ despesas, recarregar, verFaturas }: { despesas: Despesa[]; recarregar: () => void; verFaturas: () => void }) {
+function DespesasAba({
+  despesas,
+  fundos,
+  recarregar,
+  verFaturas,
+}: {
+  despesas: Despesa[];
+  fundos: FundoOpcao[];
+  recarregar: () => void;
+  verFaturas: () => void;
+}) {
   const [editando, setEditando] = useState<Despesa | "nova" | null>(null);
-  const [form, setForm] = useState({ expense_date: hojeISO(), description: "", category: "", amount: "", notes: "" });
+  const [form, setForm] = useState({ expense_date: hojeISO(), description: "", category: "", amount: "", notes: "", fund_id: "" });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -151,8 +171,15 @@ function DespesasAba({ despesas, recarregar, verFaturas }: { despesas: Despesa[]
     setErro("");
     setForm(
       d === "nova"
-        ? { expense_date: hojeISO(), description: "", category: "", amount: "", notes: "" }
-        : { expense_date: d.expense_date, description: d.description, category: d.category ?? "", amount: numero(d.amount), notes: d.notes ?? "" }
+        ? { expense_date: hojeISO(), description: "", category: "", amount: "", notes: "", fund_id: "" }
+        : {
+            expense_date: d.expense_date,
+            description: d.description,
+            category: d.category ?? "",
+            amount: numero(d.amount),
+            notes: d.notes ?? "",
+            fund_id: d.fund_id ? String(d.fund_id) : "",
+          }
     );
     setEditando(d);
   }
@@ -221,6 +248,7 @@ function DespesasAba({ despesas, recarregar, verFaturas }: { despesas: Despesa[]
                 <th>Data</th>
                 <th>Descrição</th>
                 <th>Categoria</th>
+                <th>Fundo</th>
                 <th>Origem</th>
                 <th>Valor</th>
                 <th>Ações</th>
@@ -235,6 +263,7 @@ function DespesasAba({ despesas, recarregar, verFaturas }: { despesas: Despesa[]
                     {d.notes && !d.invoice_id && <div className="hint">{d.notes}</div>}
                   </td>
                   <td>{d.category || "-"}</td>
+                  <td>{d.fund_name ?? "-"}</td>
                   <td>
                     {d.invoice_id ? (
                       <button className="icon-btn" onClick={verFaturas}>{`Fatura: ${d.invoice_description ?? d.invoice_id}`}</button>
@@ -308,6 +337,21 @@ function DespesasAba({ despesas, recarregar, verFaturas }: { despesas: Despesa[]
                       </button>
                     ))}
                   </div>
+                </div>
+                <div className="field field--full">
+                  <label>Pagar com o fundo de</label>
+                  <select value={form.fund_id} onChange={(e) => setForm({ ...form, fund_id: e.target.value })}>
+                    <option value="">Nenhum (sai do lucro)</option>
+                    {fundos.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name}
+                      </option>
+                    ))}
+                    {form.fund_id !== "" && !fundos.some((f) => String(f.id) === form.fund_id) && (
+                      <option value={form.fund_id}>Fundo arquivado (manter)</option>
+                    )}
+                  </select>
+                  <span className="hint">O fundo paga primeiro, até onde tiver saldo. O que faltar sai do lucro, como toda despesa.</span>
                 </div>
                 <div className="field field--full">
                   <label>Observação (opcional)</label>

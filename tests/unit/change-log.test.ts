@@ -157,3 +157,28 @@ describe("fatura do cartão e ruído interno", () => {
     expect(e.userName).toBe("João");
   });
 });
+
+describe("fundos no histórico de alterações", () => {
+  it("títulos de fundo e de regra de fundo", () => {
+    expect(tituloDaLinha("funds", { id: 8, name: "Feiras" })).toBe('Fundo "Feiras"');
+    expect(tituloDaLinha("fund_rules", { id: 1, fund_id: 3, pct: "5.00", from_month: "2026-09-01", to_month: null })).toBe(
+      "Regra de fundo nº 3, 5%, a partir de 09/2026, sem fim"
+    );
+    expect(tituloDaLinha("fund_rules", { id: 1, fund_id: 3, pct: "8.50", from_month: "2026-10-01", to_month: "2026-10-01" })).toBe(
+      "Regra de fundo nº 3, 8,5%, só em 10/2026"
+    );
+  });
+
+  it("apagar uma regra aparece como evento do tipo Fundos", () => {
+    const [e] = agruparEventos([
+      linha({ table: "fund_rules", op: "DELETE", before: { id: 1, fund_id: 3, pct: "5.00", from_month: "2026-09-01", to_month: null } }),
+    ]);
+    expect(e).toMatchObject({ tipo: "fundos", acao: "apagada" });
+  });
+
+  it("trocar só o fundo de uma despesa aparece como mudança (o número do fundo)", () => {
+    const antes = { id: 1, description: "Contador", amount: 150, fund_id: null };
+    const depois = { ...antes, fund_id: 3 };
+    expect(alteracoesEntre(antes, depois).map((a) => a.rotulo)).toEqual(["Fundo (nº)"]);
+  });
+});

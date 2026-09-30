@@ -634,6 +634,105 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "016",
+    name: "fundos do negocio: lista de fundos, regras de porcentagem por mes e fundo da despesa",
+    statements: [
+      // Cada fundo separa uma % de toda entrada que entra na divisao. Nunca e apagado, so arquivado.
+      `CREATE TABLE IF NOT EXISTS funds (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL CHECK (btrim(name) <> ''),
+        description TEXT,
+        position INT NOT NULL DEFAULT 0,
+        active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS funds_nome_idx ON funds (lower(btrim(name)))`,
+      `INSERT INTO funds (name, description, position) VALUES
+        ('Prospecção', 'Conquistar clientes novos', 1),
+        ('Transporte', 'Deslocamento: viagens, motoboy, transporte por aplicativo', 2),
+        ('Custos fixos', 'Aplicativos, MEI e contador', 3),
+        ('Digital', 'Custos digitais. Os aplicativos ficam em Custos fixos', 4),
+        ('Tráfego pago', 'Anúncios pagos', 5),
+        ('Embalagens', 'Caixas, sacolas e materiais de embalagem', 6),
+        ('Frete', 'Envio para o cliente (Correios, Melhor Envio). Diferente de Transporte', 7)
+        ON CONFLICT ((lower(btrim(name)))) DO NOTHING`,
+      // Cada mudanca de % vira uma regra: vale do mes de inicio ao mes de fim (nulo = sem fim).
+      // No mes M vale a regra mais recente (created_at) entre as que cobrem M.
+      `CREATE TABLE IF NOT EXISTS fund_rules (
+        id SERIAL PRIMARY KEY,
+        fund_id INT NOT NULL REFERENCES funds(id),
+        pct NUMERIC(5,2) NOT NULL CHECK (pct BETWEEN 0 AND 100),
+        from_month DATE NOT NULL CHECK (EXTRACT(DAY FROM from_month) = 1),
+        to_month DATE CHECK (to_month IS NULL OR (EXTRACT(DAY FROM to_month) = 1 AND to_month >= from_month)),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        created_by_id INT,
+        created_by_name TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS fund_rules_fund_idx ON fund_rules (fund_id, from_month)`,
+      // Qual fundo pagou a despesa (vazio = sai do lucro, como sempre foi).
+      `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS fund_id INT REFERENCES funds(id)`,
+      // Historico de alteracoes (a funcao log_change ja existe desde a migracao 014).
+      `DROP TRIGGER IF EXISTS funds_log ON funds`,
+      `CREATE TRIGGER funds_log AFTER UPDATE OR DELETE ON funds FOR EACH ROW EXECUTE FUNCTION log_change()`,
+      `DROP TRIGGER IF EXISTS fund_rules_log ON fund_rules`,
+      `CREATE TRIGGER fund_rules_log AFTER UPDATE OR DELETE ON fund_rules FOR EACH ROW EXECUTE FUNCTION log_change()`,
+    ],
+  },
+  {
+    id: "017",
+    name: "catalogo online: disponibilidade, codigo do fabricante e vaga no catalogo da peca",
+    statements: [
+      // Disponibilidade: se a peca existe na mao da Fernanda ('pronta_entrega') ou so existe no
+      // catalogo do fabricante ('encomenda'). Uso interno: a loja nunca le esta coluna.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS availability TEXT NOT NULL DEFAULT 'pronta_entrega'`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_availability_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_availability_check
+             CHECK (availability IN ('pronta_entrega', 'encomenda'));
+         END IF;
+       END $$`,
+      // Codigo do fabricante (por exemplo 023612809015). Uso interno: a loja nunca le esta coluna.
+      // Unico por fabricante, nao unico sozinho: o mesmo codigo pode existir no catalogo de dois
+      // fabricantes diferentes (cada um numera do seu jeito), entao o indice e composto com
+      // manufacturer_id. Peca sem codigo (NULL) nunca entra na comparacao.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_code TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS products_manufacturer_code_idx
+         ON products (manufacturer_id, manufacturer_code) WHERE manufacturer_code IS NOT NULL`,
+      // A peca aparece no catalogo online. Independe de show_online (a loja com carrinho).
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS show_catalog BOOLEAN NOT NULL DEFAULT false`,
+      // Ordem dentro da categoria no catalogo. Nulo = ordem de cadastro.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_position INT`,
+      // Peca de atacado (da Bia) nunca entra no catalogo, a mesma trava que ja existe para show_online.
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_catalog_not_wholesale') THEN
+           ALTER TABLE products ADD CONSTRAINT products_catalog_not_wholesale
+             CHECK (NOT show_catalog OR sale_channel <> 'atacado');
+         END IF;
+       END $$`,
+      // Qual foto vai na colagem do cartao do catalogo: a limpa ou a com a modelo. A foto principal
+      // da peca (products.photo_url) e sempre tratada como a limpa, por isso pode ficar sem tipo aqui.
+      `ALTER TABLE product_photos ADD COLUMN IF NOT EXISTS kind TEXT`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_photos_kind_check') THEN
+           ALTER TABLE product_photos ADD CONSTRAINT product_photos_kind_check
+             CHECK (kind IS NULL OR kind IN ('limpa', 'modelo'));
+         END IF;
+       END $$`,
+      // Historico de alteracoes: products ainda nao tinha o gatilho de log_change (so as tabelas do
+      // dinheiro tinham, desde a migracao 014). A funcao ja existe; so falta ligar o gatilho na tabela.
+      // O estoque muda sozinho a cada venda (UPDATE products SET stock_qty = ...), entao um gatilho
+      // simples encheria o historico com uma linha por venda. A trava do UPDATE so registra quando
+      // algo ALEM do estoque muda (nome, preco, descricao, os campos do catalogo...); apagar a peca
+      // sempre registra.
+      `DROP TRIGGER IF EXISTS products_log ON products`,
+      `DROP TRIGGER IF EXISTS products_log_delete ON products`,
+      `CREATE TRIGGER products_log AFTER UPDATE ON products FOR EACH ROW
+         WHEN ((to_jsonb(OLD) - 'stock_qty') IS DISTINCT FROM (to_jsonb(NEW) - 'stock_qty'))
+         EXECUTE FUNCTION log_change()`,
+      `CREATE TRIGGER products_log_delete AFTER DELETE ON products FOR EACH ROW EXECUTE FUNCTION log_change()`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

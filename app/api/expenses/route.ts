@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { parseExpenseBody } from "@/lib/expenses";
+import { fundoDisponivel } from "@/lib/funds-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +15,9 @@ export async function GET() {
     await ensureSchema();
     const { rows } = await db.query(
       `SELECT e.id, to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date, e.description, e.category,
-              e.amount, e.notes, p.invoice_id, ci.description AS invoice_description
+              e.amount, e.notes, e.fund_id, f.name AS fund_name, p.invoice_id, ci.description AS invoice_description
          FROM expenses e
+         LEFT JOIN funds f ON f.id = e.fund_id
          LEFT JOIN card_invoice_parts p ON p.expense_id = e.id
          LEFT JOIN card_invoices ci ON ci.id = p.invoice_id
         ORDER BY e.expense_date DESC, e.id DESC`
@@ -35,10 +37,13 @@ export async function POST(req: NextRequest) {
   if (!dados.ok) return NextResponse.json({ error: dados.error, message: dados.message }, { status: 400 });
   try {
     await ensureSchema();
+    if (dados.fundId !== null && !(await fundoDisponivel(db, dados.fundId))) {
+      return NextResponse.json({ error: "invalid_fund", message: "Esse fundo não existe ou está arquivado." }, { status: 400 });
+    }
     const { rows } = await db.query(
-      `INSERT INTO expenses (expense_date, description, category, amount, notes)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [dados.date, dados.description, dados.category, dados.amount, dados.notes]
+      `INSERT INTO expenses (expense_date, description, category, amount, notes, fund_id)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [dados.date, dados.description, dados.category, dados.amount, dados.notes, dados.fundId]
     );
     return NextResponse.json({ item: { id: rows[0].id } }, { status: 201 });
   } catch (err) {
