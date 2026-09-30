@@ -634,6 +634,51 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "016",
+    name: "fundos do negocio: lista de fundos, regras de porcentagem por mes e fundo da despesa",
+    statements: [
+      // Cada fundo separa uma % de toda entrada que entra na divisao. Nunca e apagado, so arquivado.
+      `CREATE TABLE IF NOT EXISTS funds (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL CHECK (btrim(name) <> ''),
+        description TEXT,
+        position INT NOT NULL DEFAULT 0,
+        active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS funds_nome_idx ON funds (lower(btrim(name)))`,
+      `INSERT INTO funds (name, description, position) VALUES
+        ('Prospecção', 'Conquistar clientes novos', 1),
+        ('Transporte', 'Deslocamento: viagens, motoboy, transporte por aplicativo', 2),
+        ('Custos fixos', 'Aplicativos, MEI e contador', 3),
+        ('Digital', 'Custos digitais. Os aplicativos ficam em Custos fixos', 4),
+        ('Tráfego pago', 'Anúncios pagos', 5),
+        ('Embalagens', 'Caixas, sacolas e materiais de embalagem', 6),
+        ('Frete', 'Envio para o cliente (Correios, Melhor Envio). Diferente de Transporte', 7)
+        ON CONFLICT ((lower(btrim(name)))) DO NOTHING`,
+      // Cada mudanca de % vira uma regra: vale do mes de inicio ao mes de fim (nulo = sem fim).
+      // No mes M vale a regra mais recente (created_at) entre as que cobrem M.
+      `CREATE TABLE IF NOT EXISTS fund_rules (
+        id SERIAL PRIMARY KEY,
+        fund_id INT NOT NULL REFERENCES funds(id),
+        pct NUMERIC(5,2) NOT NULL CHECK (pct BETWEEN 0 AND 100),
+        from_month DATE NOT NULL CHECK (EXTRACT(DAY FROM from_month) = 1),
+        to_month DATE CHECK (to_month IS NULL OR (EXTRACT(DAY FROM to_month) = 1 AND to_month >= from_month)),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        created_by_id INT,
+        created_by_name TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS fund_rules_fund_idx ON fund_rules (fund_id, from_month)`,
+      // Qual fundo pagou a despesa (vazio = sai do lucro, como sempre foi).
+      `ALTER TABLE expenses ADD COLUMN IF NOT EXISTS fund_id INT REFERENCES funds(id)`,
+      // Historico de alteracoes (a funcao log_change ja existe desde a migracao 014).
+      `DROP TRIGGER IF EXISTS funds_log ON funds`,
+      `CREATE TRIGGER funds_log AFTER UPDATE OR DELETE ON funds FOR EACH ROW EXECUTE FUNCTION log_change()`,
+      `DROP TRIGGER IF EXISTS fund_rules_log ON fund_rules`,
+      `CREATE TRIGGER fund_rules_log AFTER UPDATE OR DELETE ON fund_rules FOR EACH ROW EXECUTE FUNCTION log_change()`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import { toCents } from "./money";
 import { todayBR } from "./dates";
+import type { Fundo, FundRule } from "./funds";
 import {
   computeCascade,
   type CascadeResult,
@@ -44,6 +45,8 @@ export interface FinanceInputs {
   liabilityPayments: LiabilityPaymentInput[];
   invoices: InvoiceInput[];
   invoiceParts: InvoicePartInput[];
+  funds: Fundo[]; // todos os fundos, inclusive arquivados
+  fundRules: FundRule[];
 }
 
 export interface FinanceSummary {
@@ -59,7 +62,7 @@ export interface FinanceSummary {
 const DIA = (coluna: string) => `to_char(${coluna}, 'YYYY-MM-DD')`;
 
 export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
-  const [ajustes, vendas, parcelas, recebimentos, despesas, compras, pagFundo, contas, pagContas, faturas, partesFatura] =
+  const [ajustes, vendas, parcelas, recebimentos, despesas, compras, pagFundo, contas, pagContas, faturas, partesFatura, fundos, regrasDeFundo] =
     await Promise.all([
       db.query(`SELECT * FROM agreement_settings WHERE id = 1`),
       db.query(
@@ -84,7 +87,7 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
            LEFT JOIN manufacturers m ON m.id = r.manufacturer_id
           ORDER BY r.received_date NULLS LAST, r.id`
       ),
-      db.query(`SELECT id, ${DIA("expense_date")} AS expense_date, description, amount FROM expenses ORDER BY expense_date, id`),
+      db.query(`SELECT id, ${DIA("expense_date")} AS expense_date, description, amount, fund_id FROM expenses ORDER BY expense_date, id`),
       db.query(
         `SELECT id, kind, amount, ${DIA("purchase_date")} AS purchase_date, description
            FROM stock_purchases ORDER BY purchase_date NULLS FIRST, id`
@@ -102,6 +105,11 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
            FROM card_invoices ORDER BY due_date, id`
       ),
       db.query(`SELECT id, invoice_id, nature, amount, description FROM card_invoice_parts ORDER BY id`),
+      db.query(`SELECT id, name, active FROM funds ORDER BY position, id`),
+      db.query(
+        `SELECT id, fund_id, pct, ${DIA("from_month")} AS from_month, ${DIA("to_month")} AS to_month, created_at
+           FROM fund_rules ORDER BY id`
+      ),
     ]);
 
   const a = ajustes.rows[0];
@@ -174,6 +182,7 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
       date: d.expense_date,
       amountCents: toCents(d.amount),
       description: d.description,
+      fundId: d.fund_id,
     })),
     purchases: compras.rows.map((c) => ({
       id: c.id,
@@ -215,12 +224,25 @@ export async function loadFinanceInputs(db: Pool): Promise<FinanceInputs> {
       amountCents: toCents(p.amount),
       description: p.description,
     })),
+    funds: fundos.rows.map((f) => ({ id: f.id, name: f.name, active: f.active })),
+    fundRules: regrasDeFundo.rows.map((r) => ({
+      id: r.id,
+      fundId: r.fund_id,
+      pct: Number(r.pct),
+      fromMonth: r.from_month,
+      toMonth: r.to_month,
+      createdAt: new Date(r.created_at).toISOString(),
+    })),
   };
 }
 
 export function summarize(inputs: FinanceInputs, opcoes: { today?: string } = {}): FinanceSummary {
   const hoje = opcoes.today ?? todayBR();
-  const cascade = computeCascade(inputs.settings, inputs.sales, inputs.joaoPayments, inputs.expenses, inputs.receipts);
+  const cascade = computeCascade(inputs.settings, inputs.sales, inputs.joaoPayments, inputs.expenses, inputs.receipts, {
+    funds: inputs.funds,
+    rules: inputs.fundRules,
+    today: hoje,
+  });
   const fund = computeFund(cascade.totals.replenishCents, inputs.purchases, inputs.fundPayments);
   const liabilities = computeLiabilities(inputs.liabilities, inputs.liabilityPayments);
   const wholesale = computeWholesale(inputs.sales, hoje, inputs.receipts);

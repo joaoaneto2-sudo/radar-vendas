@@ -46,7 +46,7 @@ function texto(v: unknown): string | null {
 // Despesa
 
 export type ExpenseBody =
-  | { ok: true; date: string; description: string; category: string | null; amount: number; notes: string | null }
+  | { ok: true; date: string; description: string; category: string | null; amount: number; notes: string | null; fundId: number | null }
   | { ok: false; error: string; message: string };
 
 export function parseExpenseBody(body: Record<string, unknown>): ExpenseBody {
@@ -58,7 +58,16 @@ export function parseExpenseBody(body: Record<string, unknown>): ExpenseBody {
   if (amount === null || amount === "invalido" || amount <= 0) {
     return { ok: false, error: "invalid_amount", message: "Informe um valor maior que zero." };
   }
-  return { ok: true, date, description, category: texto(body.category), amount, notes: texto(body.notes) };
+  const fundoBruto = body.fund_id;
+  let fundId: number | null = null;
+  if (fundoBruto !== undefined && fundoBruto !== null && fundoBruto !== "") {
+    const n = typeof fundoBruto === "number" || typeof fundoBruto === "string" ? Number(fundoBruto) : NaN;
+    if (!Number.isInteger(n) || n <= 0) {
+      return { ok: false, error: "invalid_fund", message: "Escolha um fundo válido ou deixe em branco." };
+    }
+    fundId = n;
+  }
+  return { ok: true, date, description, category: texto(body.category), amount, notes: texto(body.notes), fundId };
 }
 
 // ---------------------------------------------------------------------------

@@ -3306,3 +3306,110 @@ a.tab-btn {
   color: var(--gold);
   font-weight: 600;
 }
+
+/* Faixa de fundos (alto do Painel financeiro) */
+.fundos-faixa {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 5px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 18px;
+}
+
+.fundos-faixa header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.fundos-faixa h2 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--accent-strong);
+}
+
+.fundos-faixa header a {
+  font-size: 0.8rem;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.fundos-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.fundo-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  color: inherit;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.fundo-cartao:hover {
+  background: var(--accent-soft);
+}
+
+.fundo-titulo {
+  font-weight: 600;
+  color: var(--accent-strong);
+  overflow-wrap: anywhere;
+}
+
+.fundo-pct {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+  margin-bottom: 4px;
+}
+
+.fundo-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.fundo-linha em {
+  font-style: normal;
+  color: var(--ink-faint);
+}
+
+.fundo-linha strong {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+}
+
+.fundo-saldo strong {
+  font-size: 0.95rem;
+}
+
+.fundo-saldo.negativo strong {
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .fundos-grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Tela Financeiro > Fundos: os cartões usam as mesmas classes da faixa do Painel */
+.fundos-grade--paginas {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.fundo-cartao--pagina:hover {
+  background: var(--surface-soft);
+}

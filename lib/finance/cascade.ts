@@ -1,4 +1,5 @@
 import { Cents, pctOf, roundDiv } from "./money";
+import { mesDe, pctDoFundo, type Fundo, type FundRule } from "./funds";
 
 // A "cascata" é a divisão do que entra na sociedade: fundo de reposição, custos,
 // despesas, Fernanda, João e o abatimento da dívida do João pelo estoque inicial.
@@ -63,6 +64,26 @@ export interface ExpenseInput {
   date: string;
   amountCents: Cents;
   description?: string | null;
+  fundId?: number | null; // fundo que paga esta despesa (o que faltar sai do lucro)
+}
+
+// Fundos do negócio (prospecção, transporte, custos fixos...): cada um separa uma % de toda entrada.
+// Sem fundos (o padrão), a cascata é idêntica à de antes.
+export interface FundsInput {
+  funds: Fundo[]; // todos, inclusive arquivados (o passado deles continua contando)
+  rules: FundRule[];
+  today: string; // AAAA-MM-DD, para saber "este mês"
+}
+
+export const SEM_FUNDOS: FundsInput = { funds: [], rules: [], today: "1970-01-01" };
+
+export interface FundAccount {
+  fundId: number;
+  enteredCents: Cents; // acumulado: tudo o que já foi separado para o fundo
+  spentCents: Cents; // já pago por ele em despesas
+  balanceCents: Cents; // entrou menos gasto
+  pctThisMonth: number;
+  enteredThisMonthCents: Cents;
 }
 
 // Dinheiro que entra fora das vendas (livro de recebimentos):
@@ -98,8 +119,10 @@ export interface CascadeEvent {
   implicit: boolean; // true: não há parcela cadastrada, contamos como recebido na data da venda
   baseCents: Cents; // o que entrou (no atacado, a comissão)
   replenishCents: Cents;
+  fundsCents: Record<number, Cents>; // quanto foi para cada fundo (por id do fundo); vazio nas despesas
   costsCents: Cents;
   expenseCents: Cents; // despesa da empresa lançada neste evento
+  fundCoveredCents: Cents; // parte da despesa paga pelo fundo escolhido
   profitCents: Cents; // base menos reposição menos custos (pode ser negativo)
   compensatedCents: Cents; // parte do lucro usada para cobrir despesas e prejuízos anteriores
   lossCarriedCents: Cents; // prejuízo desta venda que passa para os próximos lucros
@@ -129,6 +152,8 @@ export interface CascadeResult {
     wholesaleCommissionCountedCents: Cents; // comissões do atacado que já entraram na cascata
     otherIncomeCountedCents: Cents; // outras receitas (outros ramos) que já entraram na cascata
     replenishCents: Cents;
+    fundsCents: Cents; // total separado para os fundos
+    fundCoveredCents: Cents; // total de despesas pagas por fundos
     costsCents: Cents;
     expensesCents: Cents; // despesas da empresa lançadas
     profitCents: Cents; // soma dos lucros das vendas, antes das despesas
@@ -147,6 +172,7 @@ export interface CascadeResult {
     excessPaidCents: Cents; // pagou além da dívida (a Fernanda ficaria devendo ao João)
     paidFraction: number; // 0 a 1
   };
+  funds: FundAccount[]; // uma conta por fundo, na ordem em que vieram
   check: { fernandaPlusJoaoEqualsDistributable: boolean };
   warnings: Warning[];
 }
@@ -164,6 +190,7 @@ interface RawEvent {
   baseCents: Cents;
   costsCents: Cents;
   expenseCents: Cents;
+  fundId?: number | null;
 }
 
 export function computeCascade(
@@ -171,7 +198,8 @@ export function computeCascade(
   sales: SaleInput[],
   joaoPayments: JoaoPaymentInput[],
   expenses: ExpenseInput[] = [],
-  receipts: ReceiptInput[] = []
+  receipts: ReceiptInput[] = [],
+  funds: FundsInput = SEM_FUNDOS
 ): CascadeResult {
   const warnings: Warning[] = [];
   const joaoBp = Math.round(settings.joaoSharePct * 100);
@@ -305,6 +333,7 @@ export function computeCascade(
       baseCents: 0,
       costsCents: 0,
       expenseCents: despesa.amountCents,
+      fundId: despesa.fundId ?? null,
     });
   }
 
@@ -345,6 +374,10 @@ export function computeCascade(
 
   const pagamentosDoJoao = [...joaoPayments].sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
 
+  const mesDeHoje = mesDe(funds.today);
+  const contaDosFundos = new Map<number, { entrou: Cents; gasto: Cents; saldo: Cents; entrouNoMes: Cents }>();
+  for (const f of funds.funds) contaDosFundos.set(f.id, { entrou: 0, gasto: 0, saldo: 0, entrouNoMes: 0 });
+
   const events: CascadeEvent[] = [];
   let abatidoAteAgora = 0;
   let acompensar = 0; // despesas e prejuízos ainda não cobertos por lucro
@@ -361,9 +394,18 @@ export function computeCascade(
     let compensado = 0;
     let perdaLevada = 0;
     let distribuivel = 0;
+    let cobertoPeloFundo = 0;
+    const paraOsFundos: Record<number, Cents> = {};
 
     if (e.kind === "despesa") {
-      acompensar += e.expenseCents;
+      // O fundo escolhido paga primeiro, até onde tem saldo; o que faltar vai para "a compensar".
+      const conta = e.fundId != null ? contaDosFundos.get(e.fundId) : undefined;
+      if (conta) {
+        cobertoPeloFundo = Math.min(conta.saldo, e.expenseCents);
+        conta.saldo -= cobertoPeloFundo;
+        conta.gasto += cobertoPeloFundo;
+      }
+      acompensar += e.expenseCents - cobertoPeloFundo;
     } else {
       // Comissões e outras receitas usam o percentual de reposição do atacado (0% por padrão).
       const percentual =
@@ -373,7 +415,20 @@ export function computeCascade(
             ? settings.consignmentPct
             : settings.retailPct;
       reposicao = pctOf(e.baseCents, percentual);
-      lucro = e.baseCents - reposicao - e.costsCents;
+
+      // Cada fundo separa a sua % (do mês da data do evento) do valor que entrou.
+      const mesDoEvento = mesDe(e.date);
+      let somaDosFundos = 0;
+      for (const fundo of funds.funds) {
+        const parte = pctOf(e.baseCents, pctDoFundo(funds.rules, fundo.id, mesDoEvento));
+        paraOsFundos[fundo.id] = parte;
+        somaDosFundos += parte;
+        const conta = contaDosFundos.get(fundo.id)!;
+        conta.entrou += parte;
+        conta.saldo += parte;
+        if (mesDoEvento === mesDeHoje) conta.entrouNoMes += parte;
+      }
+      lucro = e.baseCents - reposicao - somaDosFundos - e.costsCents;
 
       if (lucro > 0) {
         compensado = Math.min(acompensar, lucro);
@@ -402,8 +457,10 @@ export function computeCascade(
       implicit: e.implicit,
       baseCents: e.baseCents,
       replenishCents: reposicao,
+      fundsCents: paraOsFundos,
       costsCents: e.costsCents,
       expenseCents: e.expenseCents,
+      fundCoveredCents: cobertoPeloFundo,
       profitCents: lucro,
       compensatedCents: compensado,
       lossCarriedCents: perdaLevada,
@@ -432,6 +489,8 @@ export function computeCascade(
     wholesaleCommissionCountedCents: soma((e) => e.baseCents, (e) => e.tier === "atacado"),
     otherIncomeCountedCents: soma((e) => e.baseCents, (e) => e.kind === "receita" && e.tier === null),
     replenishCents: soma((e) => e.replenishCents),
+    fundsCents: soma((e) => Object.values(e.fundsCents).reduce((total, v) => total + v, 0)),
+    fundCoveredCents: soma((e) => e.fundCoveredCents),
     costsCents: soma((e) => e.costsCents),
     expensesCents: soma((e) => e.expenseCents),
     profitCents: soma((e) => e.profitCents),
@@ -443,6 +502,18 @@ export function computeCascade(
     fernandaReceivesCents: soma((e) => e.fernandaReceivesCents),
   };
   totals.pendingCents = soldCents - totals.countedCents;
+
+  const fundAccounts: FundAccount[] = funds.funds.map((f) => {
+    const c = contaDosFundos.get(f.id)!;
+    return {
+      fundId: f.id,
+      enteredCents: c.entrou,
+      spentCents: c.gasto,
+      balanceCents: c.saldo,
+      pctThisMonth: pctDoFundo(funds.rules, f.id, mesDeHoje),
+      enteredThisMonthCents: c.entrouNoMes,
+    };
+  });
 
   const paidDirectCents = pagamentosDoJoao.reduce((total, p) => total + p.amountCents, 0);
   const quitado = paidDirectCents + totals.abatedCents;
@@ -503,6 +574,7 @@ export function computeCascade(
     events,
     totals,
     debt,
+    funds: fundAccounts,
     check: {
       fernandaPlusJoaoEqualsDistributable:
         totals.fernandaReceivesCents + totals.joaoReceivesCents === totals.distributableCents,
