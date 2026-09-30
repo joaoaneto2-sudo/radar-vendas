@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
-import { resolveStoreFields } from "@/lib/store-rules";
+import { resolveCatalogField, resolveStoreFields } from "@/lib/store-rules";
 import { MENSAGEM_CARROSSEL_CHEIO, carrosselCheio, reconciliarPeca } from "@/lib/vitrine-db";
 import { avisoDeVagasRemovidas } from "@/lib/vitrine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Liga e desliga "No site" e "Carrossel" direto na lista, sem abrir o cadastro.
-// Só mexe nos campos da loja que vieram na chamada.
+// Liga e desliga "No site", "Carrossel" e "No catálogo" direto na lista, sem abrir o cadastro.
+// Só mexe nos campos que vieram na chamada.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const db = getPool();
   if (!db) return NextResponse.json({ error: "db_not_configured" }, { status: 503 });
@@ -20,11 +20,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const entrada: Record<string, unknown> = {};
   if (Object.prototype.hasOwnProperty.call(body, "show_online")) entrada.show_online = body.show_online;
   if (Object.prototype.hasOwnProperty.call(body, "featured")) entrada.featured = body.featured;
+  const temCatalogo = Object.prototype.hasOwnProperty.call(body, "show_catalog");
 
   try {
     await ensureSchema();
     const { rows: atual } = await db.query(
-      `SELECT show_online, featured, sale_price, public_description, sale_channel, price, photo_url FROM products WHERE id = $1`,
+      `SELECT show_online, featured, sale_price, public_description, sale_channel, price, photo_url, show_catalog
+         FROM products WHERE id = $1`,
       [id]
     );
     if (atual.length === 0) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -45,10 +47,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       return NextResponse.json({ error: "carousel_full", message: MENSAGEM_CARROSSEL_CHEIO }, { status: 400 });
     }
 
+    let showCatalog: boolean = p.show_catalog;
+    if (temCatalogo) {
+      const rc = resolveCatalogField(body.show_catalog, p.show_catalog, { saleChannel: p.sale_channel });
+      if (!rc.ok) return NextResponse.json({ error: rc.error, message: rc.message }, { status: 400 });
+      showCatalog = rc.value;
+    }
+
     const { rows } = await db.query(
-      `UPDATE products SET show_online = $1, featured = $2 WHERE id = $3
-       RETURNING id, show_online, featured, sale_price, public_description`,
-      [r.value.show_online, r.value.featured, id]
+      `UPDATE products SET show_online = $1, featured = $2, show_catalog = $3 WHERE id = $4
+       RETURNING id, show_online, featured, sale_price, public_description, show_catalog`,
+      [r.value.show_online, r.value.featured, showCatalog, id]
     );
     const { removidas } = await reconciliarPeca(db, id);
     const aviso = avisoDeVagasRemovidas(removidas);

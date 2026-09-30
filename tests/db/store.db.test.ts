@@ -11,13 +11,16 @@ const disponivel = await bancoDeTesteDisponivel();
 
 // Colunas de products que o usuário da loja pode ler (pedido do João). Nada de custo, compra,
 // fornecedor ou fabricante. Se o script liberar uma coluna a mais, o teste falha.
+// show_catalog e catalog_position (migração 017) entram: a loja precisa delas para o catálogo.
+// availability e manufacturer_code NÃO entram: são internos, a loja nunca lê (sigilo do fabricante).
 const COLUNAS_LIBERADAS = {
   products: [
     "id", "name", "category", "subtype", "jewelry_type", "material", "karat", "gemstone",
     "warranty", "public_description", "price", "sale_price", "stock_qty", "featured",
     "photo_url", "created_at", "sale_channel", "active", "show_online",
+    "show_catalog", "catalog_position",
   ],
-  product_photos: ["id", "product_id", "url", "position"],
+  product_photos: ["id", "product_id", "url", "position", "kind"],
   store_settings: ["key", "value"],
   site_slots: ["area", "category", "position", "product_id", "photo_url"],
 };
@@ -140,7 +143,7 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
         await banco.pool.query(
           `UPDATE store_settings SET delivery_salvador = 15, shipping_correios = 25.5, installment_fee = 12.5, max_installments = 10`
         );
-        expect(await runMigrations(banco.pool)).toEqual(["011", "012", "013", "014", "015", "016"]);
+        expect(await runMigrations(banco.pool)).toEqual(["011", "012", "013", "014", "015", "016", "017"]);
 
         const { rows } = await banco.pool.query(`SELECT key, value FROM store_settings ORDER BY key`);
         expect(rows).toEqual([
@@ -274,6 +277,25 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
         caixa_altura_cm: "5",
         caixa_peso_g: "150",
       });
+    });
+
+    it("catálogo online (migração 017): lê show_catalog, catalog_position e product_photos.kind, mas não availability nem manufacturer_code", async () => {
+      const { rows: pub } = await admin.query(`SELECT id FROM products WHERE name = 'Peça pública'`);
+      await admin.query(
+        `UPDATE products SET show_catalog = true, catalog_position = 4, availability = 'encomenda', manufacturer_code = '023612809015' WHERE id = $1`,
+        [pub[0].id]
+      );
+      const { rows: fotos } = await admin.query(`SELECT id FROM product_photos WHERE product_id = $1 ORDER BY position LIMIT 1`, [pub[0].id]);
+      await admin.query(`UPDATE product_photos SET kind = 'limpa' WHERE id = $1`, [fotos[0].id]);
+
+      const { rows } = await loja.query(`SELECT show_catalog, catalog_position FROM products WHERE id = $1`, [pub[0].id]);
+      expect(rows[0]).toEqual({ show_catalog: true, catalog_position: 4 });
+      const { rows: foto } = await loja.query(`SELECT kind FROM product_photos WHERE id = $1`, [fotos[0].id]);
+      expect(foto[0]).toEqual({ kind: "limpa" });
+
+      // Internos: nunca liberados para a loja (sigilo do fabricante).
+      await expect(loja.query(`SELECT availability FROM products`)).rejects.toThrow(/permission denied/);
+      await expect(loja.query(`SELECT manufacturer_code FROM products`)).rejects.toThrow(/permission denied/);
     });
 
     it("roda as consultas da vitrine (só vagas de peças publicadas) e não lê o resto de site_slots", async () => {

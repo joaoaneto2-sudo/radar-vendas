@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  CATALOG_WHOLESALE_BLOCK_MESSAGE,
   WHOLESALE_BLOCK_MESSAGE,
   faltaParaPublicar,
   mensagemDeFalta,
   parseStoreSettings,
   readIntOrNull,
   readMoneyOrNull,
+  resolveCatalogField,
   resolveStoreFields,
   rowsToSettings,
   settingsToRows,
@@ -88,6 +90,31 @@ describe("peça de atacado (do fabricante)", () => {
 
   it("atacado fora do site salva normalmente", () => {
     expect(resolveStoreFields({ public_description: "x" }, FORA, { saleChannel: "atacado", price: 200, photoUrl: null })).toMatchObject({ ok: true });
+  });
+});
+
+describe("Catálogo online (show_catalog)", () => {
+  it("liga e desliga", () => {
+    expect(resolveCatalogField(true, false, { saleChannel: "varejo" })).toEqual({ ok: true, value: true });
+    expect(resolveCatalogField(false, true, { saleChannel: "varejo" })).toEqual({ ok: true, value: false });
+  });
+
+  it("sem valor mantém o que a peça já tinha", () => {
+    expect(resolveCatalogField(undefined, true, { saleChannel: "varejo" })).toEqual({ ok: true, value: true });
+    expect(resolveCatalogField(undefined, false, { saleChannel: "varejo" })).toEqual({ ok: true, value: false });
+  });
+
+  it("peça de atacado nunca entra no catálogo", () => {
+    expect(resolveCatalogField(true, false, { saleChannel: "atacado" })).toEqual({
+      ok: false,
+      error: "wholesale_not_allowed",
+      message: CATALOG_WHOLESALE_BLOCK_MESSAGE,
+    });
+  });
+
+  it("atacado pode ficar fora do catálogo normalmente (desligar sempre vale)", () => {
+    expect(resolveCatalogField(false, true, { saleChannel: "atacado" })).toEqual({ ok: true, value: false });
+    expect(resolveCatalogField(undefined, false, { saleChannel: "atacado" })).toEqual({ ok: true, value: false });
   });
 });
 

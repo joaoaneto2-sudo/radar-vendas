@@ -5,6 +5,7 @@ import { MENSAGEM_CARROSSEL_CHEIO, carrosselCheio, reconciliarPeca } from "@/lib
 import { avisoDeVagasRemovidas } from "@/lib/vitrine";
 import { lerFotosDoCorpo } from "@/lib/product-photos";
 import { gravarFotos } from "@/lib/product-photos-db";
+import { proximaPosicaoDoCatalogo } from "@/lib/catalog-db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,11 +72,25 @@ export async function POST(req: NextRequest) {
   const loja = resolveStoreFields(body, LOJA_INICIAL, { saleChannel, price, photoUrl: body.photo_url || null });
   if (!loja.ok) return NextResponse.json({ error: loja.error, message: loja.message }, { status: 400 });
 
+  // Catálogo online (migração 017). availability e manufacturer_code são internos: a loja NUNCA lê.
+  const availability = body.availability === "encomenda" ? "encomenda" : "pronta_entrega";
+  const manufacturerCode =
+    typeof body.manufacturer_code === "string" && body.manufacturer_code.trim() !== ""
+      ? body.manufacturer_code.trim()
+      : null;
+  const showCatalog = body.show_catalog === true;
+
   try {
     await ensureSchema();
     // Carrossel cheio: recusa antes de salvar a peça.
     if (loja.value.featured && (await carrosselCheio(db, 0))) {
       return NextResponse.json({ error: "carousel_full", message: MENSAGEM_CARROSSEL_CHEIO }, { status: 400 });
+    }
+    // Posição no catálogo: usa a que veio da tela, ou calcula o fim da categoria quando a peça
+    // entra marcada no catálogo sem posição explícita.
+    let catalogPosition = intOrNull(body.catalog_position);
+    if (showCatalog && catalogPosition === null && body.category) {
+      catalogPosition = await proximaPosicaoDoCatalogo(db, body.category);
     }
     const { rows } = await db.query(
       `INSERT INTO products (
@@ -83,8 +98,9 @@ export async function POST(req: NextRequest) {
         cost, price, stock_qty, warranty, photo_url, active,
         material, gemstone, age_group, gender, karat,
         purchase_date, purchase_payment_method, purchase_qty, sale_channel,
-        show_online, featured, sale_price, public_description
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+        show_online, featured, sale_price, public_description,
+        availability, manufacturer_code, show_catalog, catalog_position
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
       RETURNING *`,
       [
         body.category || null,
@@ -112,6 +128,10 @@ export async function POST(req: NextRequest) {
         loja.value.featured,
         loja.value.sale_price,
         loja.value.public_description,
+        availability,
+        manufacturerCode,
+        showCatalog,
+        catalogPosition,
       ]
     );
     await gravarFotos(db, rows[0].id, fotos.value);
@@ -119,6 +139,13 @@ export async function POST(req: NextRequest) {
     const aviso = avisoDeVagasRemovidas(removidas);
     return NextResponse.json({ item: rows[0], notes: aviso ? [aviso] : [] }, { status: 201 });
   } catch (err) {
+    const pgErr = err as { code?: string; constraint?: string };
+    if (pgErr?.code === "23505" && String(pgErr?.constraint || "").includes("manufacturer_code")) {
+      return NextResponse.json(
+        { error: "duplicate_manufacturer_code", message: "Já existe uma peça deste fabricante com este código." },
+        { status: 400 }
+      );
+    }
     console.error(err);
     return NextResponse.json({ error: "insert_failed" }, { status: 500 });
   }
