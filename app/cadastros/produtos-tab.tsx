@@ -309,8 +309,8 @@ export default function ProdutosTab() {
     if (res.ok) setItems((prev) => prev.filter((i) => i.id !== p.id));
   }
 
-  // "No site" e "Carrossel" direto na linha, sem abrir o cadastro.
-  async function toggleStore(p: Product, campo: "show_online" | "featured") {
+  // "No site", "Carrossel" e "Catálogo" direto na linha, sem abrir o cadastro.
+  async function toggleStore(p: Product, campo: "show_online" | "featured" | "show_catalog") {
     const res = await fetch(`/api/products/${p.id}/store`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -365,6 +365,9 @@ export default function ProdutosTab() {
         </a>
         <a className="btn btn-ghost" href="/importar-pecas">
           Importar peças
+        </a>
+        <a className="btn btn-ghost" href="/cadastros/catalogo">
+          Gerar catálogo (PDF)
         </a>
         <button className="btn btn-primary" onClick={openNew}>
           + Novo produto
@@ -515,6 +518,19 @@ export default function ProdutosTab() {
                         onClick={() => toggleStore(p, "featured")}
                       >
                         Carrossel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={p.sale_channel === "atacado"}
+                        title={
+                          p.sale_channel === "atacado"
+                            ? "Peça do fabricante não vai para o catálogo"
+                            : "Aparece na lista pra gerar o catálogo em PDF (varejo ou consignado)"
+                        }
+                        className={"toggle-chip" + (p.show_catalog ? " on" : "")}
+                        onClick={() => toggleStore(p, "show_catalog")}
+                      >
+                        Catálogo
                       </button>
                     </div>
                     {p.sale_channel !== "atacado" &&
