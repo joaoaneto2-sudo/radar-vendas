@@ -3,12 +3,14 @@
 import { useMemo } from "react";
 import { formatBRL, type Product } from "@/lib/format";
 import { montarQuadroDaVitrine } from "@/lib/vitrine-quadro";
+import { montarQuadroDoCatalogo } from "@/lib/catalogo-quadro";
 
 // Atalhos da loja, no alto de Produtos e cadastros: o que está no carrossel, o que está no site,
 // o que já pode entrar e, embaixo, o que precisa de atenção (esgotada ou faltando dado).
 // Os botões usam as mesmas regras da lista: o Radar continua recusando peça incompleta.
+// A coluna Catálogo é independente do site: usa suas próprias regras (migração 017).
 
-type Campo = "show_online" | "featured";
+type Campo = "show_online" | "featured" | "show_catalog";
 
 function Miniatura({ p }: { p: Product }) {
   return p.photo_url ? <img src={p.photo_url} alt="" className="qv-thumb" /> : <div className="qv-thumb qv-thumb--vazia">💎</div>;
@@ -63,7 +65,9 @@ export default function QuadroDaVitrine({
   aoEditar: (p: Product) => void;
 }) {
   const q = useMemo(() => montarQuadroDaVitrine(items), [items]);
-  const nada = q.carrossel.length + q.noSite.length + q.podemEntrar.length + q.atencao.length === 0;
+  const c = useMemo(() => montarQuadroDoCatalogo(items), [items]);
+  const nada =
+    q.carrossel.length + q.noSite.length + q.podemEntrar.length + q.atencao.length + c.noCatalogo.length + c.podemEntrar.length === 0;
   if (nada) return null;
 
   return (
@@ -119,6 +123,37 @@ export default function QuadroDaVitrine({
               </button>
               <button type="button" className="btn btn-primary btn-small" onClick={() => aoAlternar(p, "show_online")}>
                 Colocar no site
+              </button>
+            </Cartao>
+          ))}
+        </Coluna>
+
+        <Coluna titulo="No catálogo" nota="aparecem no catálogo online" vazio="Nenhuma peça no catálogo." total={c.noCatalogo.length}>
+          {c.noCatalogo.map((p) => (
+            <Cartao key={p.id} p={p}>
+              <button type="button" className="icon-btn" onClick={() => aoEditar(p)}>
+                Editar
+              </button>
+              <button type="button" className="icon-btn danger" onClick={() => aoAlternar(p, "show_catalog")}>
+                Tirar do catálogo
+              </button>
+            </Cartao>
+          ))}
+        </Coluna>
+
+        <Coluna
+          titulo="Podem entrar no catálogo"
+          nota="com foto e preço, ainda fora"
+          vazio="Nenhuma peça pronta esperando o catálogo."
+          total={c.podemEntrar.length}
+        >
+          {c.podemEntrar.map((p) => (
+            <Cartao key={p.id} p={p}>
+              <button type="button" className="icon-btn" onClick={() => aoEditar(p)}>
+                Editar
+              </button>
+              <button type="button" className="btn btn-primary btn-small" onClick={() => aoAlternar(p, "show_catalog")}>
+                Colocar no catálogo
               </button>
             </Cartao>
           ))}
