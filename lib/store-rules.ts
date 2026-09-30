@@ -45,7 +45,7 @@ export function readIntOrNull(v: unknown): number | null | "invalido" {
   return Number(texto);
 }
 
-function flag(v: unknown, atual: boolean): boolean {
+export function flag(v: unknown, atual: boolean): boolean {
   if (v === undefined) return atual;
   return v === true || v === "true" || v === 1 || v === "1";
 }
@@ -144,6 +144,31 @@ export function resolveStoreFields(
   }
 
   return { ok: true, value: { show_online: showOnline, featured, sale_price: salePrice, public_description: description }, notes };
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo online (migração 017): liga/desliga "No catálogo" peça por peça, direto na lista.
+
+export const CATALOG_WHOLESALE_BLOCK_MESSAGE = "Peça do fabricante (atacado) não entra no catálogo.";
+
+export interface CatalogContext {
+  saleChannel: string | null | undefined; // "varejo" ou "atacado"
+}
+
+export type CatalogResult =
+  | { ok: true; value: boolean }
+  | { ok: false; error: string; message: string };
+
+/**
+ * Liga ou desliga "No catálogo". Peça de atacado (do fabricante) nunca pode entrar: o banco
+ * também recusa (constraint products_catalog_not_wholesale). `input` ausente mantém o valor atual.
+ */
+export function resolveCatalogField(input: unknown, atual: boolean, ctx: CatalogContext): CatalogResult {
+  const showCatalog = flag(input, atual);
+  if (showCatalog && ctx.saleChannel === "atacado") {
+    return { ok: false, error: "wholesale_not_allowed", message: CATALOG_WHOLESALE_BLOCK_MESSAGE };
+  }
+  return { ok: true, value: showCatalog };
 }
 
 // ---------------------------------------------------------------------------
