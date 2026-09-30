@@ -54,6 +54,8 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/cadastros": ["Cadastros", "Produtos e cadastros"],
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
   "/importar-pecas": ["Cadastros", "Importar peças"],
+  "/cadastros/catalogo": ["Cadastros", "Gerar catálogo (PDF)"],
+  "/catalogo-pdf": ["Cadastros", "Catálogo para impressão"],
   "/financeiro": ["Financeiro", "Painel"],
   "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
   "/financeiro/fundo": ["Financeiro", "Fundo de reposição"],
