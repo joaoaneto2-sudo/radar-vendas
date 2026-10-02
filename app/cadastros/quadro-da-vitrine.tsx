@@ -31,7 +31,11 @@ function Cartao({
       <div className="qv-info">
         <strong title={p.name ?? undefined}>{p.name?.trim() || "(sem nome)"}</strong>
         <span className="qv-sub">
-          {p.price !== null && p.price !== undefined && p.price !== "" ? formatBRL(p.price) : "sem preço"} · estoque {p.stock_qty}
+          {p.cost !== null && p.cost !== undefined && p.cost !== "" ? `Custo ${formatBRL(p.cost)}` : "sem custo"}
+          {" · "}
+          {p.price !== null && p.price !== undefined && p.price !== "" ? `Venda ${formatBRL(p.price)}` : "sem preço"}
+          {" · estoque "}
+          {p.stock_qty}
         </span>
         {dica && <span className="qv-dica">{dica}</span>}
       </div>
