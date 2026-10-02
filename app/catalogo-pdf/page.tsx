@@ -3,7 +3,9 @@
 // Página de impressão do catálogo (varejo ou consignado): o "gerar PDF" é o próprio Ctrl+P do
 // navegador, ou o botão "Baixar PDF" que só chama window.print(). Sem biblioteca de PDF no servidor.
 // Lê a seleção feita em /cadastros/catalogo, guardada no sessionStorage (não precisa de banco aqui).
-// Layout: A4 paisagem, capa e de 1 a 10 peças por página (1 = estilo lookbook de joias; 2 a 10 = grade).
+// Layout: A4 paisagem, capa e de 1 a 10 peças por página. Cada peça é um "spread" como na referência
+// (peça isolada no rosa + foto da modelo com o nome na vertical); com 2 a 10 por página os spreads
+// ficam menores, lado a lado. A logo vira marca d'água discreta no rodapé das páginas (não na capa).
 // Nunca mostrar custo, fabricante, fornecedor ou código aqui (sigilo da loja): PecaCatalogo nem traz esses campos.
 
 import { useEffect, useState } from "react";
@@ -21,6 +23,7 @@ import {
 import s from "./catalogo-pdf.module.css";
 
 const LOJA = "Fernanda Brilhante";
+const LOGO_MARCA_DAGUA = "/marca/logo-dourado.png";
 
 const ESTILO_IMPRESSAO = `
   @page { size: A4 landscape; margin: 0; }
@@ -31,19 +34,29 @@ const ESTILO_IMPRESSAO = `
   }
 `;
 
-function PaginaDaPeca({ peca, numero, destaque, colecao }: { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: string }) {
+type Spread = { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: string; logo: boolean; mini: boolean };
+
+function MarcaDagua() {
+  return <img className={s.marcaDagua} src={LOGO_MARCA_DAGUA} alt="" />;
+}
+
+// Os dois painéis da peça. Na página de 1 peça ocupam a folha toda; na grade, cada peça ganha um
+// spread pequeno com o mesmo desenho.
+function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
   const tipo = decidirPagina(peca);
   const { fx, fy, zoom } = enquadramento(peca.catalog_photo);
   const fotoModelo = tipo === "duplo-modelo" ? peca.photo_url : peca.photo_modelo_url;
   const preco = precoDaLegenda(peca.price);
 
   return (
-    <section className={s.pagina}>
+    <>
       <div className={s.painel}>
-        <div className={s.topo}>
-          <span>{LOJA}</span>
-          <span>{String(numero).padStart(2, "0")}</span>
-        </div>
+        {!mini && (
+          <div className={s.topo}>
+            <span>{LOJA}</span>
+            <span>{String(numero).padStart(2, "0")}</span>
+          </div>
+        )}
 
         {tipo === "duplo-modelo" && peca.photo_url && (
           <div className={s.recorte}>
@@ -62,6 +75,8 @@ function PaginaDaPeca({ peca, numero, destaque, colecao }: { peca: PecaCatalogo;
           {peca.category && <p className={s.categoria}>{peca.category}</p>}
           {preco && <p className={s.preco}>{preco}</p>}
         </div>
+
+        {logo && !mini && <MarcaDagua />}
       </div>
 
       <div className={s.lado}>
@@ -74,32 +89,15 @@ function PaginaDaPeca({ peca, numero, destaque, colecao }: { peca: PecaCatalogo;
           </>
         )}
       </div>
-    </section>
+    </>
   );
 }
 
-function CelulaDaGrade({ peca, destaque, grade }: { peca: PecaCatalogo; destaque: boolean; grade: GradeDaPagina }) {
-  const { fx, fy, zoom } = enquadramento(peca.catalog_photo);
-  const modelo = decidirPagina(peca) === "duplo-modelo";
-  const preco = precoDaLegenda(peca.price);
-
+function PaginaDaPeca(props: Omit<Spread, "mini">) {
   return (
-    <div className={`${s.celula} ${grade.legenda === "lado" ? s.celulaLado : ""}`}>
-      <div className={`${s.celulaFoto} ${modelo ? s.celulaRecorte : ""}`}>
-        {peca.photo_url &&
-          (modelo ? (
-            <img src={peca.photo_url} alt="" style={{ width: `${zoom * 100}%`, transform: `translate(-${fx}%, -${fy}%)` }} />
-          ) : (
-            <img src={peca.photo_url} alt={peca.name} />
-          ))}
-      </div>
-      <div className={s.celulaLegenda}>
-        {destaque && <p className={s.destaque}>Destaque</p>}
-        <p className={s.celulaNome}>{peca.name}</p>
-        {peca.category && grade.escala > 0.8 && <p className={s.celulaCategoria}>{peca.category}</p>}
-        {preco && <p className={s.celulaPreco}>{preco}</p>}
-      </div>
-    </div>
+    <section className={s.pagina}>
+      <SpreadDaPeca {...props} mini={false} />
+    </section>
   );
 }
 
@@ -107,31 +105,41 @@ function PaginaEmGrade({
   pecas,
   numero,
   destaqueIds,
+  colecao,
+  logo,
   grade,
 }: {
   pecas: PecaCatalogo[];
   numero: number;
   destaqueIds: number[];
+  colecao: string;
+  logo: boolean;
   grade: GradeDaPagina;
 }) {
-  const estilo = {
-    "--colunas": grade.colunas,
-    "--linhas": grade.linhas,
-    "--foto": `${grade.foto}cqw`,
-    "--escala": grade.escala,
-  } as React.CSSProperties;
+  const estiloPagina = { "--colunas": grade.colunas, "--largura": `${grade.largura}cqw` } as React.CSSProperties;
+  const estiloCelula = { "--t": grade.texto } as React.CSSProperties;
 
   return (
-    <section className={`${s.pagina} ${s.paginaGrade}`} style={estilo}>
+    <section className={`${s.pagina} ${s.paginaGrade}`} style={estiloPagina}>
       <div className={`${s.topo} ${s.topoGrade}`}>
         <span>{LOJA}</span>
         <span>{String(numero).padStart(2, "0")}</span>
       </div>
       <div className={s.grade}>
         {pecas.map((p) => (
-          <CelulaDaGrade key={p.id} peca={p} destaque={destaqueIds.includes(p.id)} grade={grade} />
+          <div key={p.id} className={`${s.pagina} ${s.celulaMini}`} style={estiloCelula}>
+            <SpreadDaPeca
+              peca={p}
+              numero={numero}
+              destaque={destaqueIds.includes(p.id)}
+              colecao={colecao}
+              logo={logo}
+              mini
+            />
+          </div>
         ))}
       </div>
+      {logo && <MarcaDagua />}
     </section>
   );
 }
@@ -195,7 +203,6 @@ export default function CatalogoPdfPage() {
           className={`${s.pagina} ${s.capa}`}
           style={{ backgroundImage: `url("${capa}"), linear-gradient(135deg, #f2d6cd, #deb2a6)` }}
         >
-          {dados.logo && <img className={s.capaLogo} src="/marca/logo-banner.jpg" alt={LOJA} />}
           <h1 className={s.capaMarca}>{LOJA}</h1>
           <p className={s.capaCatalogo}>{dados.nomeCatalogo}</p>
         </section>
@@ -208,10 +215,19 @@ export default function CatalogoPdfPage() {
                 numero={i + 2}
                 destaque={i < destaques.length}
                 colecao={dados.nomeCatalogo}
+                logo={dados.logo}
               />
             ))
           : agruparPorPagina([...destaques, ...normais], porPagina).map((grupo, i) => (
-              <PaginaEmGrade key={grupo[0].id} pecas={grupo} numero={i + 2} destaqueIds={dados.destaqueIds} grade={grade} />
+              <PaginaEmGrade
+                key={grupo[0].id}
+                pecas={grupo}
+                numero={i + 2}
+                destaqueIds={dados.destaqueIds}
+                colecao={dados.nomeCatalogo}
+                logo={dados.logo}
+                grade={grade}
+              />
             ))}
       </div>
     </div>

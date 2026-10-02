@@ -23,35 +23,42 @@ export function agruparPorPagina<T>(itens: T[], porPagina: number): T[][] {
   return grupos;
 }
 
-// Colunas x linhas de cada quantidade (de 2 a 10), na página A4 paisagem (100 x 70,7 cqw).
-const GRADES: Record<number, [number, number]> = {
-  2: [2, 1], 3: [3, 1], 4: [2, 2], 5: [3, 2], 6: [3, 2], 7: [4, 2], 8: [4, 2], 9: [5, 2], 10: [5, 2],
-};
-
+// Cada peça da grade é um mini-spread com a mesma proporção da página (297 x 210). A área útil da
+// página A4 paisagem mede 90 x 57,7 (em cqw, 1cqw = 1% da largura da página).
+const ASPECTO = 297 / 210;
 const AREA_LARGURA = 90;
 const AREA_ALTURA = 57.7;
 const ESPACO = 2.5;
-const ALTURA_LEGENDA = 12;
+const NOME_NA_PAGINA_CHEIA_MM = 3.33; // 1,12cqw da página de 1 peça
 
 export type GradeDaPagina = {
   colunas: number;
   linhas: number;
-  /** 'lado' = legenda ao lado da foto (células largas); 'baixo' = legenda embaixo. */
-  legenda: "lado" | "baixo";
-  /** Lado da foto quadrada, em cqw (1cqw = 1% da largura da página). */
-  foto: number;
-  /** Fator para encolher as letras quando cabem mais peças na página. */
-  escala: number;
+  /** Largura de cada mini-spread, em cqw da página. */
+  largura: number;
+  /** Fator que amplia as letras do mini-spread para continuarem legíveis no papel (1 a 3). */
+  texto: number;
 };
 
 export function gradeDaPagina(porPagina: number): GradeDaPagina {
-  const [colunas, linhas] = GRADES[porPagina] ?? GRADES[POR_PAGINA_PADRAO];
-  const largura = (AREA_LARGURA - (colunas - 1) * ESPACO) / colunas;
-  const altura = (AREA_ALTURA - (linhas - 1) * ESPACO) / linhas;
-  const legenda = largura / altura >= 1.4 ? "lado" : "baixo";
-  const foto = legenda === "lado" ? altura : Math.min(largura, altura - ALTURA_LEGENDA);
-  const escala = porPagina <= 4 ? 1 : porPagina <= 6 ? 0.85 : 0.72;
-  return { colunas, linhas, legenda, foto: Math.round(foto * 100) / 100, escala };
+  const n = Math.min(POR_PAGINA_MAX, Math.max(1, Math.trunc(porPagina)));
+  let melhor = { colunas: 1, linhas: n, largura: 0 };
+  for (let colunas = 1; colunas <= n; colunas++) {
+    const linhas = Math.ceil(n / colunas);
+    const larguraPorColuna = (AREA_LARGURA - (colunas - 1) * ESPACO) / colunas;
+    const larguraPorLinha = ((AREA_ALTURA - (linhas - 1) * ESPACO) / linhas) * ASPECTO;
+    const largura = Math.min(larguraPorColuna, larguraPorLinha);
+    if (largura > melhor.largura + 0.01) melhor = { colunas, linhas, largura };
+  }
+  const alvoMm = n <= 4 ? 2.1 : 1.7;
+  const escala = melhor.largura / 100;
+  const texto = Math.min(3, Math.max(1, alvoMm / (NOME_NA_PAGINA_CHEIA_MM * escala)));
+  return {
+    colunas: melhor.colunas,
+    linhas: melhor.linhas,
+    largura: Math.floor(melhor.largura * 100) / 100,
+    texto: Math.round(texto * 100) / 100,
+  };
 }
 
 export type PecaDaPagina = {

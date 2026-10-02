@@ -72,13 +72,6 @@
   position: relative;
 }
 
-.capaLogo {
-  position: absolute;
-  top: 7cqw;
-  width: 13cqw;
-  border-radius: 0.5cqw;
-}
-
 .capaMarca {
   margin: 0;
   font-family: var(--serifa);
@@ -116,7 +109,7 @@
   right: 5cqw;
   display: flex;
   justify-content: space-between;
-  font-size: 0.78cqw;
+  font-size: calc(var(--t, 1) * 0.78cqw);
   letter-spacing: 0.34em;
   text-transform: uppercase;
   color: var(--suave);
@@ -164,7 +157,7 @@
 
 .destaque {
   margin: 0 0 0.9cqw;
-  font-size: 0.78cqw;
+  font-size: calc(var(--t, 1) * 0.78cqw);
   font-weight: 600;
   letter-spacing: 0.34em;
   text-transform: uppercase;
@@ -173,7 +166,7 @@
 
 .nome {
   margin: 0;
-  font-size: 1.12cqw;
+  font-size: calc(var(--t, 1) * 1.12cqw);
   font-weight: 600;
   line-height: 1.55;
   letter-spacing: 0.2em;
@@ -182,14 +175,14 @@
 
 .categoria {
   margin: 0.5cqw 0 0;
-  font-size: 0.92cqw;
+  font-size: calc(var(--t, 1) * 0.92cqw);
   letter-spacing: 0.06em;
   color: var(--suave);
 }
 
 .preco {
   margin: 1.1cqw 0 0;
-  font-size: 1.3cqw;
+  font-size: calc(var(--t, 1) * 1.3cqw);
   font-weight: 500;
   letter-spacing: 0.08em;
 }
@@ -219,7 +212,7 @@
   white-space: nowrap;
   font-family: var(--serifa);
   font-weight: 300;
-  font-size: 1.9cqw;
+  font-size: calc(var(--t, 1) * 1.9cqw);
   letter-spacing: 0.45em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.92);
@@ -231,15 +224,34 @@
 .sobreFoto {
   top: 6cqw;
   left: 2.6cqw;
-  font-size: 1.05cqw;
+  font-size: calc(var(--t, 1) * 1.05cqw);
   font-weight: 500;
   letter-spacing: 0.42em;
   transform: rotate(180deg);
   text-shadow: 0 0 1.2cqw rgba(30, 16, 12, 0.55);
 }
 
-/* Grade: de 2 a 10 peças por página. As medidas vêm de gradeDaPagina (lib/catalogo-layout.ts):
-   --colunas, --linhas, --foto (lado da foto quadrada) e --escala (tamanho das letras). */
+/* Marca d'água: a logo dourada, discreta, no rodapé de cada página (nunca na capa). O multiply faz o
+   fundo branco da imagem sumir. */
+.marcaDagua {
+  position: absolute;
+  bottom: 1.4cqw;
+  left: 50%;
+  width: 5cqw;
+  transform: translateX(-50%);
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.paginaGrade > .marcaDagua {
+  bottom: 1.3cqw;
+}
+
+/* Grade: de 2 a 10 peças por página. Cada célula é um mini-spread igual ao da página de 1 peça
+   (peça isolada no rosa + foto da modelo com o nome na vertical). As medidas vêm de
+   gradeDaPagina (lib/catalogo-layout.ts): --colunas e --largura (da célula, em cqw da página);
+   --t amplia as letras da célula para continuarem legíveis no papel. */
 
 .paginaGrade {
   display: block;
@@ -259,89 +271,62 @@
   top: 8.5cqw;
   bottom: 4.5cqw;
   display: grid;
-  grid-template-columns: repeat(var(--colunas), 1fr);
-  grid-template-rows: repeat(var(--linhas), 1fr);
+  grid-template-columns: repeat(var(--colunas), var(--largura));
+  justify-content: center;
+  align-content: center;
   gap: 2.5cqw;
 }
 
-.celula {
-  display: flex;
-  flex-direction: column;
-  gap: 1.1cqw;
-  min-width: 0;
-  min-height: 0;
+.celulaMini {
+  width: var(--largura);
+  box-shadow: 0 0.3cqw 1.2cqw rgba(74, 55, 50, 0.14);
+  break-after: auto;
 }
 
-.celulaLado {
-  flex-direction: row;
-  gap: 2cqw;
+.celulaMini .topo {
+  display: none;
 }
 
-.celulaFoto {
-  position: relative;
-  flex: none;
-  width: var(--foto);
-  height: var(--foto);
-  background: #f3dfd8;
-  isolation: isolate;
-  overflow: hidden;
-  border-radius: 0.8cqw;
+.celulaMini .peca {
+  top: 4cqw;
+  left: 4cqw;
+  width: 48cqw;
+  height: 40cqw;
 }
 
-.celulaFoto img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  mix-blend-mode: multiply;
+.celulaMini .recorte {
+  top: 5cqw;
+  left: 9cqw;
+  width: 38cqw;
+  height: 38cqw;
 }
 
-.celulaRecorte img {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: auto;
-  height: auto;
-  max-width: none;
-  mix-blend-mode: normal;
+.celulaMini .legenda {
+  left: 4.5cqw;
+  bottom: 4cqw;
+  max-width: 47cqw;
 }
 
-.celulaLegenda {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  min-width: 0;
-  flex: 1;
-}
-
-.celulaLado .celulaLegenda {
-  justify-content: flex-end;
-}
-
-.celulaNome {
-  margin: 0;
-  font-size: calc(var(--escala) * 1cqw);
-  font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+.celulaMini .nome {
+  letter-spacing: 0.1em;
+  line-height: 1.35;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
 }
 
-.celulaCategoria {
-  margin: 0.3cqw 0 0;
-  font-size: calc(var(--escala) * 0.8cqw);
-  letter-spacing: 0.05em;
-  color: var(--suave);
+.celulaMini .preco {
+  margin-top: 0.8cqw;
 }
 
-.celulaPreco {
-  margin: 0.6cqw 0 0;
-  font-size: calc(var(--escala) * 1.2cqw);
-  font-weight: 500;
-  letter-spacing: 0.06em;
+.celulaMini .vertical {
+  letter-spacing: 0.3em;
+}
+
+.celulaMini .sobreFoto {
+  top: 4cqw;
+  left: 2cqw;
 }
 
 @media print {
@@ -364,5 +349,11 @@
 
   .pagina:last-child {
     break-after: auto;
+  }
+
+  .celulaMini {
+    width: var(--largura);
+    height: auto;
+    aspect-ratio: 297 / 210;
   }
 }

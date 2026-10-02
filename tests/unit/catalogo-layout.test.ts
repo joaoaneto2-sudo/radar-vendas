@@ -67,18 +67,23 @@ describe("peças por página", () => {
     expect(agruparPorPagina([], 4)).toEqual([]);
   });
 
-  it("toda grade comporta as peças da página e a foto cabe na célula", () => {
+  it("toda grade comporta as peças, cada mini-spread cabe na área útil e as letras ficam entre 1x e 3x", () => {
     for (let n = 2; n <= 10; n++) {
       const g = gradeDaPagina(n);
+      const altura = g.largura / (297 / 210);
       expect(g.colunas * g.linhas).toBeGreaterThanOrEqual(n);
-      expect(g.foto).toBeGreaterThan(10);
-      expect(g.foto).toBeLessThanOrEqual(45);
+      expect(g.colunas * g.largura + (g.colunas - 1) * 2.5).toBeLessThanOrEqual(90.01);
+      expect(g.linhas * altura + (g.linhas - 1) * 2.5).toBeLessThanOrEqual(57.71);
+      expect(g.texto).toBeGreaterThanOrEqual(1);
+      expect(g.texto).toBeLessThanOrEqual(3);
     }
   });
 
-  it("4 por página é 2 x 2 com legenda ao lado; menos peças ficam maiores que mais peças", () => {
-    expect(gradeDaPagina(4)).toMatchObject({ colunas: 2, linhas: 2, legenda: "lado" });
-    expect(gradeDaPagina(2).foto).toBeGreaterThan(gradeDaPagina(6).foto);
-    expect(gradeDaPagina(10).escala).toBeLessThan(gradeDaPagina(2).escala);
+  it("2 por página são 2 colunas e 4 por página são 2 x 2; mais peças deixam cada spread menor e as letras maiores", () => {
+    expect(gradeDaPagina(2)).toMatchObject({ colunas: 2, linhas: 1 });
+    expect(gradeDaPagina(4)).toMatchObject({ colunas: 2, linhas: 2 });
+    expect(gradeDaPagina(2).largura).toBeGreaterThan(gradeDaPagina(6).largura);
+    expect(gradeDaPagina(6).largura).toBeGreaterThan(gradeDaPagina(10).largura);
+    expect(gradeDaPagina(10).texto).toBeGreaterThan(gradeDaPagina(2).texto);
   });
 });
