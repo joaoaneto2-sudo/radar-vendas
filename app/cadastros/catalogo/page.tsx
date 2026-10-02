@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import Combobox, { ComboboxOption } from "@/app/combobox";
 import { Product, Client, formatBRL } from "@/lib/format";
 import { NAO_INFORMADA } from "@/lib/sale-finance";
+import { CAPAS, CatalogoFoto } from "@/lib/catalogo-layout";
 
 function todayISO(): string {
   const d = new Date();
@@ -27,6 +28,8 @@ export type PecaCatalogo = {
   category: string | null;
   photo_url: string | null;
   price: number | null;
+  catalog_photo: CatalogoFoto | null;
+  photo_modelo_url?: string | null; // segunda foto, para quando existir; hoje nenhuma peça traz
 };
 
 export type CatalogoPdfDados = {
@@ -34,6 +37,7 @@ export type CatalogoPdfDados = {
   titulo: string;
   nomeCatalogo: string;
   logo: boolean;
+  capa: string;
   clienteNome: string | null;
   destaqueIds: number[];
   pecas: PecaCatalogo[];
@@ -56,6 +60,7 @@ export default function CatalogoPage() {
   const [titulo, setTitulo] = useState("");
   const [nomeCatalogo, setNomeCatalogo] = useState("Catálogo Varejo Fernanda");
   const [logo, setLogo] = useState(true);
+  const [capa, setCapa] = useState(CAPAS[0]);
   const [destaqueIds, setDestaqueIds] = useState<Set<number>>(new Set());
 
   function load() {
@@ -194,6 +199,7 @@ export default function CatalogoPage() {
       titulo: titulo.trim() || nomeCatalogo,
       nomeCatalogo: nomeCatalogo.trim() || "Catálogo",
       logo,
+      capa,
       clienteNome: tipo === "consignado" ? clienteEscolhido?.full_name || null : null,
       destaqueIds: Array.from(destaqueIds),
       pecas: pecasSelecionadas.map((p) => ({
@@ -202,6 +208,7 @@ export default function CatalogoPage() {
         category: p.category || null,
         photo_url: p.photo_url || null,
         price: p.price === null || p.price === undefined ? null : Number(p.price),
+        catalog_photo: p.catalog_photo ?? null,
       })),
     };
     try {
@@ -389,6 +396,38 @@ export default function CatalogoPage() {
                 <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} style={{ marginRight: 8 }} />
                 Mostrar o logo da Fernanda Brilhante na capa
               </label>
+            </div>
+            <div className="field field--full">
+              <label>Capa do catálogo</label>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {CAPAS.map((src, i) => (
+                  <button
+                    type="button"
+                    key={src}
+                    onClick={() => setCapa(src)}
+                    aria-label={`Capa ${i + 1}`}
+                    aria-pressed={capa === src}
+                    style={{
+                      width: 140,
+                      aspectRatio: "297 / 210",
+                      padding: 0,
+                      overflow: "hidden",
+                      cursor: "pointer",
+                      borderRadius: 8,
+                      background: "linear-gradient(135deg, #f6dcd6, #e9bfb6)",
+                      border: capa === src ? "3px solid var(--accent)" : "3px solid transparent",
+                      outline: "1px solid var(--border-strong)",
+                    }}
+                  >
+                    <img
+                      src={src}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                      onError={(e) => (e.currentTarget.style.display = "none")}
+                    />
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="field field--full">
               <label>Peças em destaque (aparecem em posição especial no PDF)</label>

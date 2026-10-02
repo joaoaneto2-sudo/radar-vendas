@@ -1,0 +1,262 @@
+/* Cada página do catálogo é um "container": todas as medidas internas usam cqw (1cqw = 1% da largura
+   da página), então o layout é o mesmo na tela, em qualquer largura, e no papel A4 paisagem. */
+
+.catalogo {
+  --rosa: #f8e9e4;
+  --rosa-escuro: #ecd3cb;
+  --tinta: #4a3732;
+  --suave: #8f7771;
+  --ouro: #a67c3d;
+  --serifa: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+  color: var(--tinta);
+  font-family: var(--sans);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 18px;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.folhas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  padding: 28px 16px 96px;
+  background: #e8e0db;
+}
+
+.pagina {
+  position: relative;
+  display: grid;
+  grid-template-columns: 56fr 44fr;
+  width: min(100%, 1123px);
+  aspect-ratio: 297 / 210;
+  container-type: size;
+  overflow: hidden;
+  background: var(--rosa);
+  box-shadow: 0 6px 30px rgba(74, 55, 50, 0.16);
+  break-after: page;
+  break-inside: avoid;
+}
+
+/* Capa */
+
+.capa {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff;
+  background-size: cover;
+  background-position: center;
+}
+
+.capa::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(40, 22, 18, 0.2), rgba(40, 22, 18, 0.34));
+}
+
+.capa > * {
+  position: relative;
+}
+
+.capaLogo {
+  position: absolute;
+  top: 7cqw;
+  width: 13cqw;
+  border-radius: 0.5cqw;
+}
+
+.capaMarca {
+  margin: 0;
+  font-family: var(--serifa);
+  font-weight: 300;
+  font-size: 4.6cqw;
+  line-height: 1.1;
+  letter-spacing: 0.42em;
+  margin-right: -0.42em;
+  text-transform: uppercase;
+  text-shadow: 0 0.2cqw 2cqw rgba(40, 22, 18, 0.35);
+}
+
+.capaCatalogo {
+  margin: 2.6cqw 0 0;
+  font-size: 1.05cqw;
+  font-weight: 500;
+  letter-spacing: 0.5em;
+  margin-right: -0.5em;
+  text-transform: uppercase;
+  text-shadow: 0 0 1.4cqw rgba(40, 22, 18, 0.55);
+}
+
+/* Página da peça */
+
+.painel {
+  position: relative;
+  background: var(--rosa);
+  isolation: isolate;
+}
+
+.topo {
+  position: absolute;
+  top: 5cqw;
+  left: 6cqw;
+  right: 5cqw;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78cqw;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--suave);
+}
+
+.peca {
+  position: absolute;
+  top: 8cqw;
+  left: 4cqw;
+  width: 48cqw;
+  height: 48cqw;
+}
+
+.peca img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+/* Recorte ampliado da foto em que a joia aparece em uma pessoa */
+.recorte {
+  position: absolute;
+  top: 10cqw;
+  left: 11cqw;
+  width: 34cqw;
+  height: 34cqw;
+  overflow: hidden;
+  border-radius: 1.4cqw;
+}
+
+.recorte img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+}
+
+.legenda {
+  position: absolute;
+  left: 6cqw;
+  bottom: 6cqw;
+  max-width: 40cqw;
+}
+
+.destaque {
+  margin: 0 0 0.9cqw;
+  font-size: 0.78cqw;
+  font-weight: 600;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--ouro);
+}
+
+.nome {
+  margin: 0;
+  font-size: 1.12cqw;
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.categoria {
+  margin: 0.5cqw 0 0;
+  font-size: 0.92cqw;
+  letter-spacing: 0.06em;
+  color: var(--suave);
+}
+
+.preco {
+  margin: 1.1cqw 0 0;
+  font-size: 1.3cqw;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+
+/* Lado direito: foto da modelo, ou painel rosa mais escuro quando só existe a foto limpa */
+
+.lado {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, var(--rosa-escuro), #e3c2b8);
+}
+
+.lado img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vertical {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-height: 58cqw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--serifa);
+  font-weight: 300;
+  font-size: 1.9cqw;
+  letter-spacing: 0.45em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  writing-mode: vertical-rl;
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+/* Sobre a foto, o nome fica pequeno na borda esquerda */
+.sobreFoto {
+  top: 6cqw;
+  left: 2.6cqw;
+  font-size: 1.05cqw;
+  font-weight: 500;
+  letter-spacing: 0.42em;
+  transform: rotate(180deg);
+  text-shadow: 0 0 1.2cqw rgba(30, 16, 12, 0.55);
+}
+
+@media print {
+  .barra {
+    display: none;
+  }
+
+  .folhas {
+    display: block;
+    padding: 0;
+    background: none;
+  }
+
+  .pagina {
+    width: 297mm;
+    height: 210mm;
+    aspect-ratio: auto;
+    box-shadow: none;
+  }
+
+  .pagina:last-child {
+    break-after: auto;
+  }
+}
