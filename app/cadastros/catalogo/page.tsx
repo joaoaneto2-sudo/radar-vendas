@@ -12,6 +12,7 @@ import Combobox, { ComboboxOption } from "@/app/combobox";
 import { Product, Client, formatBRL } from "@/lib/format";
 import { NAO_INFORMADA } from "@/lib/sale-finance";
 import { CAPAS, CatalogoFoto } from "@/lib/catalogo-layout";
+import { contarMarcacao, filtrarPecas, FiltroCatalogo, SEM_FILTRO, SituacaoMarcacao } from "@/lib/catalogo-filtro";
 
 function todayISO(): string {
   const d = new Date();
@@ -99,6 +100,41 @@ export default function CatalogoPage() {
       else novo.add(id);
       return novo;
     });
+  }
+
+  const [filtro, setFiltro] = useState<FiltroCatalogo>(SEM_FILTRO);
+  const exibidas = useMemo(() => filtrarPecas(items, filtro, selecionados), [items, filtro, selecionados]);
+  // Cada tipo mostra "marcadas/total" dentro dos outros filtros (fabricante, busca, situação).
+  const categoriasDisponiveis = useMemo(
+    () => contarMarcacao(filtrarPecas(items, filtro, selecionados, "categorias"), (p) => p.category, selecionados),
+    [items, filtro, selecionados]
+  );
+  const fabricantesDisponiveis = useMemo(
+    () => contarMarcacao(items, (p) => p.manufacturer_name, selecionados),
+    [items, selecionados]
+  );
+  const filtroAtivo =
+    filtro.categorias.length > 0 || filtro.fabricante !== "" || filtro.busca.trim() !== "" || filtro.situacao !== "todas";
+  const exibidasMarcadas = exibidas.filter((p) => selecionados.has(p.id)).length;
+
+  function alternarCategoria(nome: string) {
+    setFiltro((f) => ({
+      ...f,
+      categorias: f.categorias.includes(nome) ? f.categorias.filter((c) => c !== nome) : [...f.categorias, nome],
+    }));
+  }
+
+  function marcarExibidas() {
+    setSelecionados((prev) => new Set([...prev, ...exibidas.map((p) => p.id)]));
+  }
+
+  function desmarcarExibidas() {
+    const ids = new Set(exibidas.map((p) => p.id));
+    setSelecionados((prev) => new Set([...prev].filter((id) => !ids.has(id))));
+  }
+
+  function ficarSoComExibidas() {
+    setSelecionados(new Set(exibidas.map((p) => p.id)));
   }
 
   const pecasSelecionadas = items.filter((p) => selecionados.has(p.id));
@@ -241,14 +277,88 @@ export default function CatalogoPage() {
             </div>
           ) : (
             <>
-              <div className="toolbar" style={{ marginBottom: 12 }}>
-                <span className="hint">{selecionados.size} de {items.length} peças selecionadas</span>
-                <button className="btn btn-ghost" onClick={() => setSelecionados(new Set(items.map((i) => i.id)))}>
-                  Selecionar todas
-                </button>
-                <button className="btn btn-ghost" onClick={() => setSelecionados(new Set())}>
-                  Limpar seleção
-                </button>
+              <div className="card" style={{ marginBottom: 12 }}>
+                <div className="hint" style={{ marginBottom: 8 }}>
+                  Tipo de peça (pode escolher mais de um). O número mostra quantas estão marcadas do total.
+                </div>
+                <div className="store-toggles" style={{ marginBottom: 12 }}>
+                  {categoriasDisponiveis.map((c) => {
+                    const completo = c.total > 0 && c.marcadas === c.total;
+                    const parcial = c.marcadas > 0 && !completo;
+                    return (
+                      <button
+                        key={c.nome}
+                        type="button"
+                        className={"toggle-chip" + (filtro.categorias.includes(c.nome) ? " on" : "")}
+                        style={completo ? { borderColor: "var(--gold, #b8893a)" } : parcial ? { borderStyle: "dashed" } : undefined}
+                        title={completo ? "Todas marcadas" : parcial ? "Algumas marcadas" : "Nenhuma marcada"}
+                        onClick={() => alternarCategoria(c.nome)}
+                      >
+                        {completo ? "✓ " : ""}
+                        {c.nome} ({c.marcadas}/{c.total})
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                  <label className="field" style={{ minWidth: 200 }}>
+                    <span className="hint">Fabricante</span>
+                    <select value={filtro.fabricante} onChange={(e) => setFiltro((f) => ({ ...f, fabricante: e.target.value }))}>
+                      <option value="">Todos</option>
+                      {fabricantesDisponiveis.map((f) => (
+                        <option key={f.nome} value={f.nome}>
+                          {f.nome} ({f.marcadas}/{f.total})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field" style={{ minWidth: 180 }}>
+                    <span className="hint">Mostrar</span>
+                    <select
+                      value={filtro.situacao}
+                      onChange={(e) => setFiltro((f) => ({ ...f, situacao: e.target.value as SituacaoMarcacao }))}
+                    >
+                      <option value="todas">Todas</option>
+                      <option value="marcadas">Só as marcadas</option>
+                      <option value="desmarcadas">Só as desmarcadas</option>
+                    </select>
+                  </label>
+                  <label className="field" style={{ minWidth: 240, flex: 1 }}>
+                    <span className="hint">Buscar no nome (ex.: zircônia, pérola, ródio)</span>
+                    <input
+                      type="text"
+                      value={filtro.busca}
+                      placeholder="Digite parte do nome"
+                      onChange={(e) => setFiltro((f) => ({ ...f, busca: e.target.value }))}
+                    />
+                  </label>
+                  {filtroAtivo && (
+                    <button type="button" className="btn btn-ghost" style={{ alignSelf: "flex-end" }} onClick={() => setFiltro(SEM_FILTRO)}>
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+                <div className="toolbar" style={{ marginBottom: 0 }}>
+                  <span className="hint">
+                    {selecionados.size} de {items.length} peças selecionadas
+                    {filtroAtivo ? ` · mostrando ${exibidas.length}` : ""}
+                  </span>
+                  <button className="btn btn-ghost" onClick={marcarExibidas} disabled={exibidas.length === exibidasMarcadas}>
+                    {filtroAtivo ? `Marcar as ${exibidas.length - exibidasMarcadas} que faltam` : "Selecionar todas"}
+                  </button>
+                  <button className="btn btn-ghost" onClick={desmarcarExibidas} disabled={exibidasMarcadas === 0}>
+                    {filtroAtivo ? `Desmarcar as ${exibidasMarcadas} marcadas` : "Limpar seleção"}
+                  </button>
+                  {filtroAtivo && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={ficarSoComExibidas}
+                      disabled={exibidas.length === 0 || (exibidasMarcadas === exibidas.length && selecionados.size === exibidas.length)}
+                    >
+                      Ficar só com as {exibidas.length} mostradas
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="table-wrap tabela-cabe">
                 <table>
@@ -263,7 +373,7 @@ export default function CatalogoPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((p) => (
+                    {exibidas.map((p) => (
                       <tr key={p.id}>
                         <td>
                           <input
@@ -292,6 +402,7 @@ export default function CatalogoPage() {
                   </tbody>
                 </table>
               </div>
+              {exibidas.length === 0 && <div className="empty-state">Nenhuma peça combina com esses filtros.</div>}
               <div className="modal-actions" style={{ marginTop: 18 }}>
                 <button className="btn btn-primary" onClick={irParaTipo} disabled={selecionados.size === 0}>
                   Gerar catálogo com {selecionados.size} peça(s)
