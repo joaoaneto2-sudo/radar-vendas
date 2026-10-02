@@ -96,6 +96,8 @@ export type Product = {
   manufacturer_code?: string | null;
   show_catalog?: boolean;
   catalog_position?: number | null;
+  // Foto da peça no catálogo em PDF (migração 018). Nulo = foto limpa.
+  catalog_photo?: { kind: "limpa" | "modelo"; fx: number; fy: number; zoom: number } | null;
 };
 
 export type Manufacturer = {
