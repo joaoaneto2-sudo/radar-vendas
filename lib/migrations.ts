@@ -733,6 +733,20 @@ export const MIGRATIONS: Migration[] = [
       `CREATE TRIGGER products_log_delete AFTER DELETE ON products FOR EACH ROW EXECUTE FUNCTION log_change()`,
     ],
   },
+  {
+    id: "018",
+    name: "catalogo em PDF: tipo e enquadramento da foto de cada peca",
+    statements: [
+      // {"kind":"limpa"|"modelo","fx":0-100,"fy":0-100,"zoom":1-3}. Nulo = foto limpa.
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS catalog_photo JSONB`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_catalog_photo_kind_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_catalog_photo_kind_check
+             CHECK (catalog_photo IS NULL OR COALESCE(catalog_photo->>'kind', '') IN ('limpa', 'modelo'));
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

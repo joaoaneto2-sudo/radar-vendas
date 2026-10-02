@@ -442,4 +442,26 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
       expect(log).toEqual([{ table_name: "products", op: "DELETE" }]);
     });
   });
+
+  describe("foto do catálogo em PDF (migração 018)", () => {
+    it("peça nova nasce com catalog_photo nulo (tratada como foto limpa)", async () => {
+      const pool = await bancoPronto();
+      await pool.query(`INSERT INTO products (name, price) VALUES ('Sem classificação', 100)`);
+      const { rows } = await pool.query(`SELECT catalog_photo FROM products WHERE name = 'Sem classificação'`);
+      expect(rows[0].catalog_photo).toBeNull();
+    });
+
+    it("catalog_photo só aceita tipo limpa ou modelo (ou nulo)", async () => {
+      const pool = await bancoPronto();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, catalog_photo) VALUES ('Ruim', 100, '{"kind":"outra","fx":50,"fy":50,"zoom":1}')`)
+      ).rejects.toThrow();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, catalog_photo) VALUES ('Sem tipo', 100, '{"fx":50}')`)
+      ).rejects.toThrow();
+      await expect(
+        pool.query(`INSERT INTO products (name, price, catalog_photo) VALUES ('Modelo', 100, '{"kind":"modelo","fx":40,"fy":60,"zoom":2}')`)
+      ).resolves.toBeDefined();
+    });
+  });
 });
