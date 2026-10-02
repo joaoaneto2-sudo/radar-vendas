@@ -3,12 +3,21 @@
 // Página de impressão do catálogo (varejo ou consignado): o "gerar PDF" é o próprio Ctrl+P do
 // navegador, ou o botão "Baixar PDF" que só chama window.print(). Sem biblioteca de PDF no servidor.
 // Lê a seleção feita em /cadastros/catalogo, guardada no sessionStorage (não precisa de banco aqui).
-// Layout: A4 paisagem, capa e uma peça por página (inspirado em lookbook de joias).
+// Layout: A4 paisagem, capa e de 1 a 10 peças por página (1 = estilo lookbook de joias; 2 a 10 = grade).
 // Nunca mostrar custo, fabricante, fornecedor ou código aqui (sigilo da loja): PecaCatalogo nem traz esses campos.
 
 import { useEffect, useState } from "react";
 import type { CatalogoPdfDados, PecaCatalogo } from "@/app/cadastros/catalogo/page";
-import { CAPAS, decidirPagina, enquadramento, precoDaLegenda } from "@/lib/catalogo-layout";
+import {
+  agruparPorPagina,
+  CAPAS,
+  decidirPagina,
+  enquadramento,
+  gradeDaPagina,
+  porPaginaValido,
+  precoDaLegenda,
+  type GradeDaPagina,
+} from "@/lib/catalogo-layout";
 import s from "./catalogo-pdf.module.css";
 
 const LOJA = "Fernanda Brilhante";
@@ -69,6 +78,64 @@ function PaginaDaPeca({ peca, numero, destaque, colecao }: { peca: PecaCatalogo;
   );
 }
 
+function CelulaDaGrade({ peca, destaque, grade }: { peca: PecaCatalogo; destaque: boolean; grade: GradeDaPagina }) {
+  const { fx, fy, zoom } = enquadramento(peca.catalog_photo);
+  const modelo = decidirPagina(peca) === "duplo-modelo";
+  const preco = precoDaLegenda(peca.price);
+
+  return (
+    <div className={`${s.celula} ${grade.legenda === "lado" ? s.celulaLado : ""}`}>
+      <div className={`${s.celulaFoto} ${modelo ? s.celulaRecorte : ""}`}>
+        {peca.photo_url &&
+          (modelo ? (
+            <img src={peca.photo_url} alt="" style={{ width: `${zoom * 100}%`, transform: `translate(-${fx}%, -${fy}%)` }} />
+          ) : (
+            <img src={peca.photo_url} alt={peca.name} />
+          ))}
+      </div>
+      <div className={s.celulaLegenda}>
+        {destaque && <p className={s.destaque}>Destaque</p>}
+        <p className={s.celulaNome}>{peca.name}</p>
+        {peca.category && grade.escala > 0.8 && <p className={s.celulaCategoria}>{peca.category}</p>}
+        {preco && <p className={s.celulaPreco}>{preco}</p>}
+      </div>
+    </div>
+  );
+}
+
+function PaginaEmGrade({
+  pecas,
+  numero,
+  destaqueIds,
+  grade,
+}: {
+  pecas: PecaCatalogo[];
+  numero: number;
+  destaqueIds: number[];
+  grade: GradeDaPagina;
+}) {
+  const estilo = {
+    "--colunas": grade.colunas,
+    "--linhas": grade.linhas,
+    "--foto": `${grade.foto}cqw`,
+    "--escala": grade.escala,
+  } as React.CSSProperties;
+
+  return (
+    <section className={`${s.pagina} ${s.paginaGrade}`} style={estilo}>
+      <div className={`${s.topo} ${s.topoGrade}`}>
+        <span>{LOJA}</span>
+        <span>{String(numero).padStart(2, "0")}</span>
+      </div>
+      <div className={s.grade}>
+        {pecas.map((p) => (
+          <CelulaDaGrade key={p.id} peca={p} destaque={destaqueIds.includes(p.id)} grade={grade} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function CatalogoPdfPage() {
   const [dados, setDados] = useState<CatalogoPdfDados | null | "vazio">(null);
 
@@ -99,6 +166,8 @@ export default function CatalogoPdfPage() {
   const destaques = dados.pecas.filter((p) => dados.destaqueIds.includes(p.id));
   const normais = dados.pecas.filter((p) => !dados.destaqueIds.includes(p.id));
   const capa = dados.capa || CAPAS[0];
+  const porPagina = porPaginaValido(dados.porPagina);
+  const grade = gradeDaPagina(porPagina);
 
   return (
     <div className={s.catalogo}>
@@ -131,15 +200,19 @@ export default function CatalogoPdfPage() {
           <p className={s.capaCatalogo}>{dados.nomeCatalogo}</p>
         </section>
 
-        {[...destaques, ...normais].map((p, i) => (
-          <PaginaDaPeca
-            key={p.id}
-            peca={p}
-            numero={i + 2}
-            destaque={i < destaques.length}
-            colecao={dados.nomeCatalogo}
-          />
-        ))}
+        {porPagina === 1
+          ? [...destaques, ...normais].map((p, i) => (
+              <PaginaDaPeca
+                key={p.id}
+                peca={p}
+                numero={i + 2}
+                destaque={i < destaques.length}
+                colecao={dados.nomeCatalogo}
+              />
+            ))
+          : agruparPorPagina([...destaques, ...normais], porPagina).map((grupo, i) => (
+              <PaginaEmGrade key={grupo[0].id} pecas={grupo} numero={i + 2} destaqueIds={dados.destaqueIds} grade={grade} />
+            ))}
       </div>
     </div>
   );

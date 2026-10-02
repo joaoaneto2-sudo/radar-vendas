@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPAS, decidirPagina, enquadramento, precoDaLegenda } from "../../lib/catalogo-layout";
+import { agruparPorPagina, CAPAS, decidirPagina, enquadramento, gradeDaPagina, porPaginaValido, precoDaLegenda } from "../../lib/catalogo-layout";
 
 describe("decidirPagina", () => {
   it("sem classificação, trata como foto limpa", () => {
@@ -53,5 +53,32 @@ describe("precoDaLegenda", () => {
 describe("CAPAS", () => {
   it("tem as três capas na ordem", () => {
     expect(CAPAS).toEqual(["/catalogo/capas/capa-1.jpg", "/catalogo/capas/capa-2.jpg", "/catalogo/capas/capa-3.jpg"]);
+  });
+});
+
+describe("peças por página", () => {
+  it("aceita de 1 a 10 e volta ao padrão (4) para qualquer outra coisa", () => {
+    for (let n = 1; n <= 10; n++) expect(porPaginaValido(n)).toBe(n);
+    for (const ruim of [0, 11, -1, 2.5, "4", null, undefined]) expect(porPaginaValido(ruim)).toBe(4);
+  });
+
+  it("agrupa em páginas, a última pode ficar com menos", () => {
+    expect(agruparPorPagina([1, 2, 3, 4, 5, 6, 7], 3)).toEqual([[1, 2, 3], [4, 5, 6], [7]]);
+    expect(agruparPorPagina([], 4)).toEqual([]);
+  });
+
+  it("toda grade comporta as peças da página e a foto cabe na célula", () => {
+    for (let n = 2; n <= 10; n++) {
+      const g = gradeDaPagina(n);
+      expect(g.colunas * g.linhas).toBeGreaterThanOrEqual(n);
+      expect(g.foto).toBeGreaterThan(10);
+      expect(g.foto).toBeLessThanOrEqual(45);
+    }
+  });
+
+  it("4 por página é 2 x 2 com legenda ao lado; menos peças ficam maiores que mais peças", () => {
+    expect(gradeDaPagina(4)).toMatchObject({ colunas: 2, linhas: 2, legenda: "lado" });
+    expect(gradeDaPagina(2).foto).toBeGreaterThan(gradeDaPagina(6).foto);
+    expect(gradeDaPagina(10).escala).toBeLessThan(gradeDaPagina(2).escala);
   });
 });

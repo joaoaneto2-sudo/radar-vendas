@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import Combobox, { ComboboxOption } from "@/app/combobox";
 import { Product, Client, formatBRL } from "@/lib/format";
 import { NAO_INFORMADA } from "@/lib/sale-finance";
-import { CAPAS, CatalogoFoto } from "@/lib/catalogo-layout";
+import { CAPAS, CatalogoFoto, POR_PAGINA_MAX, POR_PAGINA_PADRAO } from "@/lib/catalogo-layout";
 import { contarMarcacao, filtrarPecas, FiltroCatalogo, SEM_FILTRO, SituacaoMarcacao } from "@/lib/catalogo-filtro";
 
 function todayISO(): string {
@@ -39,6 +39,7 @@ export type CatalogoPdfDados = {
   nomeCatalogo: string;
   logo: boolean;
   capa: string;
+  porPagina: number;
   clienteNome: string | null;
   destaqueIds: number[];
   pecas: PecaCatalogo[];
@@ -62,6 +63,7 @@ export default function CatalogoPage() {
   const [nomeCatalogo, setNomeCatalogo] = useState("Catálogo Varejo Fernanda");
   const [logo, setLogo] = useState(true);
   const [capa, setCapa] = useState(CAPAS[0]);
+  const [porPagina, setPorPagina] = useState(POR_PAGINA_PADRAO);
   const [destaqueIds, setDestaqueIds] = useState<Set<number>>(new Set());
 
   function load() {
@@ -236,6 +238,7 @@ export default function CatalogoPage() {
       nomeCatalogo: nomeCatalogo.trim() || "Catálogo",
       logo,
       capa,
+      porPagina,
       clienteNome: tipo === "consignado" ? clienteEscolhido?.full_name || null : null,
       destaqueIds: Array.from(destaqueIds),
       pecas: pecasSelecionadas.map((p) => ({
@@ -507,6 +510,27 @@ export default function CatalogoPage() {
                 <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} style={{ marginRight: 8 }} />
                 Mostrar o logo da Fernanda Brilhante na capa
               </label>
+            </div>
+            <div className="field field--full">
+              <label>Peças por página</label>
+              <div className="radio-row">
+                {Array.from({ length: POR_PAGINA_MAX }, (_, i) => i + 1).map((n) => (
+                  <button
+                    type="button"
+                    key={n}
+                    className={"radio-chip" + (porPagina === n ? " selected" : "")}
+                    aria-pressed={porPagina === n}
+                    onClick={() => setPorPagina(n)}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="hint">
+                {porPagina === 1
+                  ? "Uma peça grande por página, no estilo revista."
+                  : `${porPagina} peças por página, em grade. Menos peças por página deixa cada foto maior.`}
+              </div>
             </div>
             <div className="field field--full">
               <label>Capa do catálogo</label>

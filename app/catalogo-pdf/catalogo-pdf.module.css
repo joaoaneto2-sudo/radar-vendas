@@ -238,6 +238,112 @@
   text-shadow: 0 0 1.2cqw rgba(30, 16, 12, 0.55);
 }
 
+/* Grade: de 2 a 10 peças por página. As medidas vêm de gradeDaPagina (lib/catalogo-layout.ts):
+   --colunas, --linhas, --foto (lado da foto quadrada) e --escala (tamanho das letras). */
+
+.paginaGrade {
+  display: block;
+  background: #fdf7f4;
+}
+
+.topoGrade {
+  top: 3.4cqw;
+  left: 5cqw;
+  right: 5cqw;
+}
+
+.grade {
+  position: absolute;
+  left: 5cqw;
+  right: 5cqw;
+  top: 8.5cqw;
+  bottom: 4.5cqw;
+  display: grid;
+  grid-template-columns: repeat(var(--colunas), 1fr);
+  grid-template-rows: repeat(var(--linhas), 1fr);
+  gap: 2.5cqw;
+}
+
+.celula {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1cqw;
+  min-width: 0;
+  min-height: 0;
+}
+
+.celulaLado {
+  flex-direction: row;
+  gap: 2cqw;
+}
+
+.celulaFoto {
+  position: relative;
+  flex: none;
+  width: var(--foto);
+  height: var(--foto);
+  background: #f3dfd8;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 0.8cqw;
+}
+
+.celulaFoto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.celulaRecorte img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: auto;
+  height: auto;
+  max-width: none;
+  mix-blend-mode: normal;
+}
+
+.celulaLegenda {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+
+.celulaLado .celulaLegenda {
+  justify-content: flex-end;
+}
+
+.celulaNome {
+  margin: 0;
+  font-size: calc(var(--escala) * 1cqw);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.celulaCategoria {
+  margin: 0.3cqw 0 0;
+  font-size: calc(var(--escala) * 0.8cqw);
+  letter-spacing: 0.05em;
+  color: var(--suave);
+}
+
+.celulaPreco {
+  margin: 0.6cqw 0 0;
+  font-size: calc(var(--escala) * 1.2cqw);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
 @media print {
   .barra {
     display: none;
