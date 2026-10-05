@@ -12,7 +12,9 @@ export const dynamic = "force-dynamic";
 
 const SELECT = `
   SELECT p.*, m.name AS manufacturer_name, s.name AS supplier_name,
-         (SELECT count(*)::int FROM product_photos pp WHERE pp.product_id = p.id) AS extra_photos
+         (SELECT count(*)::int FROM product_photos pp WHERE pp.product_id = p.id) AS extra_photos,
+         (SELECT pp.url FROM product_photos pp WHERE pp.product_id = p.id AND pp.kind = 'modelo'
+           ORDER BY pp.position, pp.id LIMIT 1) AS modelo_photo_url
   FROM products p
   LEFT JOIN manufacturers m ON m.id = p.manufacturer_id
   LEFT JOIN suppliers s ON s.id = p.supplier_id

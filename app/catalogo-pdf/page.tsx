@@ -5,7 +5,7 @@
 // Lê a seleção feita em /cadastros/catalogo, guardada no sessionStorage (não precisa de banco aqui).
 // Layout: A4 paisagem, capa e de 1 a 10 peças por página. Cada peça é um "spread" como na referência
 // (peça isolada no rosa + foto da modelo com o nome na vertical); com 2 a 10 por página os spreads
-// ficam menores, lado a lado. A logo vira marca d'água discreta no rodapé das páginas (não na capa).
+// ficam menores, lado a lado. A capa leva a logo completa; as páginas, a logo como marca d'água discreta no rodapé.
 // Nunca mostrar custo, fabricante, fornecedor ou código aqui (sigilo da loja): PecaCatalogo nem traz esses campos.
 
 import { useEffect, useState } from "react";
@@ -23,7 +23,8 @@ import {
 import s from "./catalogo-pdf.module.css";
 
 const LOJA = "Fernanda Brilhante";
-const LOGO_MARCA_DAGUA = "/marca/logo-dourado.png";
+const LOGO_MARCA_DAGUA = "/marca/logo-escura.png";
+const LOGO_CAPA = "/marca/logo-clara.png";
 
 const ESTILO_IMPRESSAO = `
   @page { size: A4 landscape; margin: 0; }
@@ -63,8 +64,13 @@ function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
             <img src={peca.photo_url} alt="" style={{ width: `${zoom * 100}%`, transform: `translate(-${fx}%, -${fy}%)` }} />
           </div>
         )}
-        {tipo !== "duplo-modelo" && peca.photo_url && (
+        {tipo === "limpa-unica" && peca.photo_url && (
           <div className={s.peca}>
+            <img src={peca.photo_url} alt={peca.name} />
+          </div>
+        )}
+        {tipo === "duplo-limpa" && peca.photo_url && (
+          <div className={s.fotoClose}>
             <img src={peca.photo_url} alt={peca.name} />
           </div>
         )}
@@ -203,7 +209,9 @@ export default function CatalogoPdfPage() {
           className={`${s.pagina} ${s.capa}`}
           style={{ backgroundImage: `url("${capa}"), linear-gradient(135deg, #f2d6cd, #deb2a6)` }}
         >
-          <h1 className={s.capaMarca}>{LOJA}</h1>
+          <h1 className={s.capaMarca}>
+            <img className={s.capaLogo} src={LOGO_CAPA} alt={LOJA} />
+          </h1>
           <p className={s.capaCatalogo}>{dados.nomeCatalogo}</p>
         </section>
 

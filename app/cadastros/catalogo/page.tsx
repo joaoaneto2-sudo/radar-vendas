@@ -30,7 +30,7 @@ export type PecaCatalogo = {
   photo_url: string | null;
   price: number | null;
   catalog_photo: CatalogoFoto | null;
-  photo_modelo_url?: string | null; // segunda foto, para quando existir; hoje nenhuma peça traz
+  photo_modelo_url?: string | null; // foto da modelo; quando existe, a foto principal vira o "close" à esquerda
 };
 
 export type CatalogoPdfDados = {
@@ -248,6 +248,7 @@ export default function CatalogoPage() {
         photo_url: p.photo_url || null,
         price: p.price === null || p.price === undefined ? null : Number(p.price),
         catalog_photo: p.catalog_photo ?? null,
+        photo_modelo_url: p.modelo_photo_url ?? null,
       })),
     };
     try {
