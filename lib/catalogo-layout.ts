@@ -10,7 +10,7 @@ export type TipoPagina = "duplo-limpa" | "limpa-unica" | "duplo-modelo";
 export const CAPAS = ["/catalogo/capas/capa-1.jpg", "/catalogo/capas/capa-2.jpg", "/catalogo/capas/capa-3.jpg"];
 
 export const POR_PAGINA_MAX = 10;
-export const POR_PAGINA_PADRAO = 4;
+export const POR_PAGINA_PADRAO = 1;
 
 /** Aceita só inteiros de 1 a 10 (qualquer outra coisa, inclusive seleção antiga sem o campo, vira o padrão). */
 export function porPaginaValido(valor: unknown): number {

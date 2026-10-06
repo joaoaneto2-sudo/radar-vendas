@@ -57,9 +57,9 @@ describe("CAPAS", () => {
 });
 
 describe("peças por página", () => {
-  it("aceita de 1 a 10 e volta ao padrão (4) para qualquer outra coisa", () => {
+  it("aceita de 1 a 10 e volta ao padrão (1) para qualquer outra coisa", () => {
     for (let n = 1; n <= 10; n++) expect(porPaginaValido(n)).toBe(n);
-    for (const ruim of [0, 11, -1, 2.5, "4", null, undefined]) expect(porPaginaValido(ruim)).toBe(4);
+    for (const ruim of [0, 11, -1, 2.5, "4", null, undefined]) expect(porPaginaValido(ruim)).toBe(1);
   });
 
   it("agrupa em páginas, a última pode ficar com menos", () => {
