@@ -80,8 +80,8 @@
 
 .capaLogo {
   display: block;
-  width: 30cqw;
-  filter: drop-shadow(0 0.2cqw 1.4cqw rgba(30, 16, 12, 0.55));
+  width: 34cqw;
+  filter: brightness(0) invert(1) drop-shadow(0 0.2cqw 1.6cqw rgba(30, 16, 12, 0.7));
 }
 
 .capaCatalogo {
@@ -133,20 +133,48 @@
 /* Close da peça (quando existe a foto da modelo): a foto inteira em moldura, sem cortar */
 .fotoClose {
   position: absolute;
-  top: 8cqw;
-  left: 4cqw;
-  width: 48cqw;
-  height: 43cqw;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: 8.5cqw;
+  left: 6cqw;
+  width: 44cqw;
+  height: 40cqw;
+  overflow: hidden;
+  border-radius: 1.4cqw;
+  background: #e9d4cb;
+  box-shadow: 0 1cqw 3cqw rgba(74, 55, 50, 0.38), 0 0.2cqw 0.8cqw rgba(74, 55, 50, 0.25);
 }
 
-.fotoClose img {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: 1cqw;
-  box-shadow: 0 0.4cqw 1.8cqw rgba(74, 55, 50, 0.22);
+/* Mesma foto, ampliada e desfocada, só para preencher a caixa quando a foto é mais larga ou mais alta */
+.fotoFundo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.5);
+  filter: blur(3.4cqw) saturate(0.9) brightness(1.08);
+}
+
+.fotoFrente {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent),
+    linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(to right, transparent, #000 5%, #000 95%, transparent),
+    linear-gradient(to bottom, transparent, #000 5%, #000 95%, transparent);
+  mask-composite: intersect;
+}
+
+.fotoLarga {
+  width: 100%;
+  height: auto;
+}
+
+.fotoAlta {
+  width: auto;
+  height: 100%;
 }
 
 /* Recorte ampliado da foto em que a joia aparece em uma pessoa */
@@ -176,7 +204,7 @@
 
 .destaque {
   margin: 0 0 0.9cqw;
-  font-size: calc(var(--t, 1) * 0.78cqw);
+  font-size: calc(var(--t, 1) * 1cqw);
   font-weight: 600;
   letter-spacing: 0.34em;
   text-transform: uppercase;
@@ -185,7 +213,7 @@
 
 .nome {
   margin: 0;
-  font-size: calc(var(--t, 1) * 1.12cqw);
+  font-size: calc(var(--t, 1) * 1.5cqw);
   font-weight: 600;
   line-height: 1.55;
   letter-spacing: 0.2em;
@@ -194,14 +222,14 @@
 
 .categoria {
   margin: 0.5cqw 0 0;
-  font-size: calc(var(--t, 1) * 0.92cqw);
+  font-size: calc(var(--t, 1) * 1.2cqw);
   letter-spacing: 0.06em;
   color: var(--suave);
 }
 
 .preco {
   margin: 1.1cqw 0 0;
-  font-size: calc(var(--t, 1) * 1.3cqw);
+  font-size: calc(var(--t, 1) * 1.75cqw);
   font-weight: 500;
   letter-spacing: 0.08em;
 }
@@ -254,11 +282,12 @@
    fundo branco da imagem sumir. */
 .marcaDagua {
   position: absolute;
-  bottom: 2cqw;
+  bottom: 1.6cqw;
   left: 50%;
-  width: 11cqw;
+  width: 13cqw;
   transform: translateX(-50%);
-  opacity: 0.5;
+  opacity: 0.92;
+  filter: brightness(0.5) contrast(1.3);
   mix-blend-mode: multiply;
   pointer-events: none;
 }
@@ -315,9 +344,9 @@
 
 .celulaMini .fotoClose {
   top: 4cqw;
-  left: 4cqw;
-  width: 48cqw;
-  height: 40cqw;
+  left: 4.5cqw;
+  width: 47cqw;
+  height: 38cqw;
 }
 
 .celulaMini .recorte {

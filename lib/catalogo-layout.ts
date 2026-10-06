@@ -29,7 +29,7 @@ const ASPECTO = 297 / 210;
 const AREA_LARGURA = 90;
 const AREA_ALTURA = 57.7;
 const ESPACO = 2.5;
-const NOME_NA_PAGINA_CHEIA_MM = 3.33; // 1,12cqw da página de 1 peça
+const NOME_NA_PAGINA_CHEIA_MM = 4.46; // 1,5cqw da página de 1 peça
 
 export type GradeDaPagina = {
   colunas: number;
@@ -50,7 +50,7 @@ export function gradeDaPagina(porPagina: number): GradeDaPagina {
     const largura = Math.min(larguraPorColuna, larguraPorLinha);
     if (largura > melhor.largura + 0.01) melhor = { colunas, linhas, largura };
   }
-  const alvoMm = n <= 4 ? 2.1 : 1.7;
+  const alvoMm = n <= 4 ? 2.6 : 2;
   const escala = melhor.largura / 100;
   const texto = Math.min(3, Math.max(1, alvoMm / (NOME_NA_PAGINA_CHEIA_MM * escala)));
   return {

@@ -37,6 +37,23 @@ const ESTILO_IMPRESSAO = `
 
 type Spread = { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: string; logo: boolean; mini: boolean };
 
+// Caixa de tamanho fixo igual para todas as peças. A foto aparece inteira, com as bordas suaves, sobre
+// uma cópia ampliada e desfocada dela mesma que preenche o que sobrar (foto mais larga ou mais alta).
+function FotoClose({ url, nome }: { url: string; nome: string }) {
+  const [larga, setLarga] = useState(false);
+  return (
+    <div className={s.fotoClose}>
+      <img className={s.fotoFundo} src={url} alt="" aria-hidden="true" />
+      <img
+        className={`${s.fotoFrente} ${larga ? s.fotoLarga : s.fotoAlta}`}
+        src={url}
+        alt={nome}
+        onLoad={(e) => setLarga(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight > 1.1)}
+      />
+    </div>
+  );
+}
+
 function MarcaDagua() {
   return <img className={s.marcaDagua} src={LOGO_MARCA_DAGUA} alt="" />;
 }
@@ -70,9 +87,7 @@ function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
           </div>
         )}
         {tipo === "duplo-limpa" && peca.photo_url && (
-          <div className={s.fotoClose}>
-            <img src={peca.photo_url} alt={peca.name} />
-          </div>
+          <FotoClose url={peca.photo_url} nome={peca.name} />
         )}
 
         <div className={s.legenda}>
