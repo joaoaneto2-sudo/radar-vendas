@@ -8,12 +8,13 @@
 // ficam menores, lado a lado. A capa leva a logo completa; as páginas, a logo como marca d'água discreta no rodapé.
 // Nunca mostrar custo, fabricante, fornecedor ou código aqui (sigilo da loja): PecaCatalogo nem traz esses campos.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CatalogoPdfDados, PecaCatalogo } from "@/app/cadastros/catalogo/page";
 import {
   agruparPorPagina,
   CAPAS,
   decidirPagina,
+  desenhoDaPagina,
   enquadramento,
   gradeDaPagina,
   porPaginaValido,
@@ -41,14 +42,19 @@ type Spread = { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: 
 // uma cópia ampliada e desfocada dela mesma que preenche o que sobrar (foto mais larga ou mais alta).
 function FotoClose({ url, nome }: { url: string; nome: string }) {
   const [larga, setLarga] = useState(false);
+  const caixa = useRef<HTMLDivElement>(null);
   return (
-    <div className={s.fotoClose}>
+    <div className={s.fotoClose} ref={caixa}>
       <img className={s.fotoFundo} src={url} alt="" aria-hidden="true" />
       <img
         className={`${s.fotoFrente} ${larga ? s.fotoLarga : s.fotoAlta}`}
         src={url}
         alt={nome}
-        onLoad={(e) => setLarga(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight > 1.1)}
+        onLoad={(e) => {
+          const c = caixa.current?.getBoundingClientRect();
+          const proporcaoCaixa = c && c.height > 0 ? c.width / c.height : 1.1;
+          setLarga(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight > proporcaoCaixa);
+        }}
       />
     </div>
   );
@@ -114,9 +120,12 @@ function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
   );
 }
 
-function PaginaDaPeca(props: Omit<Spread, "mini">) {
+function PaginaDaPeca({ desenho, ...props }: Omit<Spread, "mini"> & { desenho: number }) {
+  // O desenho 4 (moldura sobre a foto da modelo) deixa a página vazia quando a peça não tem foto da modelo.
+  const desenhoFinal = desenho === 4 && decidirPagina(props.peca) === "limpa-unica" ? 2 : desenho;
+  const classeDoDesenho = desenhoFinal > 0 ? s[`v${desenhoFinal}`] : "";
   return (
-    <section className={s.pagina}>
+    <section className={`${s.pagina} ${classeDoDesenho}`}>
       <SpreadDaPeca {...props} mini={false} />
     </section>
   );
@@ -239,6 +248,7 @@ export default function CatalogoPdfPage() {
                 destaque={i < destaques.length}
                 colecao={dados.nomeCatalogo}
                 logo={dados.logo}
+                desenho={desenhoDaPagina(i, dados.variar !== false)}
               />
             ))
           : agruparPorPagina([...destaques, ...normais], porPagina).map((grupo, i) => (

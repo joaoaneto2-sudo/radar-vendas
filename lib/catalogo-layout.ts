@@ -61,6 +61,16 @@ export function gradeDaPagina(porPagina: number): GradeDaPagina {
   };
 }
 
+// Desenhos diferentes para a página de 1 peça (moldura quadrada, arco, círculo, espelhada, pílula e uma
+// que atravessa a foto da modelo). Sem variar, todas as páginas usam o desenho 0.
+export const DESENHOS_DA_PAGINA = 6;
+const ORDEM_DOS_DESENHOS = [0, 2, 3, 1, 5, 4];
+
+export function desenhoDaPagina(indice: number, variar: boolean): number {
+  if (!variar) return 0;
+  return ORDEM_DOS_DESENHOS[((Math.trunc(indice) % DESENHOS_DA_PAGINA) + DESENHOS_DA_PAGINA) % DESENHOS_DA_PAGINA];
+}
+
 export type PecaDaPagina = {
   catalog_photo?: CatalogoFoto | null;
   // Segunda foto (da modelo) para quando a peça tiver as duas; hoje nenhuma peça traz.

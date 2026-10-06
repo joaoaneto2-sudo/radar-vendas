@@ -278,6 +278,116 @@
   text-shadow: 0 0 1.2cqw rgba(30, 16, 12, 0.55);
 }
 
+/* Desenhos da página de 1 peça (classe vN na folha); o desenho 0 é o padrão acima. As medidas são em cqw
+   da página e a largura do painel da peça muda em cada desenho. */
+
+/* v1: espelhada (foto da modelo à esquerda) com moldura vertical */
+.v1 {
+  grid-template-columns: 44fr 56fr;
+}
+.v1 .lado {
+  order: -1;
+}
+.v1 .fotoClose,
+.v1 .recorte {
+  top: 8cqw;
+  left: 10cqw;
+  width: 36cqw;
+  height: 46cqw;
+}
+
+/* v2: moldura em arco */
+.v2 {
+  grid-template-columns: 52fr 48fr;
+}
+.v2 .fotoClose,
+.v2 .recorte {
+  top: 8cqw;
+  left: 6cqw;
+  width: 40cqw;
+  height: 44cqw;
+  border-radius: 20cqw 20cqw 1.4cqw 1.4cqw;
+}
+.v2 .peca {
+  left: 3cqw;
+  width: 44cqw;
+  height: 44cqw;
+}
+.v2 .legenda {
+  max-width: 38cqw;
+}
+
+/* v3: moldura redonda */
+.v3 {
+  grid-template-columns: 50fr 50fr;
+}
+.v3 .fotoClose,
+.v3 .recorte {
+  top: 8.5cqw;
+  left: 6cqw;
+  width: 38cqw;
+  height: 38cqw;
+  border-radius: 50%;
+}
+.v3 .peca {
+  left: 3cqw;
+  width: 42cqw;
+  height: 42cqw;
+}
+.v3 .legenda {
+  max-width: 38cqw;
+}
+
+/* v4: a moldura atravessa a foto da modelo */
+.v4 {
+  grid-template-columns: 40fr 60fr;
+}
+.v4 .painel {
+  z-index: 2;
+}
+.v4 .fotoClose,
+.v4 .recorte {
+  top: 10cqw;
+  left: 20cqw;
+  width: 36cqw;
+  height: 38cqw;
+}
+.v4 .sobreFoto {
+  left: auto;
+  right: 2.6cqw;
+}
+.v4 .peca {
+  left: 4cqw;
+  top: 12cqw;
+  width: 34cqw;
+  height: 34cqw;
+}
+.v4 .legenda {
+  left: 5cqw;
+  max-width: 28cqw;
+}
+
+/* v5: moldura em pílula vertical */
+.v5 {
+  grid-template-columns: 50fr 50fr;
+}
+.v5 .fotoClose,
+.v5 .recorte {
+  top: 8cqw;
+  left: 11cqw;
+  width: 28cqw;
+  height: 46cqw;
+  border-radius: 14cqw;
+}
+.v5 .peca {
+  left: 3cqw;
+  width: 44cqw;
+  height: 44cqw;
+}
+.v5 .legenda {
+  max-width: 38cqw;
+}
+
 /* Marca d'água: a logo escura, discreta, no rodapé de cada página (nunca na capa). O multiply faz o
    fundo branco da imagem sumir. */
 .marcaDagua {

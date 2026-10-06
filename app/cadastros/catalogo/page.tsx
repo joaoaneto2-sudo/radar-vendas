@@ -40,6 +40,7 @@ export type CatalogoPdfDados = {
   logo: boolean;
   capa: string;
   porPagina: number;
+  variar: boolean;
   clienteNome: string | null;
   destaqueIds: number[];
   pecas: PecaCatalogo[];
@@ -64,6 +65,7 @@ export default function CatalogoPage() {
   const [logo, setLogo] = useState(true);
   const [capa, setCapa] = useState(CAPAS[0]);
   const [porPagina, setPorPagina] = useState(POR_PAGINA_PADRAO);
+  const [variar, setVariar] = useState(true);
   const [destaqueIds, setDestaqueIds] = useState<Set<number>>(new Set());
 
   function load() {
@@ -239,6 +241,7 @@ export default function CatalogoPage() {
       logo,
       capa,
       porPagina,
+      variar,
       clienteNome: tipo === "consignado" ? clienteEscolhido?.full_name || null : null,
       destaqueIds: Array.from(destaqueIds),
       pecas: pecasSelecionadas.map((p) => ({
@@ -533,6 +536,14 @@ export default function CatalogoPage() {
                   : `${porPagina} peças por página, em grade. Menos peças por página deixa cada foto maior.`}
               </div>
             </div>
+            {porPagina === 1 && (
+              <div className="field field--full">
+                <label>
+                  <input type="checkbox" checked={variar} onChange={(e) => setVariar(e.target.checked)} style={{ marginRight: 8 }} />
+                  Variar o desenho da moldura a cada página (teste): quadrada, arco, círculo, espelhada e outras
+                </label>
+              </div>
+            )}
             <div className="field field--full">
               <label>Capa do catálogo</label>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
