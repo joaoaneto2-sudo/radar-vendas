@@ -317,27 +317,6 @@
   max-width: 38cqw;
 }
 
-/* v3: moldura redonda */
-.v3 {
-  grid-template-columns: 50fr 50fr;
-}
-.v3 .fotoClose,
-.v3 .recorte {
-  top: 8.5cqw;
-  left: 6cqw;
-  width: 38cqw;
-  height: 38cqw;
-  border-radius: 50%;
-}
-.v3 .peca {
-  left: 3cqw;
-  width: 42cqw;
-  height: 42cqw;
-}
-.v3 .legenda {
-  max-width: 38cqw;
-}
-
 /* v4: a moldura atravessa a foto da modelo */
 .v4 {
   grid-template-columns: 40fr 60fr;

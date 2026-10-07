@@ -540,7 +540,7 @@ export default function CatalogoPage() {
               <div className="field field--full">
                 <label>
                   <input type="checkbox" checked={variar} onChange={(e) => setVariar(e.target.checked)} style={{ marginRight: 8 }} />
-                  Variar o desenho da moldura a cada página (teste): quadrada, arco, círculo, espelhada e outras
+                  Variar o desenho da moldura a cada página (teste): quadrada, arco, espelhada e outras
                 </label>
               </div>
             )}

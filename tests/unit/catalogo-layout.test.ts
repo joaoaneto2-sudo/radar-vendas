@@ -93,11 +93,11 @@ describe("desenho de cada página", () => {
     for (let i = 0; i < 8; i++) expect(desenhoDaPagina(i, false)).toBe(0);
   });
 
-  it("variando, páginas vizinhas nunca repetem e os 6 desenhos aparecem em cada rodada", () => {
+  it("variando, páginas vizinhas nunca repetem e os 5 desenhos aparecem em cada rodada", () => {
     const seq = Array.from({ length: 12 }, (_, i) => desenhoDaPagina(i, true));
     for (let i = 1; i < seq.length; i++) expect(seq[i]).not.toBe(seq[i - 1]);
     expect(new Set(seq.slice(0, DESENHOS_DA_PAGINA)).size).toBe(DESENHOS_DA_PAGINA);
-    expect(seq.slice(6)).toEqual(seq.slice(0, 6));
+    expect(seq.slice(5, 10)).toEqual(seq.slice(0, 5));
   });
 
   it("índice negativo ou quebrado não estraga", () => {
