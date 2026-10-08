@@ -18,7 +18,15 @@ import { formatCentsBRL } from "@/lib/finance/money";
 import FaixaDoAcordo from "../../faixa-do-acordo";
 import type { EntradaDoResumo } from "@/lib/acordo-resumo";
 
-type Apurado = { cents: number; pieces: number; products: number; semData: number; semQuantidade: number; semCusto: number };
+type Apurado = {
+  cents: number;
+  pieces: number;
+  products: number;
+  semData: number;
+  semQuantidade: number;
+  semCusto: number;
+  marcaveis: { pieces: number; cents: number };
+};
 type Dados = {
   valores: AcordoValores;
   cascadeMode: "recebimento" | "venda";
@@ -46,6 +54,13 @@ function quando(iso: string): string {
   const dia = formatDateBR(new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10));
   const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Bahia" });
   return `${dia} às ${hora}`;
+}
+
+// "2026-09-01" -> "2026-08-31": a data que o botão de estoque inicial grava como data da compra.
+function diaAntesDoInicio(dia: string): string {
+  const d = new Date(`${dia}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 const CAMPOS_DE_PORCENTAGEM: CampoDoAcordo[] = ["retailPct", "consignmentPct", "wholesalePct", "joaoSharePct"];
@@ -140,6 +155,29 @@ export default function AcordoPage() {
     }
     setErro("");
     setAviso("Mudança desfeita. Os valores voltaram ao que eram.");
+    await carregar();
+  }
+
+  async function marcarComoInicial() {
+    const { pieces, cents } = apurado.marcaveis;
+    const ok = window.confirm(
+      `Marcar ${pieces} peça(s) sem data de compra como estoque inicial?\n\n` +
+        `Cada uma entra com 1 unidade, comprada em ${formatDateBR(diaAntesDoInicio(valores.partnershipStart))} (antes de ${formatDateBR(valores.partnershipStart)}). ` +
+        `Soma a custo: ${reais(cents)}.\n\nIsso ainda NÃO muda o estoque inicial do acordo nem a dívida: depois você usa o valor apurado e confirma.`
+    );
+    if (!ok) return;
+    const res = await fetch("/api/agreement/estoque-inicial", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmar: true }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setErro(d.message || "Não foi possível marcar as peças.");
+      return;
+    }
+    setErro("");
+    setAviso(`${d.pieces} peça(s) marcadas como estoque inicial. Agora use o valor apurado e confirme para atualizar a dívida.`);
     await carregar();
   }
 
@@ -278,7 +316,21 @@ export default function AcordoPage() {
             </span>
           </div>
         )}
+        {apurado.marcaveis.pieces > 0 && (
+          <div className="banner banner-info" role="status" style={{ marginBottom: 10 }}>
+            <span>📦</span>
+            <span>
+              {apurado.marcaveis.pieces} {apurado.marcaveis.pieces === 1 ? "peça cadastrada está" : "peças cadastradas estão"} sem data de compra, por isso
+              não entram nesta soma ({reais(apurado.marcaveis.cents)} a custo, 1 unidade de cada). Se elas são o estoque inicial da loja, marque abaixo.
+            </span>
+          </div>
+        )}
         <div className="modal-actions">
+          {apurado.marcaveis.pieces > 0 && (
+            <button type="button" className="btn btn-ghost" onClick={marcarComoInicial}>
+              Marcar as {apurado.marcaveis.pieces} peças sem data como estoque inicial
+            </button>
+          )}
           <button type="button" className="btn btn-ghost" disabled={apurado.cents === valores.initialStockCents} onClick={usarApurado}>
             Usar o valor apurado ({reais(apurado.cents)})
           </button>

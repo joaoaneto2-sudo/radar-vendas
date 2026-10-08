@@ -1,7 +1,7 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { validarAcordo } from "../../lib/agreement";
-import { desfazerUltima, lerAcordo, listarHistorico, salvarAcordo } from "../../lib/agreement-db";
+import { desfazerUltima, lerAcordo, listarHistorico, marcarComoEstoqueInicial, pecasSemDataDeCompra, salvarAcordo } from "../../lib/agreement-db";
 import { runMigrations } from "../../lib/migrations";
 import { bancoDeTesteDisponivel, criarBancoDescartavel } from "./helpers";
 
@@ -121,5 +121,49 @@ describe.skipIf(!disponivel)("parâmetros do acordo: salvar, histórico e desfaz
     await mudar({ retail_replenish_pct: "20" });
     const h = await listarHistorico(pool);
     expect(h.map((l) => l.changes[0].depois)).toEqual([20, 25]);
+  });
+
+  describe("marcar peças sem data como estoque inicial", () => {
+    beforeEach(async () => {
+      await pool.query(`DELETE FROM products WHERE name LIKE 'EI %'`);
+      await pool.query(
+        `INSERT INTO products (name, cost, price, stock_qty, sale_channel, active, purchase_date, purchase_qty) VALUES
+           ('EI sem data A', 100, 250, 1, 'varejo', true, NULL, NULL),
+           ('EI sem data B', 49.5, 124, 3, 'varejo', true, NULL, NULL),
+           ('EI com data', 80, 200, 1, 'varejo', true, '2026-09-10', 2),
+           ('EI atacado', 70, 170, 1, 'atacado', true, NULL, NULL),
+           ('EI inativa', 60, 150, 0, 'varejo', false, NULL, NULL),
+           ('EI sem custo', NULL, 150, 1, 'varejo', true, NULL, NULL)`
+      );
+    });
+    afterAll(async () => {
+      await pool.query(`DELETE FROM products WHERE name LIKE 'EI %'`);
+    });
+
+    it("conta só as peças nossas, ativas e com custo, uma unidade de cada", async () => {
+      const r = await pecasSemDataDeCompra(pool);
+      expect(r.pieces).toBeGreaterThanOrEqual(2);
+      // A e B (100 + 49,50): a de atacado, a inativa, a sem custo e a que já tem data ficam fora
+      await pool.query(`UPDATE products SET active = false WHERE name NOT LIKE 'EI %'`);
+      expect(await pecasSemDataDeCompra(pool)).toEqual({ pieces: 2, cents: 14950 });
+    });
+
+    it("grava a véspera do início da sociedade e quantidade 1, sem tocar em quem já tem data", async () => {
+      await pool.query(`UPDATE products SET active = false WHERE name NOT LIKE 'EI %'`);
+      const r = await marcarComoEstoqueInicial(pool, "2026-09-01");
+      expect(r).toEqual({ pieces: 2, cents: 14950 });
+      const { rows } = await pool.query(
+        `SELECT name, to_char(purchase_date, 'YYYY-MM-DD') AS d, purchase_qty FROM products WHERE name LIKE 'EI %' ORDER BY name`
+      );
+      const por = Object.fromEntries(rows.map((x) => [x.name, x]));
+      expect(por["EI sem data A"]).toMatchObject({ d: "2026-08-31", purchase_qty: 1 });
+      expect(por["EI sem data B"]).toMatchObject({ d: "2026-08-31", purchase_qty: 1 });
+      expect(por["EI com data"]).toMatchObject({ d: "2026-09-10", purchase_qty: 2 });
+      expect(por["EI atacado"].d).toBeNull();
+      expect(por["EI inativa"].d).toBeNull();
+      expect(por["EI sem custo"].d).toBeNull();
+      // rodar de novo não acha mais nada
+      expect(await marcarComoEstoqueInicial(pool, "2026-09-01")).toEqual({ pieces: 0, cents: 0 });
+    });
   });
 });

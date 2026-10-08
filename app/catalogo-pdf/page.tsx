@@ -191,8 +191,7 @@ export default function CatalogoPdfPage() {
     return (
       <main className="shell">
         <div className="empty-state">
-          Não encontrei uma seleção de catálogo. Volte em Produtos → "Gerar catálogo (PDF)" e escolha as peças de
-          novo.
+          Não encontrei uma seleção de catálogo. Volte em "Criar catálogo" e escolha as peças de novo.
         </div>
         <a className="btn btn-primary" href="/cadastros/catalogo">
           Voltar para a seleção
@@ -223,7 +222,7 @@ export default function CatalogoPdfPage() {
           Baixar PDF (imprimir)
         </button>
         <span className="hint">
-          {dados.pecas.length} peça(s) · {dados.tipo === "varejo" ? "Varejo" : `Consignado: ${dados.clienteNome}`}
+          {dados.pecas.length} peça(s)
         </span>
       </div>
 

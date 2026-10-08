@@ -367,7 +367,7 @@ export default function ProdutosTab() {
           Importar peças
         </a>
         <a className="btn btn-ghost" href="/cadastros/catalogo">
-          Gerar catálogo (PDF)
+          Criar catálogo
         </a>
         <button className="btn btn-primary" onClick={openNew}>
           + Novo produto

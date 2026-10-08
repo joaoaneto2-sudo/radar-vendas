@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPool, ensureSchema } from "@/lib/db";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { dividaDoJoao, validarAcordo } from "@/lib/agreement";
-import { lerAcordo, listarHistorico, salvarAcordo } from "@/lib/agreement-db";
+import { lerAcordo, listarHistorico, pecasSemDataDeCompra, salvarAcordo } from "@/lib/agreement-db";
 import { productPurchaseTotals } from "@/lib/finance/purchases";
 import { getFinanceSummary } from "@/lib/finance/load";
 
@@ -17,10 +17,11 @@ export async function GET() {
   try {
     await ensureSchema();
     const { valores, cascadeMode } = await lerAcordo(db);
-    const [produtos, historico, resumo] = await Promise.all([
+    const [produtos, historico, resumo, marcaveis] = await Promise.all([
       db.query(`SELECT to_char(purchase_date, 'YYYY-MM-DD') AS purchase_date, purchase_qty, cost, sale_channel FROM products`),
       listarHistorico(db),
       getFinanceSummary(db),
+      pecasSemDataDeCompra(db),
     ]);
     const apurado = productPurchaseTotals(produtos.rows, valores.partnershipStart);
     return NextResponse.json({
@@ -35,6 +36,7 @@ export async function GET() {
         semData: apurado.undatedProducts,
         semQuantidade: apurado.withoutQtyProducts,
         semCusto: apurado.withoutCostProducts,
+        marcaveis, // peças sem data de compra que o botão "marcar como estoque inicial" pode marcar
       },
       historico,
     });

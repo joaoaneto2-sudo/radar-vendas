@@ -5,10 +5,14 @@ import { usePathname } from "next/navigation";
 
 const PAGINAS_DE_ENTRADA = ["/login", "/primeiro-acesso"];
 
-type Icone = "inicio" | "venda" | "relatorio" | "cadastros" | "financeiro" | "receber" | "despesas" | "loja" | "mais";
+type Icone = "inicio" | "venda" | "relatorio" | "cadastros" | "financeiro" | "receber" | "despesas" | "loja" | "catalogo" | "mais";
 
 // Menu lateral (computador): páginas agrupadas por assunto.
 const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Icone }[] }[] = [
+  {
+    titulo: "Catálogo",
+    itens: [{ href: "/cadastros/catalogo", rotulo: "Criar catálogo", icone: "catalogo" }],
+  },
   {
     titulo: "Vendas",
     itens: [
@@ -55,8 +59,8 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/cadastros": ["Cadastros", "Produtos e cadastros"],
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
   "/importar-pecas": ["Cadastros", "Importar peças"],
-  "/cadastros/catalogo": ["Cadastros", "Gerar catálogo (PDF)"],
-  "/catalogo-pdf": ["Cadastros", "Catálogo para impressão"],
+  "/cadastros/catalogo": ["Catálogo", "Criar catálogo"],
+  "/catalogo-pdf": ["Catálogo", "Baixar o PDF"],
   "/financeiro": ["Financeiro", "Painel"],
   "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
   "/financeiro/fundo": ["Financeiro", "Fundo de reposição"],
@@ -77,6 +81,7 @@ const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
 ];
 
 const MAIS = [
+  { href: "/cadastros/catalogo", rotulo: "Criar catálogo" },
   { href: "/importar-vendas", rotulo: "Importar vendas" },
   { href: "/financeiro", rotulo: "Painel financeiro" },
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
@@ -142,6 +147,13 @@ function Desenho({ nome }: { nome: Icone }) {
           <path d="M9 8h6M9 12h6" />
         </svg>
       );
+    case "catalogo":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z" />
+          <path d="M5 17a3 3 0 0 1 3-3h11M10 8h5" />
+        </svg>
+      );
     case "loja":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -192,7 +204,9 @@ export default function NavBar() {
   const ativa = (href: string) =>
     href === "/cadastros"
       ? pathname === "/cadastros" || pathname === "/importar-catalogo" || pathname === "/importar-pecas"
-      : pathname === href;
+      : href === "/cadastros/catalogo"
+        ? pathname === href || pathname === "/catalogo-pdf"
+        : pathname === href;
 
   if (naEntrada) {
     return (

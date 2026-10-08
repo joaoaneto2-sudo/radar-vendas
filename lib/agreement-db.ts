@@ -144,3 +144,30 @@ export async function desfazerUltima(pool: Pool, quem: Quem): Promise<ResultadoD
     client.release();
   }
 }
+
+// Peças que entram na conta do estoque inicial mas ainda não têm data nem quantidade de compra.
+const PECAS_SEM_DATA = `active AND sale_channel IS DISTINCT FROM 'atacado' AND purchase_date IS NULL AND cost IS NOT NULL`;
+
+/** Quantas peças e quanto custam (1 unidade de cada) as que estão sem data de compra. Só olha, não muda nada. */
+export async function pecasSemDataDeCompra(db: Pick<Pool, "query">): Promise<{ pieces: number; cents: number }> {
+  const { rows } = await db.query(`SELECT count(*)::int AS n, COALESCE(sum(cost), 0) AS custo FROM products WHERE ${PECAS_SEM_DATA}`);
+  return { pieces: rows[0].n, cents: toCents(rows[0].custo) };
+}
+
+/**
+ * Marca como estoque inicial as peças sem data de compra: data = véspera do início da sociedade,
+ * quantidade comprada = 1 (regra do João: 1 por peça). Só mexe em peça sem data; quem já tem data fica como está.
+ */
+export async function marcarComoEstoqueInicial(
+  db: Pick<Pool, "query">,
+  inicioDaSociedade: string
+): Promise<{ pieces: number; cents: number }> {
+  const { rows } = await db.query(
+    `UPDATE products
+        SET purchase_date = ($1::date - 1), purchase_qty = COALESCE(purchase_qty, 1)
+      WHERE ${PECAS_SEM_DATA}
+      RETURNING cost`,
+    [inicioDaSociedade]
+  );
+  return { pieces: rows.length, cents: rows.reduce((soma, r) => soma + toCents(r.cost), 0) };
+}
