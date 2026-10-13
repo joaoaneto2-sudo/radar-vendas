@@ -32,6 +32,7 @@ export type ResultadoDoItem = {
 export interface ResultadoDoLote {
   gravou: boolean;
   fabricantesCriados: string[];
+  fabricantesParecidos: { pasta: string; existente: string }[]; // nome da pasta e o fabricante que já existia com grafia quase igual
   criadas: number;
   atualizadas: number;
   itens: ResultadoDoItem[];
@@ -77,9 +78,34 @@ export function validarLote(corpo: unknown): { ok: true; itens: ItemDoLote[] } |
   return { ok: true, itens };
 }
 
+// Quantas letras precisam mudar para um texto virar o outro (1 = erro de digitação).
+function distancia(a: string, b: string): number {
+  const linha = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    let anterior = linha[0];
+    linha[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = linha[j];
+      linha[j] = Math.min(linha[j] + 1, linha[j - 1] + 1, anterior + (a[i - 1] === b[j - 1] ? 0 : 1));
+      anterior = guardado;
+    }
+  }
+  return linha[b.length];
+}
+
+/** Fabricante já cadastrado com grafia quase igual (1 letra de diferença, nomes com 8 letras ou mais). Só se for um só. */
+export function fabricanteParecido<T extends { name: string }>(fabricantes: T[], chave: string): T | undefined {
+  if (chave.length < 8) return undefined;
+  const candidatos = fabricantes.filter((f) => {
+    const outra = semAcento(f.name);
+    return outra.length >= 8 && distancia(outra, chave) === 1;
+  });
+  return candidatos.length === 1 ? candidatos[0] : undefined;
+}
+
 export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[], gravar: boolean, markup = MARKUP_PADRAO): Promise<ResultadoDoLote> {
   const client = await db.connect();
-  const resultado: ResultadoDoLote = { gravou: gravar, fabricantesCriados: [], criadas: 0, atualizadas: 0, itens: [] };
+  const resultado: ResultadoDoLote = { gravou: gravar, fabricantesCriados: [], fabricantesParecidos: [], criadas: 0, atualizadas: 0, itens: [] };
   try {
     await client.query("BEGIN");
     const fabricantes = new Map<string, number>();
@@ -88,9 +114,13 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
       let fabId: number | undefined = fabricantes.get(chaveFab);
       if (fabId === undefined) {
         const { rows } = await client.query(`SELECT id, name FROM manufacturers`);
-        const achado = rows.find((r) => semAcento(r.name) === chaveFab);
-        if (achado) fabId = achado.id as number;
-        else {
+        const exato = rows.find((r) => semAcento(r.name) === chaveFab);
+        const parecido = exato ? undefined : fabricanteParecido(rows, chaveFab);
+        const achado = exato ?? parecido;
+        if (achado) {
+          fabId = achado.id as number;
+          if (parecido) resultado.fabricantesParecidos.push({ pasta: it.fabricante, existente: parecido.name });
+        } else {
           const novo = await client.query(`INSERT INTO manufacturers (name) VALUES ($1) RETURNING id`, [it.fabricante]);
           fabId = novo.rows[0].id as number;
           resultado.fabricantesCriados.push(it.fabricante);

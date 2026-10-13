@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { importarLote, validarLote, type ItemDoLote } from "../../lib/importar-lote";
+import { fabricanteParecido, importarLote, validarLote, type ItemDoLote } from "../../lib/importar-lote";
 import { runMigrations } from "../../lib/migrations";
 import { bancoDeTesteDisponivel, criarBancoDescartavel } from "./helpers";
 
@@ -35,6 +35,18 @@ describe("validarLote", () => {
   });
 });
 
+describe("fabricanteParecido", () => {
+  const lista = [{ name: "CATHARINA DEGAN" }, { name: "Luciana Rangel" }, { name: "Max" }];
+  it("acha o fabricante com uma letra de diferença (degan x degam)", () => {
+    expect(fabricanteParecido(lista, "catharina degam")?.name).toBe("CATHARINA DEGAN");
+  });
+  it("nome exato diferente, curto ou ambíguo não é confundido", () => {
+    expect(fabricanteParecido(lista, "luciana silva")).toBeUndefined();
+    expect(fabricanteParecido(lista, "maxx")).toBeUndefined(); // curto demais
+    expect(fabricanteParecido([{ name: "Catharina Degan" }, { name: "Catharina Degao" }], "catharina degam")).toBeUndefined();
+  });
+});
+
 describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
   let pool: Pool;
   let apagar: () => Promise<void>;
@@ -50,7 +62,7 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
   });
   beforeEach(async () => {
     await pool.query(`DELETE FROM products WHERE name LIKE 'LT %' OR name = 'Brinco flor em pérola'`);
-    await pool.query(`DELETE FROM manufacturers WHERE name IN ('Brilhare', 'Fabricante LT')`);
+    await pool.query(`DELETE FROM manufacturers WHERE name IN ('Brilhare', 'Fabricante LT', 'CATHARINA DEGAN', 'Catharina Degam', 'Max', 'Maxx')`);
   });
 
   it("o ensaio mostra o que faria e não grava nada", async () => {
@@ -136,6 +148,16 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
     const r = await importarLote(pool, [item({ fabricante: 'Fabricante LT', nome: 'LT Bracelete Dourado de São Bento', custo: 155, categoria: 'Pulseiras' })], false);
     expect(r.criadas).toBe(1);
     expect(r.itens[0].aviso).toContain('LT Bracelete são Bento');
+  });
+
+  it("fabricante já cadastrado com uma letra diferente (Degan x Degam) é reaproveitado, sem criar outro", async () => {
+    await pool.query(`INSERT INTO manufacturers (name) VALUES ('CATHARINA DEGAN')`);
+    const r = await importarLote(pool, [item({ fabricante: "Catharina Degam", nome: "LT Colar crochê", custo: 378, categoria: "Colares e Correntes" })], true);
+    expect(r.fabricantesCriados).toEqual([]);
+    expect(r.fabricantesParecidos).toEqual([{ pasta: "Catharina Degam", existente: "CATHARINA DEGAN" }]);
+    const { rows } = await pool.query(`SELECT m.name FROM products p JOIN manufacturers m ON m.id = p.manufacturer_id WHERE p.name = 'LT Colar crochê'`);
+    expect(rows[0].name).toBe("CATHARINA DEGAN");
+    expect((await pool.query(`SELECT count(*)::int AS n FROM manufacturers WHERE name ILIKE 'catharina deg%'`)).rows[0].n).toBe(1);
   });
 
   it("peça com uma foto só não deixa foto de modelo para trás", async () => {

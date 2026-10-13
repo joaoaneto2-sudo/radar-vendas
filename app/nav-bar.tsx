@@ -23,7 +23,10 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
   },
   {
     titulo: "Cadastros",
-    itens: [{ href: "/cadastros", rotulo: "Produtos e cadastros", icone: "cadastros" }],
+    itens: [
+      { href: "/cadastros", rotulo: "Produtos e cadastros", icone: "cadastros" },
+      { href: "/importar-lote", rotulo: "Subir peças das pastas", icone: "cadastros" },
+    ],
   },
   {
     titulo: "Financeiro",
@@ -59,6 +62,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/cadastros": ["Cadastros", "Produtos e cadastros"],
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
   "/importar-pecas": ["Cadastros", "Importar peças"],
+  "/importar-lote": ["Cadastros", "Subir peças das pastas"],
   "/cadastros/catalogo": ["Catálogo", "Criar catálogo"],
   "/catalogo-pdf": ["Catálogo", "Baixar o PDF"],
   "/financeiro": ["Financeiro", "Painel"],
@@ -82,6 +86,7 @@ const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
 
 const MAIS = [
   { href: "/cadastros/catalogo", rotulo: "Criar catálogo" },
+  { href: "/importar-lote", rotulo: "Subir peças das pastas" },
   { href: "/importar-vendas", rotulo: "Importar vendas" },
   { href: "/financeiro", rotulo: "Painel financeiro" },
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
