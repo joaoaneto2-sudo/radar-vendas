@@ -13,6 +13,7 @@ import type { CatalogoPdfDados, PecaCatalogo } from "@/app/cadastros/catalogo/pa
 import {
   agruparPorPagina,
   CAPAS,
+  CAPAS_COM_TEXTO_A_ESQUERDA,
   decidirPagina,
   desenhoDaPagina,
   enquadramento,
@@ -229,7 +230,7 @@ export default function CatalogoPdfPage() {
       <div className={s.folhas}>
         {/* Se a imagem da capa não existir, o degradê rosa por baixo aparece sozinho. */}
         <section
-          className={`${s.pagina} ${s.capa}`}
+          className={`${s.pagina} ${s.capa} ${CAPAS_COM_TEXTO_A_ESQUERDA.includes(capa) ? s.capaEsquerda : ""}`}
           style={{ backgroundImage: `url("${capa}"), linear-gradient(135deg, #f2d6cd, #deb2a6)` }}
         >
           <h1 className={s.capaMarca}>

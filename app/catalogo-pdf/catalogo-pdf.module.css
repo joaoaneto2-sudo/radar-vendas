@@ -73,6 +73,34 @@
   position: relative;
 }
 
+/* Capas com as pessoas à direita: o logo e o nome ficam centralizados na metade esquerda, livre. */
+.capaEsquerda {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 0;
+  padding-left: 6cqw;
+  text-align: center;
+  width: 100%;
+}
+
+.capaEsquerda::before {
+  background: linear-gradient(90deg, rgba(40, 22, 18, 0.42), rgba(40, 22, 18, 0.2) 45%, rgba(40, 22, 18, 0));
+}
+
+.capaEsquerda .capaMarca,
+.capaEsquerda .capaCatalogo {
+  width: 36cqw;
+  align-self: flex-start;
+}
+
+.capaEsquerda .capaLogo {
+  width: 36cqw;
+}
+
+.capaEsquerda .capaCatalogo {
+  margin-right: 0;
+}
+
 .capaMarca {
   margin: 0;
   line-height: 0;

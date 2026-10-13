@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agruparPorPagina, CAPAS, DESENHOS_DA_PAGINA, desenhoDaPagina, decidirPagina, enquadramento, gradeDaPagina, porPaginaValido, precoDaLegenda } from "../../lib/catalogo-layout";
+import { agruparPorPagina, CAPAS, CAPAS_COM_TEXTO_A_ESQUERDA, DESENHOS_DA_PAGINA, desenhoDaPagina, decidirPagina, enquadramento, gradeDaPagina, porPaginaValido, precoDaLegenda } from "../../lib/catalogo-layout";
 
 describe("decidirPagina", () => {
   it("sem classificação, trata como foto limpa", () => {
@@ -51,8 +51,18 @@ describe("precoDaLegenda", () => {
 });
 
 describe("CAPAS", () => {
-  it("tem as três capas na ordem", () => {
-    expect(CAPAS).toEqual(["/catalogo/capas/capa-1.jpg", "/catalogo/capas/capa-2.jpg", "/catalogo/capas/capa-3.jpg"]);
+  it("tem as quatro capas na ordem", () => {
+    expect(CAPAS).toEqual([
+      "/catalogo/capas/capa-1.jpg",
+      "/catalogo/capas/capa-2.jpg",
+      "/catalogo/capas/capa-3.jpg",
+      "/catalogo/capas/capa-4.jpg",
+    ]);
+  });
+
+  it("a capa 4 (mãe e filha) leva o texto para a esquerda; as outras ficam no centro", () => {
+    expect(CAPAS_COM_TEXTO_A_ESQUERDA).toEqual(["/catalogo/capas/capa-4.jpg"]);
+    expect(CAPAS_COM_TEXTO_A_ESQUERDA.every((c) => CAPAS.includes(c))).toBe(true);
   });
 });
 
