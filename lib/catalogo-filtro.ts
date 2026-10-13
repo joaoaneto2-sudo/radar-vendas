@@ -127,3 +127,10 @@ export function contarMarcacao<T extends { id: number }>(
   }
   return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
+
+/** Peça só entra no catálogo se tiver preço de venda (maior que zero). */
+export function temPreco(p: { price?: number | string | null }): boolean {
+  if (p.price === null || p.price === undefined || p.price === "") return false;
+  const n = Number(p.price);
+  return Number.isFinite(n) && n > 0;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contarMarcacao, filtrarPecas, lerValor, SEM_FILTRO, sortearPecas, temFiltro } from "../../lib/catalogo-filtro";
+import { contarMarcacao, filtrarPecas, lerValor, SEM_FILTRO, sortearPecas, temFiltro, temPreco } from "../../lib/catalogo-filtro";
 
 const pecas = [
   { id: 1, name: "Brinco em ródio com zircônias", category: "Brincos", manufacturer_name: "Zarpellon", supplier_name: "Loja X" },
@@ -133,5 +133,18 @@ describe("contarMarcacao", () => {
       { nome: "Pulseiras", total: 1, marcadas: 1 },
     ]);
     expect(contarMarcacao(pecas, (p) => p.manufacturer_name, new Set())).toHaveLength(2);
+  });
+});
+
+describe("temPreco", () => {
+  it("peça sem preço, com preço zero ou inválido não entra no catálogo", () => {
+    expect(temPreco({ price: null })).toBe(false);
+    expect(temPreco({})).toBe(false);
+    expect(temPreco({ price: "" })).toBe(false);
+    expect(temPreco({ price: 0 })).toBe(false);
+    expect(temPreco({ price: "0.00" })).toBe(false);
+    expect(temPreco({ price: "abc" })).toBe(false);
+    expect(temPreco({ price: "122.50" })).toBe(true);
+    expect(temPreco({ price: 89.9 })).toBe(true);
   });
 });

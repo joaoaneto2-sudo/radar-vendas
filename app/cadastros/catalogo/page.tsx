@@ -18,6 +18,7 @@ import {
   SituacaoMarcacao,
   sortearPecas,
   temFiltro,
+  temPreco,
 } from "@/lib/catalogo-filtro";
 
 const CHAVE_RASCUNHO = "radar-catalogo-rascunho";
@@ -58,6 +59,7 @@ type Rascunho = {
 export default function CriarCatalogoPage() {
   const router = useRouter();
   const [items, setItems] = useState<Product[]>([]);
+  const [semPreco, setSemPreco] = useState(0); // peças ativas que ficam de fora por não terem preço
   const [loading, setLoading] = useState(true);
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const [filtro, setFiltro] = useState<FiltroCatalogo>(SEM_FILTRO);
@@ -74,7 +76,9 @@ export default function CriarCatalogoPage() {
     fetch("/api/products")
       .then((r) => r.json())
       .then((p) => {
-        const ativas: Product[] = (p.items || []).filter((it: Product) => it.active !== false);
+        const todasAtivas: Product[] = (p.items || []).filter((it: Product) => it.active !== false);
+        const ativas = todasAtivas.filter(temPreco);
+        setSemPreco(todasAtivas.length - ativas.length);
         setItems(ativas);
         // Volta de "Voltar para a seleção": recupera o que estava escolhido.
         try {
@@ -212,7 +216,10 @@ export default function CriarCatalogoPage() {
       <div className="page-head">
         <p className="eyebrow">Catálogo</p>
         <h1>Criar catálogo</h1>
-        <p>Escolha as peças, ajuste o catálogo e baixe o PDF. Nada aqui muda estoque nem financeiro.</p>
+        <p>
+          Escolha as peças, ajuste o catálogo e baixe o PDF. Nada aqui muda estoque nem financeiro. Peça sem preço não aparece aqui.
+          {semPreco > 0 && ` Hoje ${semPreco} ${semPreco === 1 ? "peça está fora" : "peças estão fora"} por falta de preço.`}
+        </p>
       </div>
 
       {loading ? (
