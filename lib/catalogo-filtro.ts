@@ -1,4 +1,4 @@
-// Filtros da tela "Criar catálogo": tipo de peça, fabricante, faixa de preço, busca no nome, só com
+// Filtros da tela "Criar catálogo": tipo de peça, fabricantes e fornecedores (um ou vários), faixa de preço, busca no nome, só com
 // estoque, só com foto, só as marcadas para o catálogo e situação da marcação (todas, só marcadas,
 // só desmarcadas). Também sorteia peças ao acaso entre as que estão à mostra.
 
@@ -6,7 +6,8 @@ export type SituacaoMarcacao = "todas" | "marcadas" | "desmarcadas";
 
 export type FiltroCatalogo = {
   categorias: string[];
-  fabricante: string;
+  fabricantes: string[];
+  fornecedores: string[];
   busca: string;
   situacao: SituacaoMarcacao;
   precoMin: string; // texto digitado ("" = sem limite); aceita vírgula: "89,90"
@@ -18,7 +19,8 @@ export type FiltroCatalogo = {
 
 export const SEM_FILTRO: FiltroCatalogo = {
   categorias: [],
-  fabricante: "",
+  fabricantes: [],
+  fornecedores: [],
   busca: "",
   situacao: "todas",
   precoMin: "",
@@ -33,6 +35,7 @@ type PecaFiltravel = {
   name?: string | null;
   category?: string | null;
   manufacturer_name?: string | null;
+  supplier_name?: string | null;
   price?: number | string | null;
   stock_qty?: number | null;
   photo_url?: string | null;
@@ -53,7 +56,8 @@ export function lerValor(texto: string): number | null {
 export function temFiltro(f: FiltroCatalogo): boolean {
   return (
     f.categorias.length > 0 ||
-    f.fabricante !== "" ||
+    f.fabricantes.length > 0 ||
+    f.fornecedores.length > 0 ||
     f.busca.trim() !== "" ||
     f.situacao !== "todas" ||
     lerValor(f.precoMin) !== null ||
@@ -76,7 +80,8 @@ export function filtrarPecas<T extends PecaFiltravel>(
   const max = lerValor(filtro.precoMax);
   return pecas.filter((p) => {
     if (ignorar !== "categorias" && filtro.categorias.length > 0 && !filtro.categorias.includes(p.category ?? "")) return false;
-    if (filtro.fabricante && (p.manufacturer_name ?? "") !== filtro.fabricante) return false;
+    if (filtro.fabricantes.length > 0 && !filtro.fabricantes.includes(p.manufacturer_name ?? "")) return false;
+    if (filtro.fornecedores.length > 0 && !filtro.fornecedores.includes(p.supplier_name ?? "")) return false;
     if (busca && !semAcento(p.name ?? "").includes(busca)) return false;
     if (min !== null || max !== null) {
       const preco = p.price === null || p.price === undefined || p.price === "" ? null : Number(p.price);

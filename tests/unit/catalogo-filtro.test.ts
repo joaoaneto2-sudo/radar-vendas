@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { contarMarcacao, filtrarPecas, lerValor, SEM_FILTRO, sortearPecas, temFiltro } from "../../lib/catalogo-filtro";
 
 const pecas = [
-  { id: 1, name: "Brinco em ródio com zircônias", category: "Brincos", manufacturer_name: "Zarpellon" },
+  { id: 1, name: "Brinco em ródio com zircônias", category: "Brincos", manufacturer_name: "Zarpellon", supplier_name: "Loja X" },
   { id: 2, name: "Brinco pérola Shell", category: "Brincos", manufacturer_name: "Zarpellon" },
   { id: 3, name: "Brinco argola com Zircônia", category: "Brincos", manufacturer_name: "Luciana Rangel" },
   { id: 4, name: "Colar em zirconias", category: "Colares e Correntes", manufacturer_name: "Zarpellon" },
@@ -21,7 +21,7 @@ describe("filtrarPecas", () => {
   });
 
   it("brincos da Zarpellon: categoria e fabricante juntos", () => {
-    const r = filtrarPecas(pecas, { ...SEM_FILTRO, categorias: ["Brincos"], fabricante: "Zarpellon" }, todas);
+    const r = filtrarPecas(pecas, { ...SEM_FILTRO, categorias: ["Brincos"], fabricantes: ["Zarpellon"] }, todas);
     expect(r.map((p) => p.id)).toEqual([1, 2]);
   });
 
@@ -31,7 +31,7 @@ describe("filtrarPecas", () => {
   });
 
   it("peça sem fabricante some quando se escolhe um fabricante", () => {
-    expect(filtrarPecas(pecas, { ...SEM_FILTRO, fabricante: "Zarpellon" }, todas)).toHaveLength(3);
+    expect(filtrarPecas(pecas, { ...SEM_FILTRO, fabricantes: ["Zarpellon"] }, todas)).toHaveLength(3);
   });
 
   it("situação: só marcadas e só desmarcadas respeitam a seleção atual", () => {
@@ -41,8 +41,25 @@ describe("filtrarPecas", () => {
   });
 
   it("ignorar 'categorias' conta cada tipo sem o filtro de tipo, mas mantém os outros", () => {
-    const f = { ...SEM_FILTRO, categorias: ["Pulseiras"], fabricante: "Zarpellon" };
+    const f = { ...SEM_FILTRO, categorias: ["Pulseiras"], fabricantes: ["Zarpellon"] };
     expect(filtrarPecas(pecas, f, todas, "categorias").map((p) => p.id)).toEqual([1, 2, 4]);
+  });
+});
+
+describe("vários fabricantes e fornecedores", () => {
+  it("escolhendo dois fabricantes, vêm as peças dos dois", () => {
+    const r = filtrarPecas(pecas, { ...SEM_FILTRO, fabricantes: ["Zarpellon", "Luciana Rangel"] }, todas);
+    expect(r.map((p) => p.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("fornecedor funciona do mesmo jeito e combina com o fabricante", () => {
+    expect(filtrarPecas(pecas, { ...SEM_FILTRO, fornecedores: ["Loja X"] }, todas).map((p) => p.id)).toEqual([1]);
+    expect(filtrarPecas(pecas, { ...SEM_FILTRO, fabricantes: ["Luciana Rangel"], fornecedores: ["Loja X"] }, todas)).toHaveLength(0);
+  });
+
+  it("temFiltro enxerga os dois", () => {
+    expect(temFiltro({ ...SEM_FILTRO, fabricantes: ["Max"] })).toBe(true);
+    expect(temFiltro({ ...SEM_FILTRO, fornecedores: ["Max"] })).toBe(true);
   });
 });
 

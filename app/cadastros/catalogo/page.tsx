@@ -1,6 +1,6 @@
 "use client";
 
-// Criar catálogo (PDF): uma tela só, em 3 blocos. 1) escolher as peças (filtros por tipo, fabricante,
+// Criar catálogo (PDF): uma tela só, em 3 blocos. 1) escolher as peças (filtros por tipo, fabricantes, fornecedores,
 // faixa de preço, busca, estoque e foto, ou peça a peça, ou sorteio); 2) ajustar nome, peças por
 // página e capa; 3) ir para a página de impressão (/catalogo-pdf), onde sai o PDF.
 // O catálogo é só um PDF: não mexe em estoque nem em financeiro. (O catálogo consignado, que criava
@@ -106,6 +106,10 @@ export default function CriarCatalogoPage() {
     () => contarMarcacao(items, (p) => p.manufacturer_name, selecionados),
     [items, selecionados]
   );
+  const fornecedoresDisponiveis = useMemo(
+    () => contarMarcacao(items, (p) => p.supplier_name, selecionados),
+    [items, selecionados]
+  );
   const filtroAtivo = temFiltro(filtro);
   const exibidasMarcadas = exibidas.filter((p) => selecionados.has(p.id)).length;
   const pecasSelecionadas = items.filter((p) => selecionados.has(p.id));
@@ -118,6 +122,13 @@ export default function CriarCatalogoPage() {
     setFiltro((f) => ({
       ...f,
       categorias: f.categorias.includes(nome) ? f.categorias.filter((c) => c !== nome) : [...f.categorias, nome],
+    }));
+  }
+
+  function alternarLista(campo: "fabricantes" | "fornecedores", nome: string) {
+    setFiltro((f) => ({
+      ...f,
+      [campo]: f[campo].includes(nome) ? f[campo].filter((x) => x !== nome) : [...f[campo], nome],
     }));
   }
 
@@ -221,9 +232,17 @@ export default function CriarCatalogoPage() {
             </p>
 
             <div className="hint" style={{ marginBottom: 6 }}>
-              Tipo de peça (pode escolher mais de um). O número mostra quantas estão marcadas do total.
+              Tipo de peça. "Todos" ou só os que você marcar. O número mostra quantas estão marcadas do total.
             </div>
             <div className="store-toggles" style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                className={"toggle-chip" + (filtro.categorias.length === 0 ? " on" : "")}
+                title="Sem escolher nenhum, entram todos"
+                onClick={() => mudarFiltro({ categorias: [] })}
+              >
+                Todos os tipos
+              </button>
               {categoriasDisponiveis.map((c) => {
                 const completo = c.total > 0 && c.marcadas === c.total;
                 const parcial = c.marcadas > 0 && !completo;
@@ -243,18 +262,59 @@ export default function CriarCatalogoPage() {
               })}
             </div>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-              <label className="field" style={{ minWidth: 200 }}>
-                <span className="hint">Fabricante</span>
-                <select value={filtro.fabricante} onChange={(e) => mudarFiltro({ fabricante: e.target.value })}>
-                  <option value="">Todos</option>
-                  {fabricantesDisponiveis.map((f) => (
-                    <option key={f.nome} value={f.nome}>
+            <div className="hint" style={{ marginBottom: 6 }}>
+              Fabricante (a mesma divisão das pastas do estoque). "Todos" ou só os que você marcar.
+            </div>
+            <div className="store-toggles" style={{ marginBottom: 12 }}>
+              <button
+                type="button"
+                className={"toggle-chip" + (filtro.fabricantes.length === 0 ? " on" : "")}
+                title="Sem escolher nenhum, entram todos"
+                onClick={() => mudarFiltro({ fabricantes: [] })}
+              >
+                Todos os fabricantes
+              </button>
+              {fabricantesDisponiveis.map((f) => (
+                <button
+                  key={f.nome}
+                  type="button"
+                  className={"toggle-chip" + (filtro.fabricantes.includes(f.nome) ? " on" : "")}
+                  onClick={() => alternarLista("fabricantes", f.nome)}
+                >
+                  {f.nome} ({f.marcadas}/{f.total})
+                </button>
+              ))}
+            </div>
+
+            {fornecedoresDisponiveis.length > 0 && (
+              <>
+                <div className="hint" style={{ marginBottom: 6 }}>
+                  Fornecedor (de quem a peça foi comprada; pode escolher mais de um).
+                </div>
+                <div className="store-toggles" style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className={"toggle-chip" + (filtro.fornecedores.length === 0 ? " on" : "")}
+                    title="Sem escolher nenhum, entram todos"
+                    onClick={() => mudarFiltro({ fornecedores: [] })}
+                  >
+                    Todos os fornecedores
+                  </button>
+                  {fornecedoresDisponiveis.map((f) => (
+                    <button
+                      key={f.nome}
+                      type="button"
+                      className={"toggle-chip" + (filtro.fornecedores.includes(f.nome) ? " on" : "")}
+                      onClick={() => alternarLista("fornecedores", f.nome)}
+                    >
                       {f.nome} ({f.marcadas}/{f.total})
-                    </option>
+                    </button>
                   ))}
-                </select>
-              </label>
+                </div>
+              </>
+            )}
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
               <label className="field" style={{ width: 130 }}>
                 <span className="hint">Preço de (R$)</span>
                 <input
