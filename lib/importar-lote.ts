@@ -1,7 +1,9 @@
 // Importa um lote de peças vindas das pastas de fornecedor (foto close + foto com a modelo).
 // Para cada peça: acha o fabricante (cria se não existir), acha a peça pelo nome (cria se não existir),
 // grava a foto principal, a foto da modelo e o enquadramento do catálogo, e deixa a peça no catálogo.
-// Peça que já existe NÃO tem custo, preço nem estoque mexidos: só as fotos e o catálogo.
+// O valor da pasta é o CUSTO; o preço de varejo é custo x 2,5. Peça que já existe ganha as fotos e o catálogo; se o
+// custo da pasta for outro, o custo é atualizado e o preço refeito (só quando o preço atual seguia a regra do 2,5;
+// senão o preço fica como está e vem um aviso). O estoque nunca é mexido.
 // Roda dentro de uma transação; com gravar = false ela é desfeita no fim (ensaio, mostra o que faria).
 
 import type { Pool } from "pg";
@@ -97,7 +99,7 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
       }
       const fabricanteId: number = fabId;
 
-      const { rows: pecas } = await client.query(`SELECT id, name, cost FROM products WHERE manufacturer_id = $1`, [fabricanteId]);
+      const { rows: pecas } = await client.query(`SELECT id, name, cost, price FROM products WHERE manufacturer_id = $1`, [fabricanteId]);
       const existente = pecas.find((p) => semAcento(p.name ?? "") === semAcento(it.nome));
       const foto = JSON.stringify(it.catalogo);
       let id: number;
@@ -106,8 +108,20 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
       if (existente) {
         id = existente.id;
         await client.query(`UPDATE products SET photo_url = $1, catalog_photo = $2::jsonb, show_catalog = true WHERE id = $3`, [it.fotoPrincipal, foto, id]);
-        if (existente.cost !== null && Math.abs(Number(existente.cost) - it.custo) > 0.001) {
-          aviso = `custo no cadastro é ${Number(existente.cost).toFixed(2)} e na pasta é ${it.custo.toFixed(2)} (não mexi no custo)`;
+        const custoAntigo = existente.cost === null ? null : Number(existente.cost);
+        if (custoAntigo === null || Math.abs(custoAntigo - it.custo) > 0.001) {
+          const precoNovo = Math.round(it.custo * markup * 100) / 100;
+          const precoAntigo = existente.price === null ? null : Number(existente.price);
+          const seguiaARegra =
+            precoAntigo === null || (custoAntigo !== null && Math.abs(precoAntigo - Math.round(custoAntigo * markup * 100) / 100) < 0.01);
+          const doCusto = custoAntigo === null ? "vazio" : custoAntigo.toFixed(2);
+          if (seguiaARegra) {
+            await client.query(`UPDATE products SET cost = $1, price = $2 WHERE id = $3`, [it.custo, precoNovo, id]);
+            aviso = `custo atualizado de ${doCusto} para ${it.custo.toFixed(2)} e preço de ${precoAntigo === null ? "vazio" : precoAntigo.toFixed(2)} para ${precoNovo.toFixed(2)}`;
+          } else {
+            await client.query(`UPDATE products SET cost = $1 WHERE id = $2`, [it.custo, id]);
+            aviso = `custo atualizado de ${doCusto} para ${it.custo.toFixed(2)}; o preço ${precoAntigo!.toFixed(2)} não seguia o 2,5 e ficou como estava (pela regra seria ${precoNovo.toFixed(2)})`;
+          }
         }
         resultado.atualizadas++;
       } else {

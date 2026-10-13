@@ -85,22 +85,46 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
     expect(fotos.rows).toEqual([{ url: "/estoque/brilhare/nova-modelo.jpg" }]);
   });
 
-  it("peça que já existe (mesmo nome, outro acento e maiúscula) ganha fotos e catálogo, sem mexer em custo, preço e estoque", async () => {
+  it("peça que já existe (mesmo nome, outro acento e maiúscula) ganha fotos e catálogo e não mexe no estoque", async () => {
     const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
     await pool.query(
       `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active, show_catalog)
-       VALUES ('Brincos', 'LT BRINCO PEROLA', $1, 50, 140, 3, 'varejo', true, false)`,
+       VALUES ('Brincos', 'LT BRINCO PEROLA', $1, 50, 125, 3, 'varejo', true, false)`,
       [fab]
     );
-    const r = await importarLote(pool, [item({ fabricante: "fabricante lt", nome: "LT Brinco Pérola", custo: 60 })], true);
+    const r = await importarLote(pool, [item({ fabricante: "fabricante lt", nome: "LT Brinco Pérola", custo: 50 })], true);
     expect(r).toMatchObject({ criadas: 0, atualizadas: 1, fabricantesCriados: [] });
-    expect(r.itens[0].aviso).toContain("não mexi no custo");
+    expect(r.itens[0].aviso).toBeUndefined();
     const { rows } = await pool.query(`SELECT cost, price, stock_qty, show_catalog, photo_url FROM products WHERE name = 'LT BRINCO PEROLA'`);
     expect(Number(rows[0].cost)).toBe(50);
-    expect(Number(rows[0].price)).toBe(140);
+    expect(Number(rows[0].price)).toBe(125);
     expect(rows[0].stock_qty).toBe(3);
     expect(rows[0].show_catalog).toBe(true);
     expect(rows[0].photo_url).toBe("/estoque/brilhare/brinco-close.jpg");
+  });
+
+  it("custo da pasta diferente: atualiza o custo e refaz o preço (2,5x) quando o preço seguia a regra", async () => {
+    const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
+    await pool.query(
+      `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active) VALUES ('Pulseiras', 'LT Pulseira', $1, 140, 350, 2, 'varejo', true)`,
+      [fab]
+    );
+    const r = await importarLote(pool, [item({ fabricante: "Fabricante LT", nome: "LT Pulseira", custo: 169, categoria: "Pulseiras" })], true);
+    expect(r.itens[0].aviso).toContain("custo atualizado de 140.00 para 169.00 e preço de 350.00 para 422.50");
+    const { rows } = await pool.query(`SELECT cost, price, stock_qty FROM products WHERE name = 'LT Pulseira'`);
+    expect([Number(rows[0].cost), Number(rows[0].price), rows[0].stock_qty]).toEqual([169, 422.5, 2]);
+  });
+
+  it("custo da pasta diferente com preço definido à mão: atualiza só o custo e avisa", async () => {
+    const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
+    await pool.query(
+      `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active) VALUES ('Brincos', 'LT Brinco manual', $1, 50, 140, 1, 'varejo', true)`,
+      [fab]
+    );
+    const r = await importarLote(pool, [item({ fabricante: "Fabricante LT", nome: "LT Brinco manual", custo: 60 })], true);
+    expect(r.itens[0].aviso).toContain("não seguia o 2,5");
+    const { rows } = await pool.query(`SELECT cost, price FROM products WHERE name = 'LT Brinco manual'`);
+    expect([Number(rows[0].cost), Number(rows[0].price)]).toEqual([60, 140]);
   });
 
   it("peça nova com o mesmo custo de outra do mesmo fabricante gera aviso de possível duplicada", async () => {
