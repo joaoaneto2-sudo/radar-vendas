@@ -4,6 +4,8 @@
 // ou sem código) e propõe o código definitivo (SIGLA-TIPO-NNN) e o novo nome de cada arquivo. Grava o plano em
 // um JSON e imprime um resumo. Nada é renomeado.
 // Modo aplicar: renomeia de verdade, só com --aplicar <plano.json> --confirmar (grava um registro .renomeados.json).
+// Com --radar <posicao-do-radar.json> (baixado em "Baixar posição para as pastas"), o custo e o código do Radar mandam
+// nos nomes dos arquivos e a planilha do estoque é gravada ao lado das pastas.
 // Modo desfazer: --desfazer <registro.renomeados.json> --confirmar volta os nomes antigos.
 //
 // Padrão de nome:  close  -> CODIGO - Nome - custo 77,00.ext
@@ -85,7 +87,9 @@ async function codigosDoBanco() {
   }
 }
 
-export function montarPlano(pasta, arquivos, codigosBanco) {
+// `radar`: Map "fabricante|nome" -> { codigo, custo, preco } vindo do arquivo baixado do Radar (--radar). Quando a peça
+// está nele, o custo e o código do Radar mandam nos nomes dos arquivos.
+export function montarPlano(pasta, arquivos, codigosBanco, radar = new Map()) {
   const lidos = arquivos.map((a) => ({ arquivo: a, ...ler(a) }));
   // sigla da pasta: a mais comum entre os códigos definitivos, senão derivada do nome
   const contaSigla = {};
@@ -126,7 +130,8 @@ export function montarPlano(pasta, arquivos, codigosBanco) {
     const outro = repetido ? undefined : modelos[0];
     if (repetido) alertas.push(`${pasta}: o nome "${c.nome}" aparece em mais de uma peça, parear à mão`);
     const antigo = c.forma === "codigo" ? `${c.sigla}-${c.tipo}-${c.numero}` : null;
-    const invertido = !!(outro && antigo && CODIGO_E_MODELO.has(`${pasta}|${antigo}`));
+    // Só vale enquanto o arquivo de nome simples ainda não foi renomeado para o padrão (… - modelo).
+    const invertido = !!(outro && outro.forma === "simples" && antigo && CODIGO_E_MODELO.has(`${pasta}|${antigo}`));
     const arquivoModelo = invertido ? c.arquivo : outro?.arquivo ?? null;
     const arquivoClose = invertido ? outro.arquivo : c.arquivo;
     consumidos.add(c.arquivo);
@@ -136,8 +141,17 @@ export function montarPlano(pasta, arquivos, codigosBanco) {
     const tipo = c.forma === "codigo" && TIPOS.includes(c.tipo) ? c.tipo : tipoPeloNome(c.nome);
     const doBanco = repetido ? undefined : codigosBanco.find((b) => norm(b.fabricante) === norm(pasta) && norm(b.name) === norm(c.nome) && b.codigo);
     if (!provisorio && doBanco && doBanco.codigo !== antigo) alertas.push(`${pasta}: "${c.nome}" tem ${antigo} no arquivo e ${doBanco.codigo} no Radar, qual vale?`);
-    const codigo = !provisorio ? antigo : doBanco ? doBanco.codigo : proximo(tipo);
-    pecas.push({ codigo, codigoAntigo: antigo, mudaCodigo: provisorio, nome: c.nome, custo: c.custo, close: arquivoClose, modelo: arquivoModelo, invertido });
+    let codigo = !provisorio ? antigo : doBanco ? doBanco.codigo : proximo(tipo);
+    let custo = c.custo;
+    let preco = null;
+    const noRadar = repetido ? undefined : radar.get(`${norm(pasta)}|${norm(c.nome)}`);
+    if (noRadar) {
+      if (noRadar.codigo && !PROVISORIOS.has(noRadar.codigo.split("-")[0])) codigo = noRadar.codigo;
+      if (noRadar.custo !== null && noRadar.custo > 0) custo = noRadar.custo;
+      else if (c.custo) alertas.push(`${pasta}: "${c.nome}" está sem custo no Radar, mas o arquivo diz R$ ${custoBR(c.custo)}`);
+      preco = noRadar.preco;
+    }
+    pecas.push({ codigo, codigoAntigo: antigo, mudaCodigo: provisorio || codigo !== antigo, nome: c.nome, custo, custoDoArquivo: c.custo, preco, close: arquivoClose, modelo: arquivoModelo, invertido });
   }
   const avulsas = lidos.filter((l) => !consumidos.has(l.arquivo)).map((l) => l.arquivo);
 
@@ -146,7 +160,10 @@ export function montarPlano(pasta, arquivos, codigosBanco) {
   for (const p of pecas) {
     const ext = (f) => path.extname(f);
     const novoClose = p.custo === null ? null : `${p.codigo} - ${p.nome} - custo ${custoBR(p.custo)}${ext(p.close)}`;
-    if (novoClose && novoClose !== p.close.normalize("NFC")) renomear.push({ de: p.close, para: novoClose, motivo: p.mudaCodigo ? "código definitivo" : "padrão do nome" });
+    const custoMudou = p.custoDoArquivo !== null && p.custo !== null && Math.abs(p.custoDoArquivo - p.custo) > 0.001;
+    if (custoMudou) alertas.push(`${pasta}: "${p.nome}" custo ${custoBR(p.custoDoArquivo)} no arquivo e ${custoBR(p.custo)} no Radar (o Radar manda; confira antes de aprovar)`);
+    const motivoDoClose = custoMudou ? `custo do Radar (${custoBR(p.custoDoArquivo)} para ${custoBR(p.custo)})` : p.mudaCodigo ? "código definitivo" : "padrão do nome";
+    if (novoClose && novoClose !== p.close.normalize("NFC")) renomear.push({ de: p.close, para: novoClose, motivo: motivoDoClose });
     if (p.custo === null) alertas.push(`${pasta}: "${p.nome}" sem custo no nome do arquivo (Falta preço de custo)`);
     if (p.modelo) {
       const novoModelo = `${p.codigo} - ${p.nome} - modelo${ext(p.modelo)}`;
@@ -170,17 +187,44 @@ export function montarPlano(pasta, arquivos, codigosBanco) {
   return { pasta, sigla, pecas, avulsas, renomear, alertas };
 }
 
+function lerRadar() {
+  const arq = pega("--radar");
+  if (!arq) return null;
+  const dados = JSON.parse(fs.readFileSync(arq, "utf8"));
+  const mapa = new Map();
+  for (const p of dados.pecas) mapa.set(`${norm(p.fabricante)}|${norm(p.nome)}`, { codigo: p.codigo, custo: p.custo, preco: p.preco });
+  return { dados, mapa };
+}
+
+const csv = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+// Planilha do estoque: uma linha por peça, com o que está nas pastas e o que o Radar diz.
+function gravarPlanilha(resultado, radar) {
+  const destino = path.join(RAIZ, "..", "Planilha do estoque (posição do Radar).csv");
+  const linhas = ["Fabricante;Código;Peça;Custo;Preço de venda;Foto close;Foto modelo"];
+  for (const r of resultado) {
+    for (const p of r.pecas) {
+      const preco = p.preco ?? (p.custo ? Math.round(p.custo * 2.5 * 100) / 100 : null);
+      linhas.push([r.pasta, p.codigo, p.nome, p.custo === null ? "FALTA PREÇO DE CUSTO" : custoBR(p.custo), preco === null ? "" : custoBR(preco), p.close, p.modelo ?? "FALTA FOTO DA MODELO"].map(csv).join(";"));
+    }
+  }
+  fs.writeFileSync(destino, "﻿" + linhas.join("\r\n"));
+  console.log(`Planilha gravada: ${destino} (${linhas.length - 1} peças; posição do Radar de ${radar.dados.geradoEm})`);
+}
+
 async function plano() {
   const so = pega("--pasta");
-  const banco = await codigosDoBanco();
+  const radar = lerRadar();
+  const banco = radar ? radar.dados.pecas.map((p) => ({ fabricante: p.fabricante, name: p.nome, codigo: p.codigo })) : await codigosDoBanco();
   const pastas = fs.readdirSync(RAIZ, { withFileTypes: true }).filter((e) => e.isDirectory() && !/para nomear/i.test(e.name) && (!so || e.name === so)).map((e) => e.name);
   const resultado = [];
   for (const pasta of pastas) {
     const arquivos = fs.readdirSync(path.join(RAIZ, pasta), { withFileTypes: true }).filter((e) => e.isFile() && IMG.test(e.name)).map((e) => e.name);
-    resultado.push(montarPlano(pasta, arquivos, banco));
+    resultado.push(montarPlano(pasta, arquivos, banco, radar?.mapa));
   }
   const saida = pega("--saida");
   if (saida) fs.writeFileSync(saida, JSON.stringify(resultado, null, 1));
+  if (radar) gravarPlanilha(resultado, radar);
   let totalRen = 0, totalPecas = 0;
   console.log("Pasta | peças | sem modelo | renomear | código novo | avulsas | alertas");
   for (const r of resultado) {

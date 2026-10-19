@@ -3456,3 +3456,16 @@ a.tab-btn {
 .fundo-cartao--pagina:hover {
   background: var(--surface-soft);
 }
+
+/* Alerta que se corrige com um clique (Produtos e cadastros) */
+button.stock-pill.pill-clicavel {
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+button.stock-pill.pill-clicavel:hover,
+button.stock-pill.pill-clicavel:focus-visible {
+  text-decoration: underline;
+  filter: brightness(0.96);
+}

@@ -28,6 +28,7 @@ import { faltaParaPublicar, mensagemDeFalta } from "@/lib/store-rules";
 import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
 import { ALERTA_FALTA_CUSTO, faltaCusto } from "@/lib/custo";
+import CorrigirAlerta, { type AlertaCorrigivel } from "@/app/cadastros/corrigir-alerta";
 import { alertasDaPeca, contarAlertas, ORDEM_DOS_ALERTAS, TEXTO_DO_ALERTA, type ChaveAlerta } from "@/lib/alertas-da-peca";
 
 const MATERIAL_PRESETS = MATERIALS.slice(0, -1);
@@ -173,6 +174,13 @@ export default function ProdutosTab() {
   const fotosPedido = useRef(0);
   const [siteFilter, setSiteFilter] = useState<"todas" | "no_site" | "fora">("todas");
   const [alertaFiltro, setAlertaFiltro] = useState<ChaveAlerta | null>(null);
+  const [corrigindo, setCorrigindo] = useState<{ peca: Product; alerta: AlertaCorrigivel } | null>(null);
+
+  // Clique no alerta: custo, preço e código se corrigem na janelinha; foto e foto da modelo abrem a edição da peça.
+  function clicarNoAlerta(p: Product, a: ChaveAlerta) {
+    if (a === "custo" || a === "preco" || a === "codigo") setCorrigindo({ peca: p, alerta: a });
+    else openEdit(p);
+  }
 
   function load() {
     Promise.all([
@@ -364,6 +372,9 @@ export default function ProdutosTab() {
             </button>
           ))}
         </div>
+        <a className="btn btn-ghost" href="/api/products/exportar-pastas" download title="Baixa a posição do Radar (custo, preço e código) para a varredura acertar as pastas e a planilha">
+          Baixar posição para as pastas
+        </a>
         <a className="btn btn-ghost" href="/importar-catalogo">
           Importar catálogo Bia Belutti
         </a>
@@ -448,6 +459,19 @@ export default function ProdutosTab() {
         </div>
       )}
 
+      {corrigindo && (
+        <CorrigirAlerta
+          peca={corrigindo.peca}
+          alerta={corrigindo.alerta}
+          doFabricante={items.filter((i) => i.manufacturer_id === corrigindo.peca.manufacturer_id && corrigindo.peca.manufacturer_id)}
+          aoFechar={() => setCorrigindo(null)}
+          aoSalvar={(item) => {
+            setItems((prev) => prev.map((i) => (i.id === corrigindo.peca.id ? { ...i, ...item } : i)));
+            setCorrigindo(null);
+          }}
+        />
+      )}
+
       {loading ? (
         <div className="loading-state">Carregando...</div>
       ) : items.length === 0 ? (
@@ -488,9 +512,16 @@ export default function ProdutosTab() {
                     {alertasDaPeca(p)
                       .filter((a) => a === "foto" || a === "modelo" || a === "codigo")
                       .map((a) => (
-                        <span key={a} className="stock-pill out" style={{ marginRight: 4, marginTop: 4, display: "inline-block" }}>
+                        <button
+                          key={a}
+                          type="button"
+                          className="stock-pill out pill-clicavel"
+                          style={{ marginRight: 4, marginTop: 4, display: "inline-block" }}
+                          title={a === "codigo" ? "Clique para dar o código" : "Clique para abrir a peça e colocar a foto"}
+                          onClick={() => clicarNoAlerta(p, a)}
+                        >
                           {TEXTO_DO_ALERTA[a]}
-                        </span>
+                        </button>
                       ))}
                   </td>
                   <td>
@@ -526,11 +557,19 @@ export default function ProdutosTab() {
                     )}
                   </td>
                   <td className="num">
-                    {faltaCusto(p) ? <span className="stock-pill out">{ALERTA_FALTA_CUSTO}</span> : formatBRL(p.cost)}
+                    {faltaCusto(p) ? (
+                      <button type="button" className="stock-pill out pill-clicavel" title="Clique para informar o custo" onClick={() => clicarNoAlerta(p, "custo")}>
+                        {ALERTA_FALTA_CUSTO}
+                      </button>
+                    ) : (
+                      formatBRL(p.cost)
+                    )}
                   </td>
                   <td className="num">
                     {alertasDaPeca(p).includes("preco") ? (
-                      <span className="stock-pill out">{TEXTO_DO_ALERTA.preco}</span>
+                      <button type="button" className="stock-pill out pill-clicavel" title="Clique para informar o preço" onClick={() => clicarNoAlerta(p, "preco")}>
+                        {TEXTO_DO_ALERTA.preco}
+                      </button>
                     ) : (
                       formatBRL(p.price)
                     )}
