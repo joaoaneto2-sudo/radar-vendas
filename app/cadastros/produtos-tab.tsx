@@ -28,6 +28,7 @@ import { faltaParaPublicar, mensagemDeFalta } from "@/lib/store-rules";
 import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
 import { ALERTA_FALTA_CUSTO, faltaCusto } from "@/lib/custo";
+import { alertasDaPeca, contarAlertas, ORDEM_DOS_ALERTAS, TEXTO_DO_ALERTA, type ChaveAlerta } from "@/lib/alertas-da-peca";
 
 const MATERIAL_PRESETS = MATERIALS.slice(0, -1);
 const GEMSTONE_PRESETS = GEMSTONES.slice(0, -1);
@@ -171,6 +172,7 @@ export default function ProdutosTab() {
   const [saving, setSaving] = useState(false);
   const fotosPedido = useRef(0);
   const [siteFilter, setSiteFilter] = useState<"todas" | "no_site" | "fora">("todas");
+  const [alertaFiltro, setAlertaFiltro] = useState<ChaveAlerta | null>(null);
 
   function load() {
     Promise.all([
@@ -326,9 +328,10 @@ export default function ProdutosTab() {
     if (Array.isArray(dados.notes) && dados.notes.length > 0) window.alert(dados.notes.join("\n"));
   }
 
-  const visibleItems = items.filter((p) =>
-    siteFilter === "todas" ? true : siteFilter === "no_site" ? !!p.show_online : !p.show_online
-  );
+  const visibleItems = items
+    .filter((p) => (siteFilter === "todas" ? true : siteFilter === "no_site" ? !!p.show_online : !p.show_online))
+    .filter((p) => (alertaFiltro ? alertasDaPeca(p).includes(alertaFiltro) : true));
+  const contagemDeAlertas = contarAlertas(items);
   const noSiteCount = items.filter((p) => p.show_online).length;
 
   const suggestedName = buildProductDescription(form);
@@ -418,12 +421,29 @@ export default function ProdutosTab() {
         </p>
       )}
 
-      {!loading && items.some(faltaCusto) && (
-        <div className="banner banner-warning" role="status" style={{ marginBottom: 12 }}>
+      {!loading && ORDEM_DOS_ALERTAS.some((a) => contagemDeAlertas[a] > 0) && (
+        <div className="banner banner-warning" role="status" style={{ marginBottom: 12, alignItems: "flex-start" }}>
           <span>⚠️</span>
           <span>
-            {ALERTA_FALTA_CUSTO} em {items.filter(faltaCusto).length} {items.filter(faltaCusto).length === 1 ? "peça" : "peças"}. Sem o custo o Radar não
-            calcula lucro nem o valor do estoque.
+            <strong>Dados que faltam nas peças.</strong> Clique para ver só essas peças.
+            <span className="store-toggles" style={{ marginTop: 8, display: "flex" }}>
+              {ORDEM_DOS_ALERTAS.filter((a) => contagemDeAlertas[a] > 0).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  className={"toggle-chip" + (alertaFiltro === a ? " on" : "")}
+                  aria-pressed={alertaFiltro === a}
+                  onClick={() => setAlertaFiltro(alertaFiltro === a ? null : a)}
+                >
+                  {TEXTO_DO_ALERTA[a]} ({contagemDeAlertas[a]})
+                </button>
+              ))}
+              {alertaFiltro && (
+                <button type="button" className="btn btn-ghost btn-small" onClick={() => setAlertaFiltro(null)}>
+                  Mostrar todas
+                </button>
+              )}
+            </span>
           </span>
         </div>
       )}
@@ -465,6 +485,13 @@ export default function ProdutosTab() {
                     <div className="hint">
                       {[p.jewelry_type, p.material, p.karat, p.gemstone].filter(Boolean).join(" · ") || "-"}
                     </div>
+                    {alertasDaPeca(p)
+                      .filter((a) => a === "foto" || a === "modelo" || a === "codigo")
+                      .map((a) => (
+                        <span key={a} className="stock-pill out" style={{ marginRight: 4, marginTop: 4, display: "inline-block" }}>
+                          {TEXTO_DO_ALERTA[a]}
+                        </span>
+                      ))}
                   </td>
                   <td>
                     {p.category || "-"}
@@ -502,7 +529,11 @@ export default function ProdutosTab() {
                     {faltaCusto(p) ? <span className="stock-pill out">{ALERTA_FALTA_CUSTO}</span> : formatBRL(p.cost)}
                   </td>
                   <td className="num">
-                    {formatBRL(p.price)}
+                    {alertasDaPeca(p).includes("preco") ? (
+                      <span className="stock-pill out">{TEXTO_DO_ALERTA.preco}</span>
+                    ) : (
+                      formatBRL(p.price)
+                    )}
                     {p.sale_price !== null && p.sale_price !== undefined && (
                       <div>
                         <span className="stock-pill low">{`Promo ${formatBRL(p.sale_price)}`}</span>
