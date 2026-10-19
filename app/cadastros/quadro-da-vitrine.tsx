@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { formatBRL, type Product } from "@/lib/format";
+import { ALERTA_FALTA_CUSTO, faltaCusto } from "@/lib/custo";
 import { montarQuadroDaVitrine } from "@/lib/vitrine-quadro";
 import { montarQuadroDoCatalogo } from "@/lib/catalogo-quadro";
 
@@ -31,7 +32,7 @@ function Cartao({
       <div className="qv-info">
         <strong title={p.name ?? undefined}>{p.name?.trim() || "(sem nome)"}</strong>
         <span className="qv-sub">
-          {p.cost !== null && p.cost !== undefined && p.cost !== "" ? `Custo ${formatBRL(p.cost)}` : "sem custo"}
+          {faltaCusto(p) ? ALERTA_FALTA_CUSTO : `Custo ${formatBRL(p.cost)}`}
           {" · "}
           {p.price !== null && p.price !== undefined && p.price !== "" ? `Venda ${formatBRL(p.price)}` : "sem preço"}
           {" · estoque "}

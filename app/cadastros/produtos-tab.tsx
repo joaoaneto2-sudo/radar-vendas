@@ -27,6 +27,7 @@ import QuadroDaVitrine from "@/app/cadastros/quadro-da-vitrine";
 import { faltaParaPublicar, mensagemDeFalta } from "@/lib/store-rules";
 import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
+import { ALERTA_FALTA_CUSTO, faltaCusto } from "@/lib/custo";
 
 const MATERIAL_PRESETS = MATERIALS.slice(0, -1);
 const GEMSTONE_PRESETS = GEMSTONES.slice(0, -1);
@@ -417,6 +418,16 @@ export default function ProdutosTab() {
         </p>
       )}
 
+      {!loading && items.some(faltaCusto) && (
+        <div className="banner banner-warning" role="status" style={{ marginBottom: 12 }}>
+          <span>⚠️</span>
+          <span>
+            {ALERTA_FALTA_CUSTO} em {items.filter(faltaCusto).length} {items.filter(faltaCusto).length === 1 ? "peça" : "peças"}. Sem o custo o Radar não
+            calcula lucro nem o valor do estoque.
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div className="loading-state">Carregando...</div>
       ) : items.length === 0 ? (
@@ -487,7 +498,9 @@ export default function ProdutosTab() {
                       </>
                     )}
                   </td>
-                  <td className="num">{formatBRL(p.cost)}</td>
+                  <td className="num">
+                    {faltaCusto(p) ? <span className="stock-pill out">{ALERTA_FALTA_CUSTO}</span> : formatBRL(p.cost)}
+                  </td>
                   <td className="num">
                     {formatBRL(p.price)}
                     {p.sale_price !== null && p.sale_price !== undefined && (
