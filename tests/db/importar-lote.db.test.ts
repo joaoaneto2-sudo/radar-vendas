@@ -29,6 +29,8 @@ describe("validarLote", () => {
     expect(validarLote({ itens: [item({ categoria: "Coisas" })] }).ok).toBe(false);
     expect(validarLote({ itens: [item({ fotoPrincipal: "javascript:alert(1)" })] }).ok).toBe(false);
     expect(validarLote({ itens: [item({ fotoModelo: "ftp://x" })] }).ok).toBe(false);
+    expect(validarLote({ itens: [item({ codigo: "abc" })] }).ok).toBe(false);
+    expect(validarLote({ itens: [item({ codigo: "SIMONEJÓ-BR-001" })] }).ok).toBe(true);
     expect(validarLote({ itens: [item({ catalogo: { kind: "limpa", fx: 150, fy: 50, zoom: 1 } })] }).ok).toBe(false);
     // mesmo nome, com acento e maiúscula diferentes
     expect(validarLote({ itens: [item(), item({ nome: "BRINCO FLOR EM PEROLA" })] }).ok).toBe(false);
@@ -165,6 +167,44 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
     await importarLote(pool, [item({ fotoModelo: null, catalogo: { kind: "modelo", fx: 50, fy: 50, zoom: 1.4 } })], true);
     const fotos = await pool.query(`SELECT 1 FROM product_photos pp JOIN products p ON p.id = pp.product_id WHERE p.name = 'Brinco flor em pérola'`);
     expect(fotos.rowCount).toBe(0);
+  });
+
+  it("grava o código da peça nova; peça com código provisório (NOVO-) recebe o definitivo; código diferente definitivo só avisa", async () => {
+    const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
+    await pool.query(
+      `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active, manufacturer_code) VALUES
+         ('Brincos', 'LT Provisória', $1, 50, 125, 1, 'varejo', true, 'NOVO-BR-001'),
+         ('Brincos', 'LT Definitiva', $1, 50, 125, 1, 'varejo', true, 'LTFAB-BR-001')`,
+      [fab]
+    );
+    const r = await importarLote(
+      pool,
+      [
+        item({ fabricante: "Fabricante LT", nome: "LT Nova", codigo: "LTFAB-BR-010" }),
+        item({ fabricante: "Fabricante LT", nome: "LT Provisória", custo: 50, codigo: "LTFAB-BR-011" }),
+        item({ fabricante: "Fabricante LT", nome: "LT Definitiva", custo: 50, codigo: "LTFAB-BR-012" }),
+      ],
+      true
+    );
+    const { rows } = await pool.query(`SELECT name, manufacturer_code FROM products WHERE name LIKE 'LT %' ORDER BY name`);
+    expect(Object.fromEntries(rows.map((x) => [x.name, x.manufacturer_code]))).toEqual({
+      "LT Definitiva": "LTFAB-BR-001",
+      "LT Nova": "LTFAB-BR-010",
+      "LT Provisória": "LTFAB-BR-011",
+    });
+    expect(r.itens.find((i) => i.nome === "LT Definitiva")?.aviso).toContain("não mexi");
+  });
+
+  it("código já usado por outra peça do mesmo fabricante não é gravado e vira aviso", async () => {
+    const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
+    await pool.query(
+      `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active, manufacturer_code) VALUES ('Brincos', 'LT Dona do código', $1, 50, 125, 1, 'varejo', true, 'LTFAB-BR-020')`,
+      [fab]
+    );
+    const r = await importarLote(pool, [item({ fabricante: "Fabricante LT", nome: "LT Quer o mesmo", codigo: "LTFAB-BR-020" })], true);
+    expect(r.criadas).toBe(1);
+    expect(r.itens[0].aviso).toContain("já é de outra peça");
+    expect((await pool.query(`SELECT manufacturer_code FROM products WHERE name = 'LT Quer o mesmo'`)).rows[0].manufacturer_code).toBeNull();
   });
 
   it("se algo falha no meio, nada é gravado", async () => {

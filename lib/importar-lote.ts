@@ -18,6 +18,7 @@ export interface ItemDoLote {
   categoria: string;
   fotoPrincipal: string; // endereço da foto principal (o close, ou a foto da modelo quando só existe ela)
   fotoModelo: string | null; // foto com a modelo (vai para product_photos, tipo modelo)
+  codigo?: string | null; // código da peça (SIGLA-TIPO-NNN), gravado em manufacturer_code quando está livre
   catalogo: { kind: "limpa" | "modelo"; fx: number; fy: number; zoom: number };
 }
 
@@ -73,7 +74,9 @@ export function validarLote(corpo: unknown): { ok: true; itens: ItemDoLote[] } |
     const chave = `${semAcento(fabricante)}|${semAcento(nome)}`;
     if (vistos.has(chave)) return { ok: false, message: `Peça repetida na lista: ${nome} (${fabricante}).` };
     vistos.add(chave);
-    itens.push({ fabricante, nome, custo, categoria, fotoPrincipal: principal, fotoModelo: modelo, catalogo: { kind: cat.kind, fx, fy, zoom } });
+    const codigo = typeof it.codigo === "string" ? it.codigo.trim() : "";
+    if (codigo && !/^\p{Lu}+-(BR|CO|PU|AN|OU|PI|CJ)-\d{3}$/u.test(codigo)) return { ok: false, message: `Peça ${n} (${nome}): código inválido.` };
+    itens.push({ fabricante, nome, custo, categoria, fotoPrincipal: principal, fotoModelo: modelo, codigo: codigo || null, catalogo: { kind: cat.kind, fx, fy, zoom } });
   }
   return { ok: true, itens };
 }
@@ -103,6 +106,22 @@ export function fabricanteParecido<T extends { name: string }>(fabricantes: T[],
   return candidatos.length === 1 ? candidatos[0] : undefined;
 }
 
+/** Grava o código da peça quando ela não tem código (ou tem um provisório, NOVO- ou SEMFORN-) e o código está livre. */
+async function cuidarDoCodigo(
+  client: { query: (sql: string, valores?: unknown[]) => Promise<{ rowCount: number | null }> },
+  id: number,
+  fabricanteId: number,
+  codigo: string | null,
+  atual: string | null
+): Promise<string | undefined> {
+  if (!codigo || atual === codigo) return undefined;
+  if (atual && !/^(NOVO|SEMFORN)-/.test(atual)) return `código no Radar é ${atual} e na pasta é ${codigo} (não mexi)`;
+  const ocupado = await client.query(`SELECT 1 FROM products WHERE manufacturer_id = $1 AND manufacturer_code = $2 AND id <> $3`, [fabricanteId, codigo, id]);
+  if (ocupado.rowCount) return `o código ${codigo} já é de outra peça deste fabricante (não gravei)`;
+  await client.query(`UPDATE products SET manufacturer_code = $1 WHERE id = $2`, [codigo, id]);
+  return undefined;
+}
+
 export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[], gravar: boolean, markup = MARKUP_PADRAO): Promise<ResultadoDoLote> {
   const client = await db.connect();
   const resultado: ResultadoDoLote = { gravou: gravar, fabricantesCriados: [], fabricantesParecidos: [], criadas: 0, atualizadas: 0, itens: [] };
@@ -129,7 +148,7 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
       }
       const fabricanteId: number = fabId;
 
-      const { rows: pecas } = await client.query(`SELECT id, name, cost, price FROM products WHERE manufacturer_id = $1`, [fabricanteId]);
+      const { rows: pecas } = await client.query(`SELECT id, name, cost, price, manufacturer_code FROM products WHERE manufacturer_id = $1`, [fabricanteId]);
       const existente = pecas.find((p) => semAcento(p.name ?? "") === semAcento(it.nome));
       const foto = JSON.stringify(it.catalogo);
       let id: number;
@@ -167,6 +186,9 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
         id = novo.rows[0].id as number;
         resultado.criadas++;
       }
+
+      const avisoCodigo = await cuidarDoCodigo(client, id, fabricanteId, it.codigo ?? null, existente?.manufacturer_code ?? null);
+      if (avisoCodigo) aviso = aviso ? `${aviso}; ${avisoCodigo}` : avisoCodigo;
 
       await client.query(`DELETE FROM product_photos WHERE product_id = $1 AND kind = 'modelo'`, [id]);
       if (it.fotoModelo) {

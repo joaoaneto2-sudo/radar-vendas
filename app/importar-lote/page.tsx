@@ -1,6 +1,6 @@
 "use client";
 
-// Subir peças das pastas: lê o lote publicado em /estoque/lote-oito-pastas.json (peças das pastas de
+// Subir peças das pastas: lê o lote publicado em /estoque/lote-pastas.json (peças das pastas de
 // fornecedor, com foto close e foto da modelo), mostra um ensaio do que seria criado ou atualizado
 // e só grava depois de você confirmar. Valor da pasta = custo; preço de varejo = custo x 2,5.
 
@@ -20,7 +20,7 @@ export default function ImportarLotePage() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    fetch("/estoque/lote-oito-pastas.json")
+    fetch("/estoque/lote-pastas.json")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(setLote)
       .catch(() => setErroDeCarga("Não encontrei o lote de peças. Tente atualizar a página."));

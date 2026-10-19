@@ -3,7 +3,8 @@
 // Modo plano (padrão): só LÊ. Junta close + modelo de cada peça, acha os códigos provisórios (NOVO-, SEMFORN-
 // ou sem código) e propõe o código definitivo (SIGLA-TIPO-NNN) e o novo nome de cada arquivo. Grava o plano em
 // um JSON e imprime um resumo. Nada é renomeado.
-// Modo aplicar: renomeia de verdade, só com --aplicar <plano.json> --confirmar.
+// Modo aplicar: renomeia de verdade, só com --aplicar <plano.json> --confirmar (grava um registro .renomeados.json).
+// Modo desfazer: --desfazer <registro.renomeados.json> --confirmar volta os nomes antigos.
 //
 // Padrão de nome:  close  -> CODIGO - Nome - custo 77,00.ext
 //                  modelo -> CODIGO - Nome - modelo.ext
@@ -198,6 +199,7 @@ function aplicar() {
   const planos = JSON.parse(fs.readFileSync(arq, "utf8"));
   let ok = 0;
   const falhas = [];
+  const feitos = []; // registro para poder desfazer
   for (const p of planos) {
     for (const r of p.renomear) {
       const de = path.join(RAIZ, p.pasta, r.de);
@@ -205,14 +207,31 @@ function aplicar() {
       if (!fs.existsSync(de)) { falhas.push(`não achei: ${p.pasta}/${r.de}`); continue; }
       if (fs.existsSync(para)) { falhas.push(`já existe: ${p.pasta}/${r.para}`); continue; }
       fs.renameSync(de, para);
+      feitos.push({ pasta: p.pasta, de: r.de, para: r.para });
       ok++;
     }
   }
-  console.log(`Renomeados: ${ok}. Falhas: ${falhas.length}`);
+  const log = arq.replace(/\.json$/, "") + ".renomeados.json";
+  fs.writeFileSync(log, JSON.stringify(feitos, null, 1));
+  console.log(`Renomeados: ${ok}. Falhas: ${falhas.length}. Registro para desfazer: ${log}`);
   falhas.forEach((f) => console.log("  ", f));
+}
+
+function desfazer() {
+  const arq = pega("--desfazer");
+  if (!args.includes("--confirmar")) { console.error("Faltou --confirmar. Nada foi alterado."); process.exit(1); }
+  const feitos = JSON.parse(fs.readFileSync(arq, "utf8"));
+  let ok = 0;
+  for (const r of feitos.reverse()) {
+    const atual = path.join(RAIZ, r.pasta, r.para);
+    const volta = path.join(RAIZ, r.pasta, r.de);
+    if (fs.existsSync(atual) && !fs.existsSync(volta)) { fs.renameSync(atual, volta); ok++; }
+  }
+  console.log(`Voltaram ao nome antigo: ${ok} de ${feitos.length}`);
 }
 
 if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, "/")}` || process.argv[1].endsWith("varrer-pastas.mjs")) {
   if (pega("--aplicar")) aplicar();
+  else if (pega("--desfazer")) desfazer();
   else await plano();
 }
