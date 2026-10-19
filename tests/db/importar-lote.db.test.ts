@@ -218,6 +218,33 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
     expect((await pool.query(`SELECT manufacturer_code FROM products WHERE name = 'LT Quer o mesmo'`)).rows[0].manufacturer_code).toBeNull();
   });
 
+  it("peça nova sem custo é criada sem custo e sem preço (fica com o alerta), e sem foto principal também vale", async () => {
+    const r = await importarLote(pool, [{ fabricante: "Fabricante LT", nome: "LT Sem custo ainda", custo: null, categoria: "Brincos", fotoPrincipal: null }], true);
+    expect(r.criadas).toBe(1);
+    const { rows } = await pool.query(`SELECT cost, price, photo_url, stock_qty, catalog_photo FROM products WHERE name = 'LT Sem custo ainda'`);
+    expect(rows[0]).toMatchObject({ cost: null, price: null, photo_url: null, stock_qty: 1 });
+    expect(rows[0].catalog_photo).toEqual({ kind: "limpa", fx: 50, fy: 50, zoom: 1 });
+    await pool.query(`DELETE FROM manufacturers WHERE name = 'Fabricante LT'`);
+  });
+
+  it("atualizar sem mandar fotos não mexe nas fotos; mandar só a da modelo troca só ela; guarda de que arquivo veio cada uma", async () => {
+    await importarLote(pool, [item({ fotoOrigem: "close.png|100|1", modeloOrigem: "modelo.png|200|2" })], true);
+    // só o custo/código: nenhuma foto no item
+    await importarLote(pool, [{ fabricante: "Brilhare", nome: "Brinco flor em pérola", custo: 77, categoria: "Brincos", codigo: "BRILHARE-BR-001" }], true);
+    let linha = (await pool.query(`SELECT photo_url, foto_origem, modelo_origem, manufacturer_code FROM products WHERE name = 'Brinco flor em pérola'`)).rows[0];
+    expect(linha).toMatchObject({ photo_url: "/estoque/brilhare/brinco-close.jpg", foto_origem: "close.png|100|1", modelo_origem: "modelo.png|200|2", manufacturer_code: "BRILHARE-BR-001" });
+    // só a foto da modelo nova
+    await importarLote(pool, [{ fabricante: "Brilhare", nome: "Brinco flor em pérola", custo: 77, categoria: "Brincos", fotoModelo: "https://blob.example/modelo2.jpg", modeloOrigem: "modelo2.png|300|3" }], true);
+    linha = (await pool.query(`SELECT photo_url, foto_origem, modelo_origem FROM products WHERE name = 'Brinco flor em pérola'`)).rows[0];
+    expect(linha).toMatchObject({ photo_url: "/estoque/brilhare/brinco-close.jpg", foto_origem: "close.png|100|1", modelo_origem: "modelo2.png|300|3" });
+    const modelo = await pool.query(`SELECT url FROM product_photos pp JOIN products p ON p.id = pp.product_id WHERE p.name = 'Brinco flor em pérola' AND pp.kind = 'modelo'`);
+    expect(modelo.rows).toEqual([{ url: "https://blob.example/modelo2.jpg" }]);
+    // fotoModelo nulo remove a foto e a origem
+    await importarLote(pool, [{ fabricante: "Brilhare", nome: "Brinco flor em pérola", custo: 77, categoria: "Brincos", fotoModelo: null }], true);
+    linha = (await pool.query(`SELECT modelo_origem FROM products WHERE name = 'Brinco flor em pérola'`)).rows[0];
+    expect(linha.modelo_origem).toBeNull();
+  });
+
   it("se algo falha no meio, nada é gravado", async () => {
     const ruim = item({ nome: "LT Segunda", categoria: "Brincos", catalogo: { kind: "limpa", fx: 50, fy: 50, zoom: 1 } });
     // custo gigante estoura a coluna NUMERIC(12,2) no segundo item

@@ -102,6 +102,9 @@ export type Product = {
   modelo_photo_url?: string | null;
   // Custo que está no nome do arquivo da pasta quando difere do cadastro (migração 019). Gera o alerta "Custo diverge da pasta".
   custo_da_pasta?: number | string | null;
+  // Assinatura do arquivo de onde veio cada foto (migração 020): nome|tamanho|data. A varredura das pastas compara com ela.
+  foto_origem?: string | null;
+  modelo_origem?: string | null;
 };
 
 export type Manufacturer = {

@@ -46,3 +46,18 @@ export function proximoCodigo(
   while (usados.has(`${sigla}-${tipo}-${String(n).padStart(3, "0")}`)) n++;
   return `${sigla}-${tipo}-${String(n).padStart(3, "0")}`;
 }
+
+/** Categoria do cadastro para cada tipo do código (BR = Brincos etc.). */
+export const CATEGORIA_DO_TIPO: Record<string, string> = Object.fromEntries(Object.entries(TIPO_DA_CATEGORIA).map(([categoria, tipo]) => [tipo, categoria]));
+
+/** Chute do tipo pelo nome da peça (peça nova sem código ainda). Sem pista, OU (outros). */
+export function tipoPeloNome(nome: string): string {
+  const n = nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (/\b(brinco|brincos|argola|argolas|ear)\b/.test(n)) return "BR";
+  if (/\b(colar|choker|chocker|gargantilha|corrente|cordao)\b/.test(n)) return "CO";
+  if (/\b(pulseira|bracelete|braceletes|relogio)\b/.test(n)) return "PU";
+  if (/\b(anel|alianca|meia alianca)\b/.test(n)) return "AN";
+  if (/\b(pingente|escapulario|medalha|medalhao)\b/.test(n)) return "PI";
+  if (/\b(conjunto|kit)\b/.test(n)) return "CJ";
+  return "OU";
+}

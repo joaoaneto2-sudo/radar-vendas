@@ -50,3 +50,19 @@ describe("formato e provisório", () => {
     expect(ehProvisorio(null)).toBe(false);
   });
 });
+
+describe("tipoPeloNome e CATEGORIA_DO_TIPO", () => {
+  it("adivinha o tipo pelo nome", async () => {
+    const { tipoPeloNome, CATEGORIA_DO_TIPO } = await import("../../lib/codigo-da-peca");
+    expect(tipoPeloNome("Brinco gota em zircônia")).toBe("BR");
+    expect(tipoPeloNome("Argola cravejada")).toBe("BR");
+    expect(tipoPeloNome("Choker em ródio")).toBe("CO");
+    expect(tipoPeloNome("Bracelete dourado")).toBe("PU");
+    expect(tipoPeloNome("Aliança 15 em moissanite")).toBe("AN");
+    expect(tipoPeloNome("Escapulário em aço")).toBe("PI");
+    expect(tipoPeloNome("Conjunto vintage")).toBe("CJ");
+    expect(tipoPeloNome("Coisa qualquer")).toBe("OU");
+    expect(CATEGORIA_DO_TIPO.BR).toBe("Brincos");
+    expect(CATEGORIA_DO_TIPO.AN).toBe("Anéis");
+  });
+});

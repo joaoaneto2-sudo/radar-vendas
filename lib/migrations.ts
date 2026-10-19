@@ -760,6 +760,14 @@ export const MIGRATIONS: Migration[] = [
        END $$`,
     ],
   },
+  {
+    id: "020",
+    name: "de que arquivo da pasta veio cada foto (assinatura nome|tamanho|data), para a varredura saber o que ja subiu",
+    statements: [
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS foto_origem TEXT`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS modelo_origem TEXT`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

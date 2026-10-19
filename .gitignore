@@ -3,3 +3,6 @@ node_modules
 .env
 .env.local
 *.tsbuildinfo
+
+# Fotos enviadas durante o desenvolvimento (sem armazenamento na nuvem)
+public/uploads-dev/

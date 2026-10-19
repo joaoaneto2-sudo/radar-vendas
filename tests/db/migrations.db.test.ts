@@ -465,6 +465,16 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     });
   });
 
+  describe("origem das fotos (migração 020)", () => {
+    it("peça nova nasce sem origem de foto e guarda a assinatura quando informada", async () => {
+      const pool = await bancoPronto();
+      await pool.query(`INSERT INTO products (name, price) VALUES ('Sem origem', 100)`);
+      expect((await pool.query(`SELECT foto_origem, modelo_origem FROM products WHERE name = 'Sem origem'`)).rows[0]).toEqual({ foto_origem: null, modelo_origem: null });
+      await pool.query(`INSERT INTO products (name, price, foto_origem, modelo_origem) VALUES ('Com origem', 100, '40730|1700000000000', '39835|1700000000001')`);
+      expect((await pool.query(`SELECT foto_origem FROM products WHERE name = 'Com origem'`)).rows[0].foto_origem).toBe("40730|1700000000000");
+    });
+  });
+
   describe("custo em dúvida (migração 019)", () => {
     it("peça nova nasce sem dúvida (custo_da_pasta nulo) e só aceita valor maior que zero", async () => {
       const pool = await bancoPronto();
