@@ -12,6 +12,12 @@ describe("validarCorrecao", () => {
     expect(validarCorrecao({ codigo: " BRILHARE-BR-005 " })).toEqual({ ok: true, correcao: { manufacturer_code: "BRILHARE-BR-005" } });
   });
 
+  it("escolha da dúvida de custo: radar ou pasta (com ou sem refazer o preço)", () => {
+    expect(validarCorrecao({ resolverCusto: "pasta", calcularPreco: true })).toEqual({ ok: true, correcao: { resolverCusto: "pasta", calcularPrecoDaPasta: true } });
+    expect(validarCorrecao({ resolverCusto: "radar" })).toEqual({ ok: true, correcao: { resolverCusto: "radar", calcularPrecoDaPasta: false } });
+    expect(validarCorrecao({ resolverCusto: "talvez" }).ok).toBe(false);
+  });
+
   it("recusa valor zero, negativo, texto, código fora do formato e pedido vazio", () => {
     expect(validarCorrecao({ custo: 0 }).ok).toBe(false);
     expect(validarCorrecao({ custo: "-5" }).ok).toBe(false);

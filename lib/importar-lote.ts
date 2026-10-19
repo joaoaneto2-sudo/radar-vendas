@@ -1,9 +1,10 @@
 // Importa um lote de peças vindas das pastas de fornecedor (foto close + foto com a modelo).
 // Para cada peça: acha o fabricante (cria se não existir), acha a peça pelo nome (cria se não existir),
 // grava a foto principal, a foto da modelo e o enquadramento do catálogo, e deixa a peça no catálogo.
-// O valor da pasta é o CUSTO; o preço de varejo é custo x 2,5. Peça que já existe ganha as fotos e o catálogo; se o
-// custo da pasta for outro, o custo é atualizado e o preço refeito (só quando o preço atual seguia a regra do 2,5;
-// senão o preço fica como está e vem um aviso). O estoque nunca é mexido.
+// O valor da pasta é o CUSTO; o preço de varejo é custo x 2,5. Peça que já existe ganha as fotos e o catálogo; o
+// estoque nunca é mexido. Se o custo do cadastro e o da pasta forem diferentes, NADA é sobrescrito: o custo da pasta
+// fica guardado em custo_da_pasta e a peça mostra o alerta "Custo diverge da pasta" para o João decidir. Cadastro
+// sem custo é preenchido com o da pasta.
 // Roda dentro de uma transação; com gravar = false ela é desfeita no fim (ensaio, mostra o que faria).
 
 import type { Pool } from "pg";
@@ -158,19 +159,17 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
         id = existente.id;
         await client.query(`UPDATE products SET photo_url = $1, catalog_photo = $2::jsonb, show_catalog = true WHERE id = $3`, [it.fotoPrincipal, foto, id]);
         const custoAntigo = existente.cost === null ? null : Number(existente.cost);
-        if (custoAntigo === null || Math.abs(custoAntigo - it.custo) > 0.001) {
+        if (custoAntigo === null) {
+          // Cadastro sem custo: preenche com o da pasta (e o preço de venda, se também faltava).
           const precoNovo = Math.round(it.custo * markup * 100) / 100;
-          const precoAntigo = existente.price === null ? null : Number(existente.price);
-          const seguiaARegra =
-            precoAntigo === null || (custoAntigo !== null && Math.abs(precoAntigo - Math.round(custoAntigo * markup * 100) / 100) < 0.01);
-          const doCusto = custoAntigo === null ? "vazio" : custoAntigo.toFixed(2);
-          if (seguiaARegra) {
-            await client.query(`UPDATE products SET cost = $1, price = $2 WHERE id = $3`, [it.custo, precoNovo, id]);
-            aviso = `custo atualizado de ${doCusto} para ${it.custo.toFixed(2)} e preço de ${precoAntigo === null ? "vazio" : precoAntigo.toFixed(2)} para ${precoNovo.toFixed(2)}`;
-          } else {
-            await client.query(`UPDATE products SET cost = $1 WHERE id = $2`, [it.custo, id]);
-            aviso = `custo atualizado de ${doCusto} para ${it.custo.toFixed(2)}; o preço ${precoAntigo!.toFixed(2)} não seguia o 2,5 e ficou como estava (pela regra seria ${precoNovo.toFixed(2)})`;
-          }
+          await client.query(`UPDATE products SET cost = $1, price = COALESCE(price, $2), custo_da_pasta = NULL WHERE id = $3`, [it.custo, precoNovo, id]);
+          aviso = `o custo estava vazio e foi preenchido com ${it.custo.toFixed(2)} (o da pasta)`;
+        } else if (Math.abs(custoAntigo - it.custo) > 0.001) {
+          // Os dois custos existem e são diferentes: não escolho por você. Fica o alerta "Custo diverge da pasta" na peça.
+          await client.query(`UPDATE products SET custo_da_pasta = $1 WHERE id = $2`, [it.custo, id]);
+          aviso = `custo diverge: cadastro ${custoAntigo.toFixed(2)} e pasta ${it.custo.toFixed(2)}. Não mudei; a peça ficou com o alerta "Custo diverge da pasta" para você decidir`;
+        } else {
+          await client.query(`UPDATE products SET custo_da_pasta = NULL WHERE id = $1 AND custo_da_pasta IS NOT NULL`, [id]);
         }
         resultado.atualizadas++;
       } else {

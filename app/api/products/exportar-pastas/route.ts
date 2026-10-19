@@ -14,7 +14,7 @@ export async function GET() {
     await ensureSchema();
     const { rows } = await db.query(
       `SELECT p.id, m.name AS fabricante, p.name AS nome, p.category AS categoria, p.manufacturer_code AS codigo,
-              p.cost AS custo, p.price AS preco, p.stock_qty AS estoque
+              p.cost AS custo, p.custo_da_pasta AS custo_da_pasta, p.price AS preco, p.stock_qty AS estoque
          FROM products p JOIN manufacturers m ON m.id = p.manufacturer_id
         WHERE p.active AND p.sale_channel IS DISTINCT FROM 'atacado'
         ORDER BY m.name, p.manufacturer_code NULLS LAST, p.name`
@@ -28,6 +28,7 @@ export async function GET() {
         categoria: r.categoria,
         codigo: r.codigo,
         custo: r.custo === null ? null : Number(r.custo),
+        custoDaPasta: r.custo_da_pasta === null ? null : Number(r.custo_da_pasta), // custo em dúvida (alerta no Radar)
         preco: r.preco === null ? null : Number(r.preco),
         estoque: r.estoque,
       })),

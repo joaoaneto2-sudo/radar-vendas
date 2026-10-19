@@ -100,6 +100,8 @@ export type Product = {
   catalog_photo?: { kind: "limpa" | "modelo"; fx: number; fy: number; zoom: number } | null;
   // Foto da peça usada pela modelo (product_photos com kind modelo), quando existe.
   modelo_photo_url?: string | null;
+  // Custo que está no nome do arquivo da pasta quando difere do cadastro (migração 019). Gera o alerta "Custo diverge da pasta".
+  custo_da_pasta?: number | string | null;
 };
 
 export type Manufacturer = {

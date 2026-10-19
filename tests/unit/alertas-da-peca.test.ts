@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertasDaPeca, contarAlertas } from "../../lib/alertas-da-peca";
+import { AJUDA_DO_ALERTA, ORDEM_DOS_ALERTAS, TEXTO_DO_ALERTA, alertasDaPeca, contarAlertas } from "../../lib/alertas-da-peca";
 
 const completa = {
   cost: 77,
@@ -44,9 +44,31 @@ describe("alertasDaPeca", () => {
   });
 });
 
+describe("custo em dúvida", () => {
+  it("custo da pasta diferente do cadastro vira alerta; igual ou ausente não", () => {
+    expect(alertasDaPeca({ ...completa, custo_da_pasta: 119, cost: 89 })).toEqual(["custoPasta"]);
+    expect(alertasDaPeca({ ...completa, custo_da_pasta: "89.00", cost: 89 })).toEqual([]);
+    expect(alertasDaPeca({ ...completa, custo_da_pasta: null })).toEqual([]);
+  });
+
+  it("sem custo no cadastro vale só o alerta de falta de custo", () => {
+    expect(alertasDaPeca({ ...completa, cost: null, custo_da_pasta: 119 })).toEqual(["custo"]);
+  });
+});
+
 describe("contarAlertas", () => {
   it("conta quantas peças têm cada alerta", () => {
     const r = contarAlertas([completa, { ...completa, cost: null }, { ...completa, cost: null, manufacturer_code: null }]);
-    expect(r).toEqual({ custo: 2, preco: 0, foto: 0, modelo: 0, codigo: 1 });
+    expect(r).toEqual({ custo: 2, custoPasta: 0, preco: 0, foto: 0, modelo: 0, codigo: 1 });
+  });
+});
+
+describe("ajuda de cada alerta", () => {
+  it("todo alerta tem texto, o problema e como resolver", () => {
+    for (const a of ORDEM_DOS_ALERTAS) {
+      expect(TEXTO_DO_ALERTA[a].length).toBeGreaterThan(5);
+      expect(AJUDA_DO_ALERTA[a].problema.length).toBeGreaterThan(20);
+      expect(AJUDA_DO_ALERTA[a].comoResolver.length).toBeGreaterThan(20);
+    }
   });
 });

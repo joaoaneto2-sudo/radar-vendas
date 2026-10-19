@@ -72,6 +72,24 @@ describe.skipIf(!disponivel)("correção rápida pelo alerta", () => {
     expect((await pool.query(`SELECT manufacturer_code FROM products WHERE id = $1`, [semCusto])).rows[0].manufacturer_code).toBe("FABCR-BR-002");
   });
 
+  it("dúvida de custo: 'pasta' passa a valer o custo do arquivo (e refaz o preço se pedido); 'radar' só tira o alerta", async () => {
+    await pool.query(`UPDATE products SET cost = 89, price = 222.5, custo_da_pasta = 119 WHERE id = $1`, [semCusto]);
+    const radar = await aplicar(semCusto, { resolverCusto: "radar" });
+    expect(radar.ok).toBe(true);
+    let linha = (await pool.query(`SELECT cost, price, custo_da_pasta FROM products WHERE id = $1`, [semCusto])).rows[0];
+    expect([Number(linha.cost), Number(linha.price), linha.custo_da_pasta]).toEqual([89, 222.5, null]);
+
+    await pool.query(`UPDATE products SET custo_da_pasta = 119 WHERE id = $1`, [semCusto]);
+    const pasta = await aplicar(semCusto, { resolverCusto: "pasta", calcularPrecoDaPasta: true });
+    expect(pasta.ok).toBe(true);
+    linha = (await pool.query(`SELECT cost, price, custo_da_pasta FROM products WHERE id = $1`, [semCusto])).rows[0];
+    expect([Number(linha.cost), Number(linha.price), linha.custo_da_pasta]).toEqual([119, 297.5, null]);
+  });
+
+  it("usar o custo da pasta sem haver dúvida é recusado", async () => {
+    expect(await aplicar(semCusto, { resolverCusto: "pasta" })).toMatchObject({ ok: false, error: "no_doubt" });
+  });
+
   it("peça que não existe devolve not_found", async () => {
     expect(await aplicar(99999999, { cost: 10 })).toMatchObject({ ok: false, error: "not_found" });
   });

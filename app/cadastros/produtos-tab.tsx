@@ -29,7 +29,7 @@ import { productPurchaseTotals, purchasePhase } from "@/lib/finance/purchases";
 import { formatCentsBRL } from "@/lib/finance/money";
 import { ALERTA_FALTA_CUSTO, faltaCusto } from "@/lib/custo";
 import CorrigirAlerta, { type AlertaCorrigivel } from "@/app/cadastros/corrigir-alerta";
-import { alertasDaPeca, contarAlertas, ORDEM_DOS_ALERTAS, TEXTO_DO_ALERTA, type ChaveAlerta } from "@/lib/alertas-da-peca";
+import { AJUDA_DO_ALERTA, alertasDaPeca, contarAlertas, ORDEM_DOS_ALERTAS, TEXTO_DO_ALERTA, type ChaveAlerta } from "@/lib/alertas-da-peca";
 
 const MATERIAL_PRESETS = MATERIALS.slice(0, -1);
 const GEMSTONE_PRESETS = GEMSTONES.slice(0, -1);
@@ -176,10 +176,9 @@ export default function ProdutosTab() {
   const [alertaFiltro, setAlertaFiltro] = useState<ChaveAlerta | null>(null);
   const [corrigindo, setCorrigindo] = useState<{ peca: Product; alerta: AlertaCorrigivel } | null>(null);
 
-  // Clique no alerta: custo, preço e código se corrigem na janelinha; foto e foto da modelo abrem a edição da peça.
+  // Clique no alerta: abre a janelinha que explica o problema, diz como resolver e já resolve.
   function clicarNoAlerta(p: Product, a: ChaveAlerta) {
-    if (a === "custo" || a === "preco" || a === "codigo") setCorrigindo({ peca: p, alerta: a });
-    else openEdit(p);
+    setCorrigindo({ peca: p, alerta: a });
   }
 
   function load() {
@@ -436,7 +435,7 @@ export default function ProdutosTab() {
         <div className="banner banner-warning" role="status" style={{ marginBottom: 12, alignItems: "flex-start" }}>
           <span>⚠️</span>
           <span>
-            <strong>Dados que faltam nas peças.</strong> Clique para ver só essas peças.
+            <strong>Dados que faltam ou precisam de decisão.</strong> Clique num botão abaixo para ver só essas peças. Em cada peça, clique no alerta vermelho: ele explica o problema, diz como resolver e já resolve.
             <span className="store-toggles" style={{ marginTop: 8, display: "flex" }}>
               {ORDEM_DOS_ALERTAS.filter((a) => contagemDeAlertas[a] > 0).map((a) => (
                 <button
@@ -444,6 +443,7 @@ export default function ProdutosTab() {
                   type="button"
                   className={"toggle-chip" + (alertaFiltro === a ? " on" : "")}
                   aria-pressed={alertaFiltro === a}
+                  title={AJUDA_DO_ALERTA[a].problema}
                   onClick={() => setAlertaFiltro(alertaFiltro === a ? null : a)}
                 >
                   {TEXTO_DO_ALERTA[a]} ({contagemDeAlertas[a]})
@@ -455,6 +455,13 @@ export default function ProdutosTab() {
                 </button>
               )}
             </span>
+            {alertaFiltro && (
+              <span style={{ display: "block", marginTop: 8 }}>
+                <strong>O problema:</strong> {AJUDA_DO_ALERTA[alertaFiltro].problema}
+                <br />
+                <strong>Como resolver:</strong> {AJUDA_DO_ALERTA[alertaFiltro].comoResolver}
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -465,6 +472,7 @@ export default function ProdutosTab() {
           alerta={corrigindo.alerta}
           doFabricante={items.filter((i) => i.manufacturer_id === corrigindo.peca.manufacturer_id && corrigindo.peca.manufacturer_id)}
           aoFechar={() => setCorrigindo(null)}
+          aoAbrirPeca={openEdit}
           aoSalvar={(item) => {
             setItems((prev) => prev.map((i) => (i.id === corrigindo.peca.id ? { ...i, ...item } : i)));
             setCorrigindo(null);
@@ -517,7 +525,7 @@ export default function ProdutosTab() {
                           type="button"
                           className="stock-pill out pill-clicavel"
                           style={{ marginRight: 4, marginTop: 4, display: "inline-block" }}
-                          title={a === "codigo" ? "Clique para dar o código" : "Clique para abrir a peça e colocar a foto"}
+                          title={`${AJUDA_DO_ALERTA[a].problema} Clique para resolver.`}
                           onClick={() => clicarNoAlerta(p, a)}
                         >
                           {TEXTO_DO_ALERTA[a]}
@@ -558,16 +566,28 @@ export default function ProdutosTab() {
                   </td>
                   <td className="num">
                     {faltaCusto(p) ? (
-                      <button type="button" className="stock-pill out pill-clicavel" title="Clique para informar o custo" onClick={() => clicarNoAlerta(p, "custo")}>
+                      <button type="button" className="stock-pill out pill-clicavel" title={`${AJUDA_DO_ALERTA.custo.problema} Clique para resolver.`} onClick={() => clicarNoAlerta(p, "custo")}>
                         {ALERTA_FALTA_CUSTO}
                       </button>
                     ) : (
                       formatBRL(p.cost)
                     )}
+                    {alertasDaPeca(p).includes("custoPasta") && (
+                      <div>
+                        <button
+                          type="button"
+                          className="stock-pill out pill-clicavel"
+                          title={`${AJUDA_DO_ALERTA.custoPasta.problema} Clique para resolver.`}
+                          onClick={() => clicarNoAlerta(p, "custoPasta")}
+                        >
+                          {TEXTO_DO_ALERTA.custoPasta}: pasta {formatBRL(p.custo_da_pasta)}
+                        </button>
+                      </div>
+                    )}
                   </td>
                   <td className="num">
                     {alertasDaPeca(p).includes("preco") ? (
-                      <button type="button" className="stock-pill out pill-clicavel" title="Clique para informar o preço" onClick={() => clicarNoAlerta(p, "preco")}>
+                      <button type="button" className="stock-pill out pill-clicavel" title={`${AJUDA_DO_ALERTA.preco.problema} Clique para resolver.`} onClick={() => clicarNoAlerta(p, "preco")}>
                         {TEXTO_DO_ALERTA.preco}
                       </button>
                     ) : (

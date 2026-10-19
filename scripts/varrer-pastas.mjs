@@ -147,7 +147,9 @@ export function montarPlano(pasta, arquivos, codigosBanco, radar = new Map()) {
     const noRadar = repetido ? undefined : radar.get(`${norm(pasta)}|${norm(c.nome)}`);
     if (noRadar) {
       if (noRadar.codigo && !PROVISORIOS.has(noRadar.codigo.split("-")[0])) codigo = noRadar.codigo;
-      if (noRadar.custo !== null && noRadar.custo > 0) custo = noRadar.custo;
+      const emDuvida = noRadar.duvida !== null && noRadar.custo !== null && Math.abs(noRadar.duvida - noRadar.custo) > 0.001;
+      if (emDuvida) alertas.push(`${pasta}: "${c.nome}" tem custo em dúvida no Radar (cadastro ${custoBR(noRadar.custo)} x pasta ${custoBR(noRadar.duvida)}); não renomeei, resolva no alerta "Custo diverge da pasta"`);
+      else if (noRadar.custo !== null && noRadar.custo > 0) custo = noRadar.custo;
       else if (c.custo) alertas.push(`${pasta}: "${c.nome}" está sem custo no Radar, mas o arquivo diz R$ ${custoBR(c.custo)}`);
       preco = noRadar.preco;
     }
@@ -192,7 +194,7 @@ function lerRadar() {
   if (!arq) return null;
   const dados = JSON.parse(fs.readFileSync(arq, "utf8"));
   const mapa = new Map();
-  for (const p of dados.pecas) mapa.set(`${norm(p.fabricante)}|${norm(p.nome)}`, { codigo: p.codigo, custo: p.custo, preco: p.preco });
+  for (const p of dados.pecas) mapa.set(`${norm(p.fabricante)}|${norm(p.nome)}`, { codigo: p.codigo, custo: p.custo, preco: p.preco, duvida: p.custoDaPasta ?? null });
   return { dados, mapa };
 }
 

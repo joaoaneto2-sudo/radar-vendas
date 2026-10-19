@@ -747,6 +747,19 @@ export const MIGRATIONS: Migration[] = [
        END $$`,
     ],
   },
+  {
+    id: "019",
+    name: "custo em duvida: o custo que esta no nome do arquivo da pasta quando difere do cadastro",
+    statements: [
+      // Nulo = sem duvida. Quando preenchido e diferente de cost, o Radar mostra o alerta "Custo diverge da pasta".
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS custo_da_pasta NUMERIC(12,2)`,
+      `DO $$ BEGIN
+         IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'products_custo_da_pasta_check') THEN
+           ALTER TABLE products ADD CONSTRAINT products_custo_da_pasta_check CHECK (custo_da_pasta IS NULL OR custo_da_pasta > 0);
+         END IF;
+       END $$`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

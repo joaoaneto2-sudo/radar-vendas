@@ -464,4 +464,14 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
       ).resolves.toBeDefined();
     });
   });
+
+  describe("custo em dúvida (migração 019)", () => {
+    it("peça nova nasce sem dúvida (custo_da_pasta nulo) e só aceita valor maior que zero", async () => {
+      const pool = await bancoPronto();
+      await pool.query(`INSERT INTO products (name, price) VALUES ('Sem dúvida', 100)`);
+      expect((await pool.query(`SELECT custo_da_pasta FROM products WHERE name = 'Sem dúvida'`)).rows[0].custo_da_pasta).toBeNull();
+      await expect(pool.query(`INSERT INTO products (name, price, custo_da_pasta) VALUES ('Zero', 100, 0)`)).rejects.toThrow();
+      await expect(pool.query(`INSERT INTO products (name, price, custo_da_pasta) VALUES ('Com dúvida', 100, 119)`)).resolves.toBeDefined();
+    });
+  });
 });
