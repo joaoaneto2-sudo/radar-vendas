@@ -73,6 +73,17 @@ async function enviarFoto(arquivo: ArquivoFonte): Promise<string> {
   return (await res.json()).url as string;
 }
 
+// Baixa um arquivo com os nomes antigos de cada arquivo renomeado (para o João, ou para mim, desfazer se precisar).
+function baixarRegistro(registro: { pasta: string; de: string; para: string }[]) {
+  const dia = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([JSON.stringify(registro, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `registro-de-renomeacao-${dia}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
 export default function AtualizarPastasPage() {
   const [fase, setFase] = useState<Fase>("inicio");
   const [raiz, setRaiz] = useState<RaizFonte | null>(null);
@@ -80,7 +91,7 @@ export default function AtualizarPastasPage() {
   const [planos, setPlanos] = useState<PlanoLido[]>([]);
   const [erro, setErro] = useState("");
   const [progresso, setProgresso] = useState("");
-  const [relatorio, setRelatorio] = useState<{ criadas: number; atualizadas: number; fotos: number; renomeados: number; avisos: string[]; falhas: string[] } | null>(null);
+  const [relatorio, setRelatorio] = useState<{ criadas: number; atualizadas: number; fotos: number; renomeados: number; avisos: string[]; falhas: string[]; registro: { pasta: string; de: string; para: string }[] } | null>(null);
   const [suporte, setSuporte] = useState(true);
 
   const ler = useCallback(async (fonte: RaizFonte) => {
@@ -169,6 +180,7 @@ export default function AtualizarPastasPage() {
     setFase("executando");
     setErro("");
     const falhas: string[] = [];
+    const registro: { pasta: string; de: string; para: string }[] = [];
     const avisos: string[] = [];
     let criadas = 0;
     let atualizadas = 0;
@@ -189,6 +201,7 @@ export default function AtualizarPastasPage() {
             plano.arquivos.delete(r.de);
             plano.arquivos.set(novo.nome, novo);
             renomeados++;
+            registro.push({ pasta: plano.fabricante, de: r.de, para: r.para });
             if (peca.close?.nome === r.de) peca.close = { nome: novo.nome, tamanho: novo.tamanho, modificadoEm: novo.modificadoEm };
             if (peca.modelo?.nome === r.de) peca.modelo = { nome: novo.nome, tamanho: novo.tamanho, modificadoEm: novo.modificadoEm };
           }
@@ -234,7 +247,8 @@ export default function AtualizarPastasPage() {
         falhas.push("A conexão caiu ao gravar. Clique em Atualizar de novo: o que já subiu é pulado.");
       }
     }
-    setRelatorio({ criadas, atualizadas, fotos, renomeados, avisos, falhas });
+    setRelatorio({ criadas, atualizadas, fotos, renomeados, avisos, falhas, registro });
+    if (registro.length > 0) baixarRegistro(registro); // cópia dos nomes antigos, para poder desfazer
     setProgresso("");
     setFase("pronto");
   }
@@ -439,6 +453,11 @@ export default function AtualizarPastasPage() {
             <a className="btn btn-primary" href="/cadastros">
               Ver em Produtos e cadastros
             </a>
+            {relatorio.registro.length > 0 && (
+              <button className="btn btn-ghost" onClick={() => baixarRegistro(relatorio.registro)} title="Lista com o nome antigo e o novo de cada arquivo renomeado">
+                Baixar registro dos nomes antigos
+              </button>
+            )}
             <a className="btn btn-ghost" href="/cadastros/catalogo">
               Criar catálogo
             </a>
