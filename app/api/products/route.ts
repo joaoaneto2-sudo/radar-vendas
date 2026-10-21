@@ -14,7 +14,9 @@ const SELECT = `
   SELECT p.*, m.name AS manufacturer_name, s.name AS supplier_name,
          (SELECT count(*)::int FROM product_photos pp WHERE pp.product_id = p.id) AS extra_photos,
          (SELECT pp.url FROM product_photos pp WHERE pp.product_id = p.id AND pp.kind = 'modelo'
-           ORDER BY pp.position, pp.id LIMIT 1) AS modelo_photo_url
+           ORDER BY pp.position, pp.id LIMIT 1) AS modelo_photo_url,
+         (SELECT COALESCE(json_agg(json_build_object('url', pp.url, 'kind', pp.kind) ORDER BY pp.position, pp.id), '[]'::json)
+            FROM product_photos pp WHERE pp.product_id = p.id) AS galeria
   FROM products p
   LEFT JOIN manufacturers m ON m.id = p.manufacturer_id
   LEFT JOIN suppliers s ON s.id = p.supplier_id

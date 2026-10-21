@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Product, formatBRL } from "@/lib/format";
 import { CAPAS, CatalogoFoto, POR_PAGINA_MAX, POR_PAGINA_PADRAO } from "@/lib/catalogo-layout";
+import { FOTOS_POR_PECA_MAX, fotosDaPagina, fotosDisponiveis, fotosEscolhidas, type PadraoDeFotos } from "@/lib/catalogo-fotos";
 import {
   contarMarcacao,
   filtrarPecas,
@@ -32,6 +33,7 @@ export type PecaCatalogo = {
   price: number | null;
   catalog_photo: CatalogoFoto | null;
   photo_modelo_url?: string | null; // foto da modelo; quando existe, a foto principal vira o "close" à esquerda
+  fotos?: string[]; // fotos escolhidas para o catálogo, em ordem (a primeira é a principal); ausente = close + modelo
 };
 
 export type CatalogoPdfDados = {
@@ -54,6 +56,8 @@ type Rascunho = {
   capa: string;
   porPagina: number;
   variar: boolean;
+  fotosPorPeca?: PadraoDeFotos;
+  escolhaDeFotos?: Record<number, string[]>;
 };
 
 export default function CriarCatalogoPage() {
@@ -70,6 +74,8 @@ export default function CriarCatalogoPage() {
   const [capa, setCapa] = useState(CAPAS[0]);
   const [porPagina, setPorPagina] = useState(POR_PAGINA_PADRAO);
   const [variar, setVariar] = useState(true);
+  const [fotosPorPeca, setFotosPorPeca] = useState<PadraoDeFotos>("padrao");
+  const [escolhaDeFotos, setEscolhaDeFotos] = useState<Record<number, string[]>>({});
   const [destaqueIds, setDestaqueIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -92,6 +98,8 @@ export default function CriarCatalogoPage() {
             if (CAPAS.includes(r.capa)) setCapa(r.capa);
             setPorPagina(r.porPagina);
             setVariar(r.variar);
+            if (r.fotosPorPeca) setFotosPorPeca(r.fotosPorPeca);
+            if (r.escolhaDeFotos) setEscolhaDeFotos(r.escolhaDeFotos);
           }
         } catch {
           // sem rascunho ou sessionStorage indisponível: começa vazio
@@ -167,6 +175,32 @@ export default function CriarCatalogoPage() {
     setDestaqueIds(new Set());
   }
 
+  // Fotos de cada peça no catálogo: o que vale hoje para a peça (escolha própria, número de fotos ou o padrão) e o clique numa foto.
+  function fotosDaPeca(p: Product): string[] {
+    return fotosDaPagina(p, fotosEscolhidas(p, fotosPorPeca, escolhaDeFotos[p.id]));
+  }
+
+  function alternarFoto(p: Product, url: string) {
+    const atual = fotosDaPeca(p);
+    let nova: string[];
+    if (atual.includes(url)) {
+      if (atual.length === 1) return; // pelo menos uma foto
+      nova = atual.filter((u) => u !== url);
+    } else {
+      if (atual.length >= FOTOS_POR_PECA_MAX) return;
+      nova = [...atual, url];
+    }
+    setEscolhaDeFotos((prev) => ({ ...prev, [p.id]: nova }));
+  }
+
+  function voltarAoPadraoDeFotos(id: number) {
+    setEscolhaDeFotos((prev) => {
+      const novo = { ...prev };
+      delete novo[id];
+      return novo;
+    });
+  }
+
   function toggleDestaque(id: number) {
     setDestaqueIds((prev) => {
       const novo = new Set(prev);
@@ -197,11 +231,12 @@ export default function CriarCatalogoPage() {
         price: p.price === null || p.price === undefined ? null : Number(p.price),
         catalog_photo: p.catalog_photo ?? null,
         photo_modelo_url: p.modelo_photo_url ?? null,
+        ...(fotosEscolhidas(p, fotosPorPeca, escolhaDeFotos[p.id]) ? { fotos: fotosEscolhidas(p, fotosPorPeca, escolhaDeFotos[p.id]) } : {}),
       })),
     };
     try {
       sessionStorage.setItem("radar-catalogo-pdf", JSON.stringify(dados));
-      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar };
+      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos };
       sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(rascunho));
     } catch {
       // sessionStorage indisponível: segue mesmo assim, a página de impressão avisa se não achar nada.
@@ -493,6 +528,109 @@ export default function CriarCatalogoPage() {
                     ? "Uma peça grande por página, no estilo revista."
                     : `${porPagina} peças por página, em grade. Menos peças por página deixa cada foto maior.`}
                 </div>
+              </div>
+              <div className="field field--full">
+                <label>Fotos de cada peça</label>
+                <div className="radio-row">
+                  <button
+                    type="button"
+                    className={"radio-chip" + (fotosPorPeca === "padrao" ? " selected" : "")}
+                    aria-pressed={fotosPorPeca === "padrao"}
+                    onClick={() => setFotosPorPeca("padrao")}
+                  >
+                    Padrão (close + modelo)
+                  </button>
+                  {Array.from({ length: FOTOS_POR_PECA_MAX }, (_, i) => i + 1).map((n) => (
+                    <button
+                      type="button"
+                      key={n}
+                      className={"radio-chip" + (fotosPorPeca === n ? " selected" : "")}
+                      aria-pressed={fotosPorPeca === n}
+                      onClick={() => setFotosPorPeca(n as PadraoDeFotos)}
+                    >
+                      {n} {n === 1 ? "foto" : "fotos"}
+                    </button>
+                  ))}
+                </div>
+                <div className="hint">
+                  {fotosPorPeca === "padrao"
+                    ? "Cada peça usa a foto principal e, se tiver, a foto da modelo. Peça com uma foto só sai com a foto grande."
+                    : `As ${fotosPorPeca} primeiras fotos de cada peça (peça com menos fotos usa as que tem). Para escolher quais, uma peça por vez, abra a lista abaixo.`}
+                  {porPagina > 2 && (fotosPorPeca === 3 || fotosPorPeca === 4 || Object.values(escolhaDeFotos).some((l) => l.length > 2))
+                    ? " Atenção: com mais de 2 peças por página só cabem 2 fotos de cada. Para 3 ou 4 fotos, use 1 ou 2 peças por página."
+                    : ""}
+                </div>
+                {pecasSelecionadas.length > 0 && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: "pointer" }}>
+                      Escolher as fotos peça por peça{Object.keys(escolhaDeFotos).length > 0 ? ` (${Object.keys(escolhaDeFotos).length} com escolha própria)` : ""}
+                    </summary>
+                    <p className="hint" style={{ margin: "8px 0" }}>
+                      Clique nas fotos para ligar e desligar. O número mostra a posição: a 1 é a foto de destaque (emoldurada, ao lado do nome) e as outras
+                      ficam no painel das fotos. Até {FOTOS_POR_PECA_MAX} por peça.
+                    </p>
+                    <div style={{ maxHeight: 420, overflowY: "auto", display: "grid", gap: 10 }}>
+                      {pecasSelecionadas.map((p) => {
+                        const todas = fotosDisponiveis(p);
+                        const usadas = fotosDaPeca(p);
+                        return (
+                          <div key={p.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                              <strong>{p.name || `#${p.id}`}</strong>
+                              <span className="hint">
+                                {usadas.length} de {todas.length} {todas.length === 1 ? "foto" : "fotos"}
+                                {escolhaDeFotos[p.id] && (
+                                  <button type="button" className="btn btn-ghost btn-small" style={{ marginLeft: 8 }} onClick={() => voltarAoPadraoDeFotos(p.id)}>
+                                    Voltar ao padrão
+                                  </button>
+                                )}
+                              </span>
+                            </div>
+                            {todas.length === 0 ? (
+                              <span className="hint">Esta peça não tem foto.</span>
+                            ) : (
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                {todas.map((foto) => {
+                                  const posicao = usadas.indexOf(foto.url) + 1;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={foto.url}
+                                      onClick={() => alternarFoto(p, foto.url)}
+                                      aria-pressed={posicao > 0}
+                                      title={`${foto.rotulo}: clique para ${posicao > 0 ? "tirar do" : "pôr no"} catálogo`}
+                                      style={{
+                                        position: "relative",
+                                        width: 84,
+                                        padding: 0,
+                                        borderRadius: 8,
+                                        overflow: "hidden",
+                                        cursor: "pointer",
+                                        background: "#eee",
+                                        border: posicao > 0 ? "3px solid var(--accent)" : "3px solid transparent",
+                                        opacity: posicao > 0 ? 1 : 0.45,
+                                      }}
+                                    >
+                                      <img src={foto.url} alt={foto.rotulo} style={{ width: "100%", height: 84, objectFit: "cover", display: "block" }} />
+                                      <span style={{ position: "absolute", left: 3, bottom: 3, fontSize: 10, background: "rgba(0,0,0,.55)", color: "#fff", borderRadius: 4, padding: "0 4px" }}>
+                                        {foto.rotulo}
+                                      </span>
+                                      {posicao > 0 && (
+                                        <span style={{ position: "absolute", right: 3, top: 3, fontSize: 12, fontWeight: 700, background: "var(--accent)", color: "#fff", borderRadius: 999, minWidth: 20, textAlign: "center" }}>
+                                          {posicao}
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
               </div>
               {porPagina === 1 && (
                 <div className="field field--full">

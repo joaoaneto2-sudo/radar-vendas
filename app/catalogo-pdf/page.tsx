@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CatalogoPdfDados, PecaCatalogo } from "@/app/cadastros/catalogo/page";
 import {
   agruparPorPagina,
+  aplicarEscolhaDeFotos,
   CAPAS,
   CAPAS_COM_TEXTO_A_ESQUERDA,
   decidirPagina,
@@ -41,11 +42,11 @@ type Spread = { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: 
 
 // Caixa de tamanho fixo igual para todas as peças. A foto aparece inteira, com as bordas suaves, sobre
 // uma cópia ampliada e desfocada dela mesma que preenche o que sobrar (foto mais larga ou mais alta).
-function FotoClose({ url, nome }: { url: string; nome: string }) {
+function FotoClose({ url, nome, caixaClasse }: { url: string; nome: string; caixaClasse?: string }) {
   const [larga, setLarga] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
   return (
-    <div className={s.fotoClose} ref={caixa}>
+    <div className={caixaClasse ?? s.fotoClose} ref={caixa}>
       <img className={s.fotoFundo} src={url} alt="" aria-hidden="true" />
       <img
         className={`${s.fotoFrente} ${larga ? s.fotoLarga : s.fotoAlta}`}
@@ -67,15 +68,20 @@ function MarcaDagua() {
 
 // Os dois painéis da peça. Na página de 1 peça ocupam a folha toda; na grade, cada peça ganha um
 // spread pequeno com o mesmo desenho.
-function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
+function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, mini }: Spread) {
+  // Fotos escolhidas na tela de gerar: 1 ou 2 usam o desenho de sempre; 3 ou 4 viram mosaico (nas grades pequenas, só 2).
+  const pecaBase = mini && (pecaOriginal.fotos?.length ?? 0) >= 3 ? { ...pecaOriginal, fotos: pecaOriginal.fotos!.slice(0, 2) } : pecaOriginal;
+  const peca = aplicarEscolhaDeFotos(pecaBase);
   const tipo = decidirPagina(peca);
   const { fx, fy, zoom } = enquadramento(peca.catalog_photo);
   const fotoModelo = tipo === "duplo-modelo" ? peca.photo_url : peca.photo_modelo_url;
   const preco = precoDaLegenda(peca.price);
+  const mosaico = tipo === "mosaico" ? peca.fotos ?? [] : [];
+  const unica = tipo === "limpa-unica";
 
   return (
     <>
-      <div className={s.painel}>
+      <div className={`${s.painel} ${unica ? s.painelUnico : ""}`}>
         {!mini && (
           <div className={s.topo}>
             <span>{LOJA}</span>
@@ -88,13 +94,8 @@ function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
             <img src={peca.photo_url} alt="" style={{ width: `${zoom * 100}%`, transform: `translate(-${fx}%, -${fy}%)` }} />
           </div>
         )}
-        {tipo === "limpa-unica" && peca.photo_url && (
-          <div className={s.peca}>
-            <img src={peca.photo_url} alt={peca.name} />
-          </div>
-        )}
-        {tipo === "duplo-limpa" && peca.photo_url && (
-          <FotoClose url={peca.photo_url} nome={peca.name} />
+        {(tipo === "duplo-limpa" || tipo === "mosaico") && (mosaico[0] ?? peca.photo_url) && (
+          <FotoClose url={(mosaico[0] ?? peca.photo_url) as string} nome={peca.name} />
         )}
 
         <div className={s.legenda}>
@@ -107,9 +108,24 @@ function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
         {logo && !mini && <MarcaDagua />}
       </div>
 
-      <div className={s.lado}>
-        {tipo === "limpa-unica" ? (
-          <span className={s.vertical}>{colecao}</span>
+      <div className={`${s.lado} ${tipo === "mosaico" ? `${s.mosaico} ${mosaico.length === 3 ? s.mosaico2 : s.mosaico3}` : ""}`}>
+        {tipo === "mosaico" ? (
+          <>
+            {mosaico.slice(1).map((url, i) => (
+              <img key={url + i} src={url} alt="" />
+            ))}
+            <span className={`${s.vertical} ${s.sobreFoto}`}>{colecao}</span>
+          </>
+        ) : unica ? (
+          // Peça com uma foto só: a foto grande no lado direito (inteira, sem cortar) e o nome e o preço no centro do esquerdo.
+          peca.photo_url ? (
+            <>
+              <FotoClose url={peca.photo_url} nome={peca.name} caixaClasse={s.fotoLado} />
+              <span className={`${s.vertical} ${s.sobreFoto}`}>{colecao}</span>
+            </>
+          ) : (
+            <span className={s.vertical}>{colecao}</span>
+          )
         ) : (
           <>
             {fotoModelo && <img src={fotoModelo} alt="" style={{ objectPosition: `${fx}% ${fy}%` }} />}
@@ -122,8 +138,9 @@ function SpreadDaPeca({ peca, numero, destaque, colecao, logo, mini }: Spread) {
 }
 
 function PaginaDaPeca({ desenho, ...props }: Omit<Spread, "mini"> & { desenho: number }) {
-  // O desenho 4 (moldura sobre a foto da modelo) deixa a página vazia quando a peça não tem foto da modelo.
-  const desenhoFinal = desenho === 4 && decidirPagina(props.peca) === "limpa-unica" ? 2 : desenho;
+  // Os desenhos que se revezam foram feitos para close + modelo: peça de uma foto só e mosaico usam sempre o desenho padrão.
+  const tipoDaPagina = decidirPagina(aplicarEscolhaDeFotos(props.peca));
+  const desenhoFinal = tipoDaPagina === "limpa-unica" || tipoDaPagina === "mosaico" ? 0 : desenho;
   const classeDoDesenho = desenhoFinal > 0 ? s[`v${desenhoFinal}`] : "";
   return (
     <section className={`${s.pagina} ${classeDoDesenho}`}>

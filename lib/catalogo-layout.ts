@@ -5,7 +5,7 @@ import { formatBRL } from "./format";
 
 export type CatalogoFoto = { kind: "limpa" | "modelo"; fx: number; fy: number; zoom: number };
 
-export type TipoPagina = "duplo-limpa" | "limpa-unica" | "duplo-modelo";
+export type TipoPagina = "duplo-limpa" | "limpa-unica" | "duplo-modelo" | "mosaico";
 
 export const CAPAS = ["/catalogo/capas/capa-1.jpg", "/catalogo/capas/capa-2.jpg", "/catalogo/capas/capa-3.jpg", "/catalogo/capas/capa-4.jpg", "/catalogo/capas/capa-5.jpg"];
 
@@ -76,11 +76,29 @@ export function desenhoDaPagina(indice: number, variar: boolean): number {
 
 export type PecaDaPagina = {
   catalog_photo?: CatalogoFoto | null;
-  // Segunda foto (da modelo) para quando a peça tiver as duas; hoje nenhuma peça traz.
+  // Segunda foto (da modelo) para quando a peça tiver as duas.
   photo_modelo_url?: string | null;
+  // Fotos escolhidas para o catálogo, em ordem (a primeira é a principal). Ausente = close + modelo, como sempre.
+  fotos?: string[] | null;
 };
 
+/**
+ * Com 1 ou 2 fotos escolhidas, a página usa o desenho de sempre com essas fotos (1 = só a principal; 2 = principal + segunda).
+ * Com 3 ou mais é o desenho de mosaico. Sem escolha, nada muda.
+ */
+export function aplicarEscolhaDeFotos<T extends PecaDaPagina & { photo_url?: string | null }>(peca: T): T {
+  const fotos = peca.fotos ?? [];
+  if (fotos.length === 0 || fotos.length >= 3) return peca;
+  const limpa: CatalogoFoto = { kind: "limpa", fx: 50, fy: 50, zoom: 1 };
+  if (fotos.length === 1) {
+    if (fotos[0] === peca.photo_url) return { ...peca, photo_modelo_url: peca.catalog_photo?.kind === "modelo" ? peca.photo_modelo_url : null };
+    return { ...peca, photo_url: fotos[0], photo_modelo_url: null, catalog_photo: limpa };
+  }
+  return { ...peca, photo_url: fotos[0], photo_modelo_url: fotos[1], catalog_photo: limpa };
+}
+
 export function decidirPagina(peca: PecaDaPagina): TipoPagina {
+  if ((peca.fotos?.length ?? 0) >= 3) return "mosaico";
   if (peca.catalog_photo?.kind === "modelo") return "duplo-modelo";
   return peca.photo_modelo_url ? "duplo-limpa" : "limpa-unica";
 }

@@ -230,6 +230,97 @@
   max-width: 40cqw;
 }
 
+/* Peça com uma foto só: nome e preço no centro do painel esquerdo, e a foto grande no lado direito */
+.painelUnico .legenda {
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
+  max-width: 42cqw;
+}
+
+.painelUnico .legenda::before {
+  content: "";
+  display: block;
+  width: 5cqw;
+  height: 0.15cqw;
+  margin-bottom: 2.2cqw;
+  background: var(--ouro);
+}
+
+.painelUnico .nome {
+  font-size: calc(var(--t, 1) * 2cqw);
+}
+
+.painelUnico .preco {
+  font-size: calc(var(--t, 1) * 2.1cqw);
+}
+
+/* Caixa grande da foto no lado direito, emoldurada (foto inteira, bordas suaves, sobre cópia desfocada) */
+.fotoLado {
+  position: absolute;
+  top: 8cqw;
+  bottom: 8cqw;
+  left: 5cqw;
+  right: 5cqw;
+  overflow: hidden;
+  border-radius: 1.4cqw;
+  background: #e9d4cb;
+  box-shadow: 0 1cqw 3cqw rgba(74, 55, 50, 0.38), 0 0.2cqw 0.8cqw rgba(74, 55, 50, 0.25);
+}
+
+.celulaMini .fotoLado {
+  top: 5cqw;
+  bottom: 5cqw;
+  left: 3.5cqw;
+  right: 3.5cqw;
+}
+
+.lado .fotoLado img {
+  object-fit: initial;
+}
+
+.lado .fotoLado .fotoFundo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lado .fotoLado .fotoLarga {
+  width: 100%;
+  height: auto;
+}
+
+.lado .fotoLado .fotoAlta {
+  width: auto;
+  height: 100%;
+}
+
+/* Mosaico: 3 ou 4 fotos escolhidas (a primeira fica emoldurada à esquerda; as outras formam o lado direito) */
+.lado.mosaico {
+  display: grid;
+  gap: 0.6cqw;
+  background: var(--rosa);
+}
+
+.mosaico2 {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.mosaico3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.mosaico3 > img:first-child {
+  grid-row: 1 / span 2;
+}
+
+.mosaico img {
+  min-width: 0;
+  min-height: 0;
+}
+
 .destaque {
   margin: 0 0 0.9cqw;
   font-size: calc(var(--t, 1) * 1cqw);
@@ -477,6 +568,20 @@
   left: 4.5cqw;
   bottom: 4cqw;
   max-width: 47cqw;
+}
+
+.celulaMini .painelUnico .legenda {
+  top: 50%;
+  bottom: auto;
+  max-width: 46cqw;
+}
+
+.celulaMini .painelUnico .nome {
+  font-size: calc(var(--t, 1) * 1.6cqw);
+}
+
+.celulaMini .painelUnico .preco {
+  font-size: calc(var(--t, 1) * 1.7cqw);
 }
 
 .celulaMini .nome {
