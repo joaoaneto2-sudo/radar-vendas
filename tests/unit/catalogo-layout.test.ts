@@ -51,17 +51,18 @@ describe("precoDaLegenda", () => {
 });
 
 describe("CAPAS", () => {
-  it("tem as quatro capas na ordem", () => {
+  it("tem as cinco capas na ordem", () => {
     expect(CAPAS).toEqual([
       "/catalogo/capas/capa-1.jpg",
       "/catalogo/capas/capa-2.jpg",
       "/catalogo/capas/capa-3.jpg",
       "/catalogo/capas/capa-4.jpg",
+      "/catalogo/capas/capa-5.jpg",
     ]);
   });
 
-  it("a capa 4 (mãe e filha) leva o texto para a esquerda; as outras ficam no centro", () => {
-    expect(CAPAS_COM_TEXTO_A_ESQUERDA).toEqual(["/catalogo/capas/capa-4.jpg"]);
+  it("as capas 4 (mãe e filha) e 5 (retrato com anéis) levam o texto para a esquerda; as outras ficam no centro", () => {
+    expect(CAPAS_COM_TEXTO_A_ESQUERDA).toEqual(["/catalogo/capas/capa-4.jpg", "/catalogo/capas/capa-5.jpg"]);
     expect(CAPAS_COM_TEXTO_A_ESQUERDA.every((c) => CAPAS.includes(c))).toBe(true);
   });
 });

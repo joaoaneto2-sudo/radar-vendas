@@ -7,10 +7,10 @@ export type CatalogoFoto = { kind: "limpa" | "modelo"; fx: number; fy: number; z
 
 export type TipoPagina = "duplo-limpa" | "limpa-unica" | "duplo-modelo";
 
-export const CAPAS = ["/catalogo/capas/capa-1.jpg", "/catalogo/capas/capa-2.jpg", "/catalogo/capas/capa-3.jpg", "/catalogo/capas/capa-4.jpg"];
+export const CAPAS = ["/catalogo/capas/capa-1.jpg", "/catalogo/capas/capa-2.jpg", "/catalogo/capas/capa-3.jpg", "/catalogo/capas/capa-4.jpg", "/catalogo/capas/capa-5.jpg"];
 
 // Capas em que as pessoas ficam à direita: o logo e o nome do catálogo vão para o lado esquerdo, livre.
-export const CAPAS_COM_TEXTO_A_ESQUERDA = ["/catalogo/capas/capa-4.jpg"];
+export const CAPAS_COM_TEXTO_A_ESQUERDA = ["/catalogo/capas/capa-4.jpg", "/catalogo/capas/capa-5.jpg"];
 
 export const POR_PAGINA_MAX = 10;
 export const POR_PAGINA_PADRAO = 1;
