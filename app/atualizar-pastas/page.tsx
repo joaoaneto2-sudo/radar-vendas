@@ -216,6 +216,8 @@ export default function AtualizarPastasPage() {
           if (peca.subir.modelo && peca.modelo) {
             item.fotoModelo = await enviarFoto(plano.arquivos.get(peca.modelo.nome)!);
             item.modeloOrigem = assinatura(peca.modelo);
+            // Com close + modelo a página é o par (foto limpa à esquerda, modelo à direita), mesmo que antes a peça fosse só foto de modelo.
+            item.catalogo = { kind: "limpa", fx: 50, fy: 50, zoom: 1 };
             fotos++;
           }
           if (peca.situacao !== "igual" || item.fotoPrincipal || item.fotoModelo) itens.push(item);

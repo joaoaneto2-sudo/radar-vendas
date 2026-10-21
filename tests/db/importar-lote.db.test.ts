@@ -245,6 +245,18 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
     expect(linha.modelo_origem).toBeNull();
   });
 
+  it("peça que só tinha foto de modelo e ganha a foto da modelo (par) passa para foto limpa + modelo", async () => {
+    const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
+    await pool.query(
+      `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active, photo_url, catalog_photo)
+       VALUES ('Brincos', 'LT So modelo', $1, 30, 75, 1, 'varejo', true, '/x/foto.jpg', '{"kind":"modelo","fx":50,"fy":50,"zoom":1.4}'::jsonb)`,
+      [fab]
+    );
+    await importarLote(pool, [{ fabricante: "Fabricante LT", nome: "LT So modelo", custo: 30, categoria: "Brincos", fotoModelo: "https://blob.example/modelo.jpg", modeloOrigem: "1|2" }], true);
+    const linha = (await pool.query(`SELECT catalog_photo FROM products WHERE name = 'LT So modelo'`)).rows[0];
+    expect(linha.catalog_photo).toEqual({ kind: "limpa", fx: 50, fy: 50, zoom: 1 });
+  });
+
   it("se algo falha no meio, nada é gravado", async () => {
     const ruim = item({ nome: "LT Segunda", categoria: "Brincos", catalogo: { kind: "limpa", fx: 50, fy: 50, zoom: 1 } });
     // custo gigante estoura a coluna NUMERIC(12,2) no segundo item

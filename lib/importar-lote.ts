@@ -217,6 +217,13 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
           await client.query(`INSERT INTO product_photos (product_id, url, position, kind) VALUES ($1, $2, 0, 'modelo')`, [id, it.fotoModelo]);
         }
         await client.query(`UPDATE products SET modelo_origem = $1 WHERE id = $2`, [it.fotoModelo ? it.modeloOrigem ?? null : null, id]);
+        // A peça que tinha só uma foto de modelo (desenho de recorte) e agora ganhou close + modelo passa a ser par: foto limpa + modelo.
+        if (it.fotoModelo && !it.catalogo) {
+          await client.query(
+            `UPDATE products SET catalog_photo = '{"kind":"limpa","fx":50,"fy":50,"zoom":1}'::jsonb WHERE id = $1 AND COALESCE(catalog_photo->>'kind', '') = 'modelo'`,
+            [id]
+          );
+        }
       }
       resultado.itens.push({ fabricante: it.fabricante, nome: it.nome, acao: existente ? "atualizada" : "criada", id, aviso });
     }

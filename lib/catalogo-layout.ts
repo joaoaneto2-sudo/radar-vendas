@@ -91,7 +91,7 @@ export function aplicarEscolhaDeFotos<T extends PecaDaPagina & { photo_url?: str
   if (fotos.length === 0 || fotos.length >= 3) return peca;
   const limpa: CatalogoFoto = { kind: "limpa", fx: 50, fy: 50, zoom: 1 };
   if (fotos.length === 1) {
-    if (fotos[0] === peca.photo_url) return { ...peca, photo_modelo_url: peca.catalog_photo?.kind === "modelo" ? peca.photo_modelo_url : null };
+    if (fotos[0] === peca.photo_url) return { ...peca, photo_modelo_url: null };
     return { ...peca, photo_url: fotos[0], photo_modelo_url: null, catalog_photo: limpa };
   }
   return { ...peca, photo_url: fotos[0], photo_modelo_url: fotos[1], catalog_photo: limpa };
