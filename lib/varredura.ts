@@ -256,8 +256,9 @@ export function resolverFabricante(prefixo: string, nomesNoRadar: string[]): str
 }
 
 const RE_FAB_DESC_VALOR = /^(.+?)\s*-\s*(.+?)\s*-\s*([\d.,_]*)\s*$/;
+const RE_DESC_VALOR = /^(.+?)\s+(\d+(?:\.\d{3})*,\d{2}|\d+\.\d{2})$/;
 const capitalizar = (t: string) => {
-  const limpo = t.replace(/\s+/g, " ").trim();
+  const limpo = t.replace(/\s+/g, " ").replace(/[.\s]+$/, "");
   return limpo.charAt(0).toUpperCase() + limpo.slice(1);
 };
 
@@ -288,9 +289,13 @@ export function planejarColecao(colecao: string, arquivos: ArquivoDaPasta[], fab
   const simples: { arquivo: ArquivoDaPasta; desc: string }[] = [];
   for (const a of lidos) {
     const base = semExtensao(a.nome.normalize("NFC")).trim();
-    const m = /^whatsapp image/i.test(base) ? null : base.match(RE_FAB_DESC_VALOR);
+    const semNome = /^whatsapp image/i.test(base);
+    const m = semNome ? null : base.match(RE_FAB_DESC_VALOR);
     if (!m) {
-      simples.push({ arquivo: a, desc: base });
+      // Sem fabricante no nome mas com valor no fim ("Anel folha orgânica 59,00"): é a foto de produto, e o fabricante é a própria pasta.
+      const soValor = semNome ? null : base.match(RE_DESC_VALOR);
+      if (soValor) closes.push({ arquivo: a, fabricante: colecao, desc: soValor[1].replace(/[\s,]+por$/i, "").trim(), custo: lerCusto(soValor[2]) });
+      else simples.push({ arquivo: a, desc: base });
       continue;
     }
     const fabricante = resolverFabricante(m[1], nomes);
@@ -306,7 +311,9 @@ export function planejarColecao(colecao: string, arquivos: ArquivoDaPasta[], fab
   const pecas: PecaPlanejada[] = [];
   const nomesJaVistos = new Set<string>();
 
-  for (const c of closes) {
+  const descricoesFeitas = new Set<string>();
+  const processar = (lista: Close[]) => { for (const c of lista) {
+    descricoesFeitas.add(norm(c.desc));
     const nome = capitalizar(c.desc);
     const chave = `${norm(c.fabricante)}|${norm(nome)}`;
     if (nomesJaVistos.has(chave)) {
@@ -347,7 +354,23 @@ export function planejarColecao(colecao: string, arquivos: ArquivoDaPasta[], fab
       radarId: noRadar?.id ?? null, situacao: !noRadar ? "nova" : subirClose || subirModelo || mudouCusto || mudouCodigo ? "atualizar" : "igual",
       subir: { close: subirClose, modelo: subirModelo }, catalogoKind: "limpa", custoNoRadar: noRadar?.custo ?? null, renomear: [],
     });
+  } };
+  processar(closes);
+
+  // Foto sem fabricante e sem valor que não é a modelo de nenhuma peça: é uma peça só com uma foto, do fabricante "a pasta", sem custo.
+  // Repetida de uma peça que já existe (mesma descrição) fica de fora.
+  const soltas: Close[] = [];
+  for (const x of simples) {
+    if (consumidas.has(x.arquivo) || /^whatsapp image/i.test(x.desc)) continue;
+    if (descricoesFeitas.has(norm(x.desc))) {
+      alertas.push(`${colecao}: a foto "${x.arquivo.nome}" repete a descrição de uma peça que já tem foto e foi deixada de fora`);
+      consumidas.add(x.arquivo);
+      continue;
+    }
+    soltas.push({ arquivo: x.arquivo, fabricante: colecao, desc: x.desc, custo: null });
+    consumidas.add(x.arquivo);
   }
+  processar(soltas);
 
   const sobras = simples.filter((x) => !consumidas.has(x.arquivo));
   for (const x of sobras) alertas.push(`${colecao}: a foto "${x.arquivo.nome}" não tem fabricante e valor no nome nem par com outra foto, e foi deixada de fora`);

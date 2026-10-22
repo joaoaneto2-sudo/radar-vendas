@@ -34,18 +34,20 @@ describe("resolverFabricante", () => {
 describe("planejarColecao com os 75 arquivos reais de Escolhas de Fernanda", () => {
   const plano = planejarColecao("Escolhas de Fernanda", nomesReais.map((n) => arq(n)), fabricantes());
 
-  it("acha as 41 peças, 25 com foto da modelo e 16 só com o close", () => {
+  it("acha as 41 peças com fabricante no nome (25 com foto da modelo e 16 só com o close) mais 7 do fabricante-pasta", () => {
     expect(plano.colecao).toBe(true);
-    expect(plano.pecas).toHaveLength(41);
+    expect(plano.pecas).toHaveLength(48);
+    expect(plano.pecas.filter((p) => p.fabricante !== "Escolhas de Fernanda")).toHaveLength(41);
     expect(plano.pecas.filter((p) => p.modelo).length).toBe(25);
-    expect(plano.pecas.filter((p) => !p.modelo).length).toBe(16);
+    expect(plano.pecas.filter((p) => !p.modelo && p.fabricante !== "Escolhas de Fernanda").length).toBe(16);
     expect(plano.pecas.every((p) => p.situacao === "nova")).toBe(true);
   });
 
   it("arruma os fabricantes (Zarpelon, MILLANO, Nino Bran) e não renomeia nenhum arquivo", () => {
     const porFab = new Map<string, number>();
     for (const p of plano.pecas) porFab.set(p.fabricante!, (porFab.get(p.fabricante!) ?? 0) + 1);
-    expect([...porFab.keys()].sort()).toEqual(["Bia Belutti", "Brilhare", "Milano", "Nino", "Zarpellon"]);
+    expect([...porFab.keys()].sort()).toEqual(["Bia Belutti", "Brilhare", "Escolhas de Fernanda", "Milano", "Nino", "Zarpellon"]);
+    expect(porFab.get("Escolhas de Fernanda")).toBe(7);
     expect(porFab.get("Milano")).toBe(5);
     expect(porFab.get("Nino")).toBe(6);
     expect(plano.pecas.every((p) => p.renomear.length === 0)).toBe(true);
@@ -62,10 +64,25 @@ describe("planejarColecao com os 75 arquivos reais de Escolhas de Fernanda", () 
     expect(plano.pecas.every((p) => p.nome === p.nome.charAt(0).toUpperCase() + p.nome.slice(1))).toBe(true);
   });
 
-  it("as fotos soltas (sem fabricante e valor, sem par) ficam de fora e aparecem nos alertas", () => {
-    expect(plano.avulsas).toContain("Anel branco figuras geométricas.jpeg");
-    expect(plano.avulsas).toContain("WhatsApp Image 2026-10-20 at 20.37.24.jpeg");
-    expect(plano.alertas.some((a) => a.includes("Anel branco figuras geométricas.jpeg"))).toBe(true);
+  it("foto sem fabricante no nome vira peça do fabricante-pasta: o valor no fim do nome é o custo", () => {
+    const doFab = plano.pecas.filter((p) => p.fabricante === "Escolhas de Fernanda");
+    expect(doFab.find((p) => p.nome === "Anel folha orgânica")).toMatchObject({ custo: 59, categoria: "Anéis", codigo: "ESCOLHAS-AN-003" });
+    expect(doFab.find((p) => p.nome === "Anel duplo")?.custo).toBe(69);
+    expect(doFab.find((p) => p.nome === "Anel duplo e duas várias formas, os dois")?.custo).toBe(69);
+    expect(doFab.every((p) => p.renomear.length === 0)).toBe(true);
+  });
+
+  it("foto sem fabricante e sem valor entra como peça sem custo (com alerta); ponto final do nome some", () => {
+    const sem = plano.pecas.find((p) => p.nome === "Anel branco figuras geométricas")!;
+    expect(sem).toMatchObject({ fabricante: "Escolhas de Fernanda", custo: null, modelo: null });
+    expect(plano.alertas.some((a) => a.includes('"Anel branco figuras geométricas" está sem valor'))).toBe(true);
+    expect(plano.pecas.find((p) => p.nome.startsWith("Conjunto semi joia"))?.nome.endsWith("cravejadas")).toBe(true);
+  });
+
+  it("segunda cópia da foto de uma peça que já existe fica de fora; imagem do WhatsApp sem nome fica avulsa", () => {
+    expect(plano.pecas.filter((p) => p.nome === "Pingente quadrado na pedra legítima")).toHaveLength(1);
+    expect(plano.alertas.some((a) => a.includes("Pingente quadrado na pedra legítima.jpeg") && a.includes("repete"))).toBe(true);
+    expect(plano.avulsas).toEqual(["WhatsApp Image 2026-10-20 at 20.37.24.jpeg"]);
   });
 
   it("escolhe a categoria certa: pulseira com a palavra corrente é pulseira; colar com pingente é colar", () => {
