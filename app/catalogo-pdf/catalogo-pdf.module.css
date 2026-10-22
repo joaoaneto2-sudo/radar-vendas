@@ -436,18 +436,15 @@
   max-width: 38cqw;
 }
 
-/* v4: a moldura atravessa a foto da modelo */
+/* v4: moldura grande no painel estreito, sem passar por cima da foto da modelo (ali fica a joia dela) */
 .v4 {
   grid-template-columns: 40fr 60fr;
-}
-.v4 .painel {
-  z-index: 2;
 }
 .v4 .fotoClose,
 .v4 .recorte {
   top: 10cqw;
-  left: 20cqw;
-  width: 36cqw;
+  left: 4cqw;
+  width: 32cqw;
   height: 38cqw;
 }
 .v4 .sobreFoto {

@@ -82,6 +82,12 @@ describe("página com fotos escolhidas", () => {
     expect(decidirPagina(aplicarEscolhaDeFotos({ ...p, fotos: ["/a/m.jpg"] }))).toBe("duplo-modelo");
   });
 
+  it("duas fotos escolhidas mantêm o foco (onde está a joia) já marcado na foto da modelo", () => {
+    const p = { photo_url: "/a/close.jpg", photo_modelo_url: "/a/modelo.jpg", catalog_photo: { kind: "limpa" as const, fx: 22, fy: 40, zoom: 1 } };
+    const r = aplicarEscolhaDeFotos({ ...p, fotos: ["/a/close.jpg", "/a/modelo.jpg"] });
+    expect(r.catalog_photo).toEqual({ kind: "limpa", fx: 22, fy: 40, zoom: 1 });
+  });
+
   it("sem escolha nada muda", () => {
     const p = { photo_url: "/a/close.jpg", photo_modelo_url: "/a/modelo.jpg" };
     expect(aplicarEscolhaDeFotos(p)).toBe(p);

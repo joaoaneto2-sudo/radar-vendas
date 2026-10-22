@@ -64,8 +64,8 @@ export function gradeDaPagina(porPagina: number): GradeDaPagina {
   };
 }
 
-// Desenhos diferentes para a página de 1 peça (moldura quadrada, arco, espelhada, pílula e uma que
-// atravessa a foto da modelo). Sem variar, todas as páginas usam o desenho 0.
+// Desenhos diferentes para a página de 1 peça (moldura quadrada, arco, espelhada, pílula e moldura grande no
+// painel estreito). Nenhum cobre a foto da modelo. Sem variar, todas as páginas usam o desenho 0.
 export const DESENHOS_DA_PAGINA = 5;
 const ORDEM_DOS_DESENHOS = [0, 2, 1, 5, 4];
 
@@ -89,7 +89,9 @@ export type PecaDaPagina = {
 export function aplicarEscolhaDeFotos<T extends PecaDaPagina & { photo_url?: string | null }>(peca: T): T {
   const fotos = peca.fotos ?? [];
   if (fotos.length === 0 || fotos.length >= 3) return peca;
-  const limpa: CatalogoFoto = { kind: "limpa", fx: 50, fy: 50, zoom: 1 };
+  // O foco escolhido para a foto da modelo (onde está a joia) continua valendo; recorte de foto "modelo" usa fx/fy de outro jeito e não é reaproveitado.
+  const foco = peca.catalog_photo && peca.catalog_photo.kind !== "modelo" ? peca.catalog_photo : null;
+  const limpa: CatalogoFoto = { kind: "limpa", fx: foco?.fx ?? 50, fy: foco?.fy ?? 50, zoom: 1 };
   if (fotos.length === 1) {
     if (fotos[0] === peca.photo_url) return { ...peca, photo_modelo_url: null };
     return { ...peca, photo_url: fotos[0], photo_modelo_url: null, catalog_photo: limpa };

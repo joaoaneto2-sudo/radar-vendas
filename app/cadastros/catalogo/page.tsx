@@ -23,6 +23,7 @@ import {
 } from "@/lib/catalogo-filtro";
 
 const CHAVE_RASCUNHO = "radar-catalogo-rascunho";
+const CHAVE_FOCO = "radar-catalogo-foco"; // onde está a joia na foto da modelo de cada peça; fica guardado neste navegador para os próximos catálogos
 const NOME_PADRAO = "Catálogo Varejo Fernanda";
 
 export type PecaCatalogo = {
@@ -60,6 +61,13 @@ type Rascunho = {
   escolhaDeFotos?: Record<number, string[]>;
 };
 
+/** Enquadramento da peça no catálogo: o foco escolhido (onde está a joia na foto da modelo) vale só para peça com close + modelo. */
+function focoDaModelo(p: Product, ponto: { x: number; y: number } | undefined): CatalogoFoto | null {
+  const atual = p.catalog_photo ?? null;
+  if (!ponto || !p.modelo_photo_url || atual?.kind === "modelo") return atual;
+  return { kind: "limpa", zoom: 1, ...atual, fx: ponto.x, fy: ponto.y };
+}
+
 export default function CriarCatalogoPage() {
   const router = useRouter();
   const [items, setItems] = useState<Product[]>([]);
@@ -77,8 +85,15 @@ export default function CriarCatalogoPage() {
   const [fotosPorPeca, setFotosPorPeca] = useState<PadraoDeFotos>("padrao");
   const [escolhaDeFotos, setEscolhaDeFotos] = useState<Record<number, string[]>>({});
   const [destaqueIds, setDestaqueIds] = useState<Set<number>>(new Set());
+  const [foco, setFoco] = useState<Record<number, { x: number; y: number }>>({});
 
   useEffect(() => {
+    try {
+      const guardado = localStorage.getItem(CHAVE_FOCO);
+      if (guardado) setFoco(JSON.parse(guardado));
+    } catch {
+      // sem armazenamento local: o foco vale só nesta tela
+    }
     fetch("/api/products")
       .then((r) => r.json())
       .then((p) => {
@@ -219,6 +234,21 @@ export default function CriarCatalogoPage() {
     });
   }
 
+  // Clique na foto da modelo = onde está a joia. O catálogo passa a mostrar essa parte da foto, sem cortar a joia.
+  function definirFoco(id: number, ponto: { x: number; y: number } | null) {
+    setFoco((prev) => {
+      const novo = { ...prev };
+      if (ponto) novo[id] = { x: Math.round(Math.min(100, Math.max(0, ponto.x))), y: Math.round(Math.min(100, Math.max(0, ponto.y))) };
+      else delete novo[id];
+      try {
+        localStorage.setItem(CHAVE_FOCO, JSON.stringify(novo));
+      } catch {
+        // sem armazenamento local: o foco vale só nesta tela
+      }
+      return novo;
+    });
+  }
+
   function toggleDestaque(id: number) {
     setDestaqueIds((prev) => {
       const novo = new Set(prev);
@@ -247,7 +277,7 @@ export default function CriarCatalogoPage() {
         category: p.category || null,
         photo_url: p.photo_url || null,
         price: p.price === null || p.price === undefined ? null : Number(p.price),
-        catalog_photo: p.catalog_photo ?? null,
+        catalog_photo: focoDaModelo(p, foco[p.id]),
         photo_modelo_url: p.modelo_photo_url ?? null,
         ...(fotosEscolhidas(p, fotosPorPeca, escolhaDeFotos[p.id]) ? { fotos: fotosEscolhidas(p, fotosPorPeca, escolhaDeFotos[p.id]) } : {}),
       })),
@@ -673,6 +703,62 @@ export default function CriarCatalogoPage() {
                           </div>
                         );
                       })}
+                    </div>
+                  </details>
+                )}
+                {pecasSelecionadas.some((p) => p.modelo_photo_url && p.catalog_photo?.kind !== "modelo") && (
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: "pointer" }}>
+                      Enquadrar a foto da modelo{Object.keys(foco).length > 0 ? ` (${pecasSelecionadas.filter((p) => foco[p.id]).length} com a joia marcada)` : ""}
+                    </summary>
+                    <p className="hint" style={{ margin: "8px 0" }}>
+                      Se a joia ficou cortada ou na beirada da página, clique em cima da joia na foto da modelo. O catálogo passa a mostrar essa parte da
+                      foto. Fica guardado para os próximos catálogos.
+                    </p>
+                    <div style={{ maxHeight: 460, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 10 }}>
+                      {pecasSelecionadas
+                        .filter((p) => p.modelo_photo_url && p.catalog_photo?.kind !== "modelo")
+                        .map((p) => (
+                          <div key={p.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginBottom: 6, fontSize: 13 }}>
+                              <strong>{p.name || `#${p.id}`}</strong>
+                              {foco[p.id] && (
+                                <button type="button" className="btn btn-ghost btn-small" onClick={() => definirFoco(p.id, null)}>
+                                  Centralizar
+                                </button>
+                              )}
+                            </div>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Clique na joia da peça ${p.name}`}
+                              style={{ position: "relative", cursor: "crosshair", lineHeight: 0 }}
+                              onClick={(e) => {
+                                const r = e.currentTarget.getBoundingClientRect();
+                                definirFoco(p.id, { x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
+                              }}
+                            >
+                              <img src={p.modelo_photo_url as string} alt="" style={{ width: "100%", borderRadius: 8, display: "block" }} />
+                              {foco[p.id] && (
+                                <span
+                                  style={{
+                                    position: "absolute",
+                                    left: `${foco[p.id].x}%`,
+                                    top: `${foco[p.id].y}%`,
+                                    width: 22,
+                                    height: 22,
+                                    marginLeft: -11,
+                                    marginTop: -11,
+                                    borderRadius: 999,
+                                    border: "3px solid var(--accent)",
+                                    boxShadow: "0 0 0 2px #fff",
+                                    pointerEvents: "none",
+                                  }}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        ))}
                     </div>
                   </details>
                 )}
