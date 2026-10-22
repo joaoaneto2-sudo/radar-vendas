@@ -139,11 +139,12 @@
   bottom: 0;
 }
 
-.mensagemLateral {
-  left: 46cqw;
+.capa > .mensagemLateral {
+  left: 48cqw;
   right: 0;
   top: 0;
   bottom: 0;
+  padding: 4cqw 3cqw;
 }
 
 .mensagemCaixa {

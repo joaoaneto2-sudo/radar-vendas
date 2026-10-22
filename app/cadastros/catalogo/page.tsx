@@ -918,7 +918,17 @@ export default function CriarCatalogoPage() {
                   </label>
                 </div>
               )}
-              <div className="field field--full">
+              <div className="field field--full capa-editor">
+                <style>{`
+                  .capa-editor { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(320px, 44%); align-items: start; }
+                  .capa-previa { position: sticky; top: 12px; }
+                  @media (max-width: 960px) {
+                    .capa-editor { grid-template-columns: minmax(0, 1fr); }
+                    .capa-previa { order: -1; z-index: 5; background: var(--surface); padding: 8px 0; }
+                  }
+                `}</style>
+                <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+              <div>
                 <label>Capa do catálogo</label>
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   {CAPAS.map((src, i) => (
@@ -950,13 +960,13 @@ export default function CriarCatalogoPage() {
                   ))}
                 </div>
               </div>
-              <div className="field field--full">
+              <div>
                 <label>
                   <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} style={{ marginRight: 8 }} />
                   Mostrar o logo da Fernanda Brilhante na capa
                 </label>
               </div>
-              <div className="field field--full">
+              <div>
                 <link rel="stylesheet" href={URL_DAS_FONTES} />
                 <label>Mensagem sobre a capa (opcional)</label>
                 <div className="hint" style={{ marginBottom: 8 }}>
@@ -1084,11 +1094,30 @@ export default function CriarCatalogoPage() {
                         Fundo escuro suave atrás da mensagem (ajuda a ler sobre qualquer foto)
                       </label>
                     </div>
-                    <div className={estiloDoCatalogo.catalogo} style={{ maxWidth: 620 }}>
-                      <CapaDoCatalogo capa={capa} nomeCatalogo={nomeCatalogo.trim() || "Catálogo"} mensagem={mensagemValida(mensagem)} />
-                    </div>
                   </div>
                 )}
+              </div>
+                </div>
+                <div className="capa-previa">
+                  <div className="hint" style={{ marginBottom: 6 }}>
+                    <strong>Pré-visualização da capa</strong>: muda na hora, enquanto você escolhe.
+                    {temMensagem && " Clique na capa para mover a mensagem."}
+                  </div>
+                  <div
+                    className={estiloDoCatalogo.catalogo}
+                    style={{ cursor: temMensagem ? "pointer" : "default" }}
+                    title={temMensagem ? "Clique para mover a mensagem" : undefined}
+                    onClick={(e) => {
+                      if (!temMensagem) return;
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const x = (e.clientX - r.left) / r.width;
+                      const y = (e.clientY - r.top) / r.height;
+                      mudarMensagem({ coluna: x < 1 / 3 ? "esq" : x < 2 / 3 ? "centro" : "dir", linha: y < 1 / 3 ? "topo" : y < 2 / 3 ? "meio" : "base" });
+                    }}
+                  >
+                    <CapaDoCatalogo capa={capa} nomeCatalogo={nomeCatalogo.trim() || "Catálogo"} mensagem={mensagemValida(mensagem)} />
+                  </div>
+                </div>
               </div>
               {pecasSelecionadas.length > 0 && (
                 <details className="field field--full">
