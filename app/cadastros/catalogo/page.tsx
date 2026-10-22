@@ -27,6 +27,7 @@ import {
   type MensagemDaCapa,
 } from "@/lib/catalogo-mensagem";
 import { CapaDoCatalogo } from "@/app/catalogo-pdf/capa";
+import { QUALIDADES_DO_PDF, qualidadeValida, type QualidadeDoPdf } from "@/lib/catalogo-imagem";
 import estiloDoCatalogo from "@/app/catalogo-pdf/catalogo-pdf.module.css";
 import { FOTOS_POR_PECA_MAX, fotosDaPagina, fotosDisponiveis, fotosEscolhidas, type PadraoDeFotos } from "@/lib/catalogo-fotos";
 import {
@@ -68,6 +69,7 @@ export type CatalogoPdfDados = {
   pecas: PecaCatalogo[];
   mensagemCapa?: MensagemDaCapa | null; // mensagem sobre a capa (slogan, pergunta, oferta); ausente = sem mensagem
   capaLayout?: CapaLayout; // onde o João pôs a marca, o nome e a mensagem na capa; ausente = no lugar de sempre
+  qualidadePdf?: QualidadeDoPdf; // leve (padrão) ou alta: tamanho das fotos dentro do PDF
 };
 
 type Rascunho = {
@@ -82,6 +84,7 @@ type Rascunho = {
   ordem?: number[];
   mensagem?: MensagemDaCapa;
   capaLayout?: CapaLayout;
+  qualidadePdf?: QualidadeDoPdf;
 };
 
 /** Enquadramento da peça no catálogo: o foco escolhido (onde está a joia na foto da modelo) vale só para peça com close + modelo. */
@@ -112,6 +115,7 @@ export default function CriarCatalogoPage() {
   const [ordem, setOrdem] = useState<number[]>([]); // ids na ordem das páginas; quem não está aqui segue a ordem da lista
   const [mensagem, setMensagem] = useState<MensagemDaCapa>(MENSAGEM_PADRAO);
   const [capaLayout, setCapaLayout] = useState<CapaLayout>({});
+  const [qualidadePdf, setQualidadePdf] = useState<QualidadeDoPdf>("leve");
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [soltarSobre, setSoltarSobre] = useState<number | null>(null);
 
@@ -145,6 +149,7 @@ export default function CriarCatalogoPage() {
             if (r.escolhaDeFotos) setEscolhaDeFotos(r.escolhaDeFotos);
             if (Array.isArray(r.ordem)) setOrdem(r.ordem.filter((id) => existentes.has(id)));
             if (r.capaLayout) setCapaLayout(capaLayoutValido(r.capaLayout));
+            if (r.qualidadePdf) setQualidadePdf(qualidadeValida(r.qualidadePdf));
             if (r.mensagem && Array.isArray(r.mensagem.blocos) && r.mensagem.blocos.length > 0) setMensagem({ ...MENSAGEM_PADRAO, ...r.mensagem });
           }
         } catch {
@@ -345,6 +350,7 @@ export default function CriarCatalogoPage() {
       destaqueIds: Array.from(destaqueIds).filter((id) => selecionados.has(id)),
       mensagemCapa: mensagemValida(mensagem),
       capaLayout: capaLayoutValido(capaLayout),
+      qualidadePdf,
       pecas: pecasSelecionadas.map((p) => ({
         id: p.id,
         name: p.name || "",
@@ -358,7 +364,7 @@ export default function CriarCatalogoPage() {
     };
     try {
       sessionStorage.setItem("radar-catalogo-pdf", JSON.stringify(dados));
-      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos, ordem: idsNaOrdem, mensagem, capaLayout };
+      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos, ordem: idsNaOrdem, mensagem, capaLayout, qualidadePdf };
       sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(rascunho));
     } catch {
       // sessionStorage indisponível: segue mesmo assim, a página de impressão avisa se não achar nada.
@@ -1223,6 +1229,25 @@ export default function CriarCatalogoPage() {
                 ? "Escolha pelo menos uma peça no bloco 1."
                 : `O catálogo "${nomeCatalogo.trim() || "Catálogo"}" terá ${totalSelecionadas} ${totalSelecionadas === 1 ? "peça" : "peças"}, ${porPagina} por página. Na próxima tela, o botão "Baixar PDF" salva o arquivo.`}
             </p>
+            <div style={{ marginBottom: 14 }}>
+              <label>Tamanho do arquivo</label>
+              <div className="radio-row" style={{ marginTop: 6 }}>
+                {(Object.keys(QUALIDADES_DO_PDF) as QualidadeDoPdf[]).map((q) => (
+                  <button
+                    type="button"
+                    key={q}
+                    className={"radio-chip" + (qualidadePdf === q ? " selected" : "")}
+                    aria-pressed={qualidadePdf === q}
+                    onClick={() => setQualidadePdf(q)}
+                  >
+                    {QUALIDADES_DO_PDF[q].nome}
+                  </button>
+                ))}
+              </div>
+              <div className="hint" style={{ marginTop: 6 }}>
+                {QUALIDADES_DO_PDF[qualidadePdf].descricao}
+              </div>
+            </div>
             <button className="btn btn-primary" onClick={gerarPdf} disabled={totalSelecionadas === 0}>
               Ver e baixar o PDF ({totalSelecionadas} {totalSelecionadas === 1 ? "peça" : "peças"})
             </button>

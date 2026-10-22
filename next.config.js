@@ -16,6 +16,11 @@ const nextConfig = {
         source: "/api/(.*)",
         headers: [{ key: "Cache-Control", value: "no-store" }],
       },
+      {
+        // Fotos do catálogo em PDF já redimensionadas: ficam um dia neste navegador (esta regra vem depois da de cima e vale no lugar dela).
+        source: "/api/catalogo-imagem",
+        headers: [{ key: "Cache-Control", value: "private, max-age=86400" }],
+      },
     ];
   },
 };

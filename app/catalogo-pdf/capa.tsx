@@ -7,6 +7,7 @@
 
 import { useRef, type CSSProperties, type PointerEvent } from "react";
 import { CAPAS, CAPAS_COM_TEXTO_A_ESQUERDA } from "@/lib/catalogo-layout";
+import { larguraDaImagem, urlDaImagem, type QualidadeDoPdf } from "@/lib/catalogo-imagem";
 import { NOME_TAMANHO, limitarPonto, marcaTamanhoPadrao, posicaoPadrao, type CapaLayout, type ElementoDaCapa, type Ponto } from "@/lib/catalogo-capa";
 import {
   AUMENTO_DO_TRECHO_GRANDE,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/catalogo-mensagem";
 import s from "./catalogo-pdf.module.css";
 
-const LOGO_CAPA = "/marca/logo-clara.png";
+const LOGO_CAPA = "/marca/logo-capa.png"; // branco, já com a sombra suave (sem filtro de CSS, que pesa no PDF)
 const LOJA = "Fernanda Brilhante";
 
 const JUSTIFICAR = { topo: "flex-start", meio: "center", base: "flex-end" } as const;
@@ -87,6 +88,7 @@ export function CapaDoCatalogo({
   layout,
   editavel = false,
   onMover,
+  qualidade,
 }: {
   capa: string;
   nomeCatalogo: string;
@@ -94,9 +96,11 @@ export function CapaDoCatalogo({
   layout?: CapaLayout | null;
   editavel?: boolean;
   onMover?: (elemento: ElementoDaCapa, ponto: Ponto) => void;
+  qualidade?: QualidadeDoPdf; // na página de impressão a imagem da capa vem redimensionada; na pré-visualização, a original
 }) {
   const imagem = capa || CAPAS[0];
   const lateral = CAPAS_COM_TEXTO_A_ESQUERDA.includes(imagem);
+  const fundoDaCapa = qualidade ? urlDaImagem(imagem, { largura: larguraDaImagem(qualidade, "capa", false), qualidade }) : imagem;
   const secao = useRef<HTMLElement>(null);
   const pegada = useRef<{ chave: ElementoDaCapa; dx: number; dy: number } | null>(null);
 
@@ -148,7 +152,7 @@ export function CapaDoCatalogo({
     <section
       ref={secao}
       className={`${s.pagina} ${s.capa} ${lateral ? s.capaEsquerda : ""}`}
-      style={{ backgroundImage: `url("${imagem}"), linear-gradient(135deg, #f2d6cd, #deb2a6)` }}
+      style={{ backgroundImage: `url("${fundoDaCapa}"), linear-gradient(135deg, #f2d6cd, #deb2a6)` }}
     >
       <div className={s.capaLivre}>
         <h1 className={`${s.livreMarca} ${classeMarca}`} style={{ ...ponto(posMarca), width: `${larguraMarca}%` }} {...eventosMarca}>

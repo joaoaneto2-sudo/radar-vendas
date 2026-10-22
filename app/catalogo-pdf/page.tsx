@@ -9,6 +9,7 @@
 // Nunca mostrar custo, fabricante, fornecedor ou código aqui (sigilo da loja): PecaCatalogo nem traz esses campos.
 
 import { useEffect, useRef, useState } from "react";
+import { larguraDaImagem, qualidadeValida, urlDaImagem, urlDaMoldura, type QualidadeDoPdf } from "@/lib/catalogo-imagem";
 import type { CatalogoPdfDados, PecaCatalogo } from "@/app/cadastros/catalogo/page";
 import {
   agruparPorPagina,
@@ -27,7 +28,7 @@ import { CapaDoCatalogo } from "./capa";
 import s from "./catalogo-pdf.module.css";
 
 const LOJA = "Fernanda Brilhante";
-const LOGO_MARCA_DAGUA = "/marca/logo-escura.png";
+const LOGO_MARCA_DAGUA = "/marca/logo-marca-dagua.png"; // já com a transparência certa: nada de filtro nem mistura de cores no PDF
 
 const ESTILO_IMPRESSAO = `
   @page { size: A4 landscape; margin: 0; }
@@ -38,26 +39,21 @@ const ESTILO_IMPRESSAO = `
   }
 `;
 
-type Spread = { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: string; logo: boolean; mini: boolean };
+type Spread = { peca: PecaCatalogo; numero: number; destaque: boolean; colecao: string; logo: boolean; mini: boolean; qualidade: QualidadeDoPdf };
 
-// Caixa de tamanho fixo igual para todas as peças. A foto aparece inteira, com as bordas suaves, sobre
-// uma cópia ampliada e desfocada dela mesma que preenche o que sobrar (foto mais larga ou mais alta).
-function FotoClose({ url, nome, caixaClasse }: { url: string; nome: string; caixaClasse?: string }) {
-  const [larga, setLarga] = useState(false);
+// Caixa de tamanho fixo igual para todas as peças. A foto aparece inteira, com as bordas suaves, sobre uma cópia ampliada e
+// desfocada dela mesma que preenche o que sobrar. Quem monta isso é o servidor (uma imagem JPEG só, do tamanho da caixa):
+// filtro de borrão e máscara do CSS viram imagens enormes no PDF e deixam páginas em branco em vários leitores.
+function FotoClose({ url, nome, caixaClasse, qualidade, largura }: { url: string; nome: string; caixaClasse?: string; qualidade: QualidadeDoPdf; largura: number }) {
   const caixa = useRef<HTMLDivElement>(null);
+  const [proporcao, setProporcao] = useState<number | null>(null);
+  useEffect(() => {
+    const c = caixa.current?.getBoundingClientRect();
+    setProporcao(c && c.height > 0 ? c.width / c.height : 1.1);
+  }, []);
   return (
     <div className={caixaClasse ?? s.fotoClose} ref={caixa}>
-      <img className={s.fotoFundo} src={url} alt="" aria-hidden="true" />
-      <img
-        className={`${s.fotoFrente} ${larga ? s.fotoLarga : s.fotoAlta}`}
-        src={url}
-        alt={nome}
-        onLoad={(e) => {
-          const c = caixa.current?.getBoundingClientRect();
-          const proporcaoCaixa = c && c.height > 0 ? c.width / c.height : 1.1;
-          setLarga(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight > proporcaoCaixa);
-        }}
-      />
+      {proporcao !== null && <img className={s.fotoComposta} src={urlDaMoldura(url, { largura, proporcao, qualidade })} alt={nome} />}
     </div>
   );
 }
@@ -68,7 +64,8 @@ function MarcaDagua() {
 
 // Os dois painéis da peça. Na página de 1 peça ocupam a folha toda; na grade, cada peça ganha um
 // spread pequeno com o mesmo desenho.
-function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, mini }: Spread) {
+function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, mini, qualidade }: Spread) {
+  const foto = (url: string | null | undefined, uso: "modelo" | "mosaico") => urlDaImagem(url, { largura: larguraDaImagem(qualidade, uso, mini), qualidade });
   // Fotos escolhidas na tela de gerar: 1 ou 2 usam o desenho de sempre; 3 ou 4 viram mosaico (nas grades pequenas, só 2).
   const pecaBase = mini && (pecaOriginal.fotos?.length ?? 0) >= 3 ? { ...pecaOriginal, fotos: pecaOriginal.fotos!.slice(0, 2) } : pecaOriginal;
   const peca = aplicarEscolhaDeFotos(pecaBase);
@@ -91,11 +88,11 @@ function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, min
 
         {tipo === "duplo-modelo" && peca.photo_url && (
           <div className={s.recorte}>
-            <img src={peca.photo_url} alt="" style={{ width: `${zoom * 100}%`, transform: `translate(-${fx}%, -${fy}%)` }} />
+            <img src={foto(peca.photo_url, "modelo")} alt="" style={{ width: `${zoom * 100}%`, transform: `translate(-${fx}%, -${fy}%)` }} />
           </div>
         )}
         {(tipo === "duplo-limpa" || tipo === "mosaico") && (mosaico[0] ?? peca.photo_url) && (
-          <FotoClose url={(mosaico[0] ?? peca.photo_url) as string} nome={peca.name} />
+          <FotoClose url={(mosaico[0] ?? peca.photo_url) as string} nome={peca.name} qualidade={qualidade} largura={larguraDaImagem(qualidade, "close", mini)} />
         )}
 
         <div className={s.legenda}>
@@ -112,7 +109,7 @@ function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, min
         {tipo === "mosaico" ? (
           <>
             {mosaico.slice(1).map((url, i) => (
-              <img key={url + i} src={url} alt="" />
+              <img key={url + i} src={foto(url, "mosaico")} alt="" />
             ))}
             <span className={`${s.vertical} ${s.sobreFoto}`}>{colecao}</span>
           </>
@@ -120,7 +117,7 @@ function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, min
           // Peça com uma foto só: a foto grande no lado direito (inteira, sem cortar) e o nome e o preço no centro do esquerdo.
           peca.photo_url ? (
             <>
-              <FotoClose url={peca.photo_url} nome={peca.name} caixaClasse={s.fotoLado} />
+              <FotoClose url={peca.photo_url} nome={peca.name} caixaClasse={s.fotoLado} qualidade={qualidade} largura={larguraDaImagem(qualidade, "modelo", mini)} />
               <span className={`${s.vertical} ${s.sobreFoto}`}>{colecao}</span>
             </>
           ) : (
@@ -128,7 +125,7 @@ function SpreadDaPeca({ peca: pecaOriginal, numero, destaque, colecao, logo, min
           )
         ) : (
           <>
-            {fotoModelo && <img src={fotoModelo} alt="" style={{ objectPosition: `${fx}% ${fy}%` }} />}
+            {fotoModelo && <img src={foto(fotoModelo, "modelo")} alt="" style={{ objectPosition: `${fx}% ${fy}%` }} />}
             <span className={`${s.vertical} ${s.sobreFoto}`}>{colecao}</span>
           </>
         )}
@@ -156,7 +153,9 @@ function PaginaEmGrade({
   colecao,
   logo,
   grade,
+  qualidade,
 }: {
+  qualidade: QualidadeDoPdf;
   pecas: PecaCatalogo[];
   numero: number;
   destaqueIds: number[];
@@ -183,6 +182,7 @@ function PaginaEmGrade({
               colecao={colecao}
               logo={logo}
               mini
+              qualidade={qualidade}
             />
           </div>
         ))}
@@ -221,6 +221,7 @@ export default function CatalogoPdfPage() {
   // A ordem das peças é a que o João deixou na tela "Criar catálogo"; destaque só põe o rótulo.
   const pecas = dados.pecas;
   const porPagina = porPaginaValido(dados.porPagina);
+  const qualidade = qualidadeValida(dados.qualidadePdf);
   const grade = gradeDaPagina(porPagina);
 
   return (
@@ -245,7 +246,7 @@ export default function CatalogoPdfPage() {
       </div>
 
       <div className={s.folhas}>
-        <CapaDoCatalogo capa={dados.capa} nomeCatalogo={dados.nomeCatalogo} mensagem={mensagemValida(dados.mensagemCapa)} layout={capaLayoutValido(dados.capaLayout)} />
+        <CapaDoCatalogo capa={dados.capa} nomeCatalogo={dados.nomeCatalogo} mensagem={mensagemValida(dados.mensagemCapa)} layout={capaLayoutValido(dados.capaLayout)} qualidade={qualidade} />
 
         {porPagina === 1
           ? pecas.map((p, i) => (
@@ -256,6 +257,7 @@ export default function CatalogoPdfPage() {
                 destaque={dados.destaqueIds.includes(p.id)}
                 colecao={dados.nomeCatalogo}
                 logo={dados.logo}
+                qualidade={qualidade}
                 desenho={desenhoDaPagina(i, dados.variar !== false)}
               />
             ))
@@ -268,6 +270,7 @@ export default function CatalogoPdfPage() {
                 colecao={dados.nomeCatalogo}
                 logo={dados.logo}
                 grade={grade}
+                qualidade={qualidade}
               />
             ))}
       </div>
