@@ -9,7 +9,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Product, formatBRL } from "@/lib/format";
-import { CAPAS, CatalogoFoto, POR_PAGINA_MAX, POR_PAGINA_PADRAO } from "@/lib/catalogo-layout";
+import { CAPAS, CAPAS_COM_TEXTO_A_ESQUERDA, CatalogoFoto, POR_PAGINA_MAX, POR_PAGINA_PADRAO } from "@/lib/catalogo-layout";
+import { MARCA_TAMANHO, NOME_TAMANHO, capaLayoutValido, limitarPonto, marcaTamanhoPadrao, posicaoPadrao, semPosicao, type CapaLayout, type ElementoDaCapa, type Ponto } from "@/lib/catalogo-capa";
 import { CRITERIOS_DE_ORDEM, moverPara, moverUmaCasa, ordenarPor, pecasNaOrdem, type CriterioDeOrdem } from "@/lib/catalogo-ordem";
 import {
   BLOCO_NOVO,
@@ -66,6 +67,7 @@ export type CatalogoPdfDados = {
   destaqueIds: number[];
   pecas: PecaCatalogo[];
   mensagemCapa?: MensagemDaCapa | null; // mensagem sobre a capa (slogan, pergunta, oferta); ausente = sem mensagem
+  capaLayout?: CapaLayout; // onde o João pôs a marca, o nome e a mensagem na capa; ausente = no lugar de sempre
 };
 
 type Rascunho = {
@@ -79,6 +81,7 @@ type Rascunho = {
   escolhaDeFotos?: Record<number, string[]>;
   ordem?: number[];
   mensagem?: MensagemDaCapa;
+  capaLayout?: CapaLayout;
 };
 
 /** Enquadramento da peça no catálogo: o foco escolhido (onde está a joia na foto da modelo) vale só para peça com close + modelo. */
@@ -108,6 +111,7 @@ export default function CriarCatalogoPage() {
   const [foco, setFoco] = useState<Record<number, { x: number; y: number }>>({});
   const [ordem, setOrdem] = useState<number[]>([]); // ids na ordem das páginas; quem não está aqui segue a ordem da lista
   const [mensagem, setMensagem] = useState<MensagemDaCapa>(MENSAGEM_PADRAO);
+  const [capaLayout, setCapaLayout] = useState<CapaLayout>({});
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [soltarSobre, setSoltarSobre] = useState<number | null>(null);
 
@@ -140,6 +144,7 @@ export default function CriarCatalogoPage() {
             if (r.fotosPorPeca) setFotosPorPeca(r.fotosPorPeca);
             if (r.escolhaDeFotos) setEscolhaDeFotos(r.escolhaDeFotos);
             if (Array.isArray(r.ordem)) setOrdem(r.ordem.filter((id) => existentes.has(id)));
+            if (r.capaLayout) setCapaLayout(capaLayoutValido(r.capaLayout));
             if (r.mensagem && Array.isArray(r.mensagem.blocos) && r.mensagem.blocos.length > 0) setMensagem({ ...MENSAGEM_PADRAO, ...r.mensagem });
           }
         } catch {
@@ -317,6 +322,13 @@ export default function CriarCatalogoPage() {
     setMensagem((prev) => (prev.blocos.length <= 1 ? prev : { ...prev, blocos: prev.blocos.filter((_, i) => i !== indice) }));
   }
   const temMensagem = mensagemValida(mensagem) !== null;
+  const capaLateral = CAPAS_COM_TEXTO_A_ESQUERDA.includes(capa);
+  function moverNaCapa(elemento: ElementoDaCapa, ponto: Ponto) {
+    setCapaLayout((prev) => ({ ...prev, [elemento]: limitarPonto(ponto) }));
+  }
+  function centralizarNaCapa(elemento: "marca" | "nome") {
+    setCapaLayout((prev) => ({ ...prev, [elemento]: { x: 50, y: (prev[elemento] ?? posicaoPadrao(elemento, capaLateral)).y } }));
+  }
 
   function gerarPdf() {
     if (pecasSelecionadas.length === 0) return;
@@ -332,6 +344,7 @@ export default function CriarCatalogoPage() {
       clienteNome: null,
       destaqueIds: Array.from(destaqueIds).filter((id) => selecionados.has(id)),
       mensagemCapa: mensagemValida(mensagem),
+      capaLayout: capaLayoutValido(capaLayout),
       pecas: pecasSelecionadas.map((p) => ({
         id: p.id,
         name: p.name || "",
@@ -345,7 +358,7 @@ export default function CriarCatalogoPage() {
     };
     try {
       sessionStorage.setItem("radar-catalogo-pdf", JSON.stringify(dados));
-      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos, ordem: idsNaOrdem, mensagem };
+      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos, ordem: idsNaOrdem, mensagem, capaLayout };
       sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(rascunho));
     } catch {
       // sessionStorage indisponível: segue mesmo assim, a página de impressão avisa se não achar nada.
@@ -1075,7 +1088,10 @@ export default function CriarCatalogoPage() {
                                   key={linha + coluna}
                                   aria-label={`Mensagem ${linha === "topo" ? "em cima" : linha === "meio" ? "no meio" : "embaixo"}, ${coluna === "esq" ? "à esquerda" : coluna === "dir" ? "à direita" : "no centro"}`}
                                   aria-pressed={ativa}
-                                  onClick={() => mudarMensagem({ linha, coluna })}
+                                  onClick={() => {
+                                    mudarMensagem({ linha, coluna });
+                                    setCapaLayout((prev) => semPosicao(prev, ["mensagem"]));
+                                  }}
                                   style={{
                                     height: 30,
                                     borderRadius: 6,
@@ -1097,25 +1113,82 @@ export default function CriarCatalogoPage() {
                   </div>
                 )}
               </div>
+              <div>
+                <label>Posição e tamanho na capa</label>
+                <div className="hint" style={{ marginBottom: 8 }}>
+                  Arraste na pré-visualização. Dá para pôr a marca no alto e a mensagem embaixo, do mesmo lado, ou onde preferir.
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ width: 150 }}>Marca Fernanda Brilhante</strong>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span className="hint">Tamanho</span>
+                      <input
+                        type="range"
+                        min={MARCA_TAMANHO.min}
+                        max={MARCA_TAMANHO.max}
+                        value={capaLayout.marcaTamanho ?? marcaTamanhoPadrao(capaLateral)}
+                        onChange={(e) => setCapaLayout((prev) => ({ ...prev, marcaTamanho: Number(e.target.value) }))}
+                      />
+                    </label>
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => centralizarNaCapa("marca")}>
+                      Centralizar
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => setCapaLayout((prev) => semPosicao({ ...prev, marcaTamanho: undefined }, ["marca"]))}>
+                      Voltar ao lugar
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <strong style={{ width: 150 }}>Nome do catálogo</strong>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span className="hint">Tamanho</span>
+                      <input
+                        type="range"
+                        min={NOME_TAMANHO.min}
+                        max={NOME_TAMANHO.max}
+                        step={0.05}
+                        value={capaLayout.nomeTamanho ?? NOME_TAMANHO.padrao}
+                        onChange={(e) => setCapaLayout((prev) => ({ ...prev, nomeTamanho: Number(e.target.value) }))}
+                      />
+                    </label>
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => centralizarNaCapa("nome")}>
+                      Centralizar
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => setCapaLayout((prev) => semPosicao({ ...prev, nomeTamanho: undefined }, ["nome"]))}>
+                      Voltar ao lugar
+                    </button>
+                  </div>
+                  {temMensagem && (
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                      <strong style={{ width: 150 }}>Mensagem</strong>
+                      <span className="hint">Arraste, ou use as 9 posições acima.</span>
+                      <button type="button" className="btn btn-ghost btn-small" disabled={!capaLayout.mensagem} onClick={() => setCapaLayout((prev) => semPosicao(prev, ["mensagem"]))}>
+                        Voltar ao lugar
+                      </button>
+                    </div>
+                  )}
+                  <div>
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => setCapaLayout({})}>
+                      Voltar tudo ao lugar de sempre
+                    </button>
+                  </div>
+                </div>
+              </div>
                 </div>
                 <div className="capa-previa">
                   <div className="hint" style={{ marginBottom: 6 }}>
-                    <strong>Pré-visualização da capa</strong>: muda na hora, enquanto você escolhe.
-                    {temMensagem && " Clique na capa para mover a mensagem."}
+                    <strong>Pré-visualização da capa</strong>: muda na hora. <strong>Arraste</strong> a marca, o nome do catálogo ou a mensagem para
+                    onde quiser.
                   </div>
-                  <div
-                    className={estiloDoCatalogo.catalogo}
-                    style={{ cursor: temMensagem ? "pointer" : "default" }}
-                    title={temMensagem ? "Clique para mover a mensagem" : undefined}
-                    onClick={(e) => {
-                      if (!temMensagem) return;
-                      const r = e.currentTarget.getBoundingClientRect();
-                      const x = (e.clientX - r.left) / r.width;
-                      const y = (e.clientY - r.top) / r.height;
-                      mudarMensagem({ coluna: x < 1 / 3 ? "esq" : x < 2 / 3 ? "centro" : "dir", linha: y < 1 / 3 ? "topo" : y < 2 / 3 ? "meio" : "base" });
-                    }}
-                  >
-                    <CapaDoCatalogo capa={capa} nomeCatalogo={nomeCatalogo.trim() || "Catálogo"} mensagem={mensagemValida(mensagem)} />
+                  <div className={estiloDoCatalogo.catalogo}>
+                    <CapaDoCatalogo
+                      capa={capa}
+                      nomeCatalogo={nomeCatalogo.trim() || "Catálogo"}
+                      mensagem={mensagemValida(mensagem)}
+                      layout={capaLayout}
+                      editavel
+                      onMover={moverNaCapa}
+                    />
                   </div>
                 </div>
               </div>

@@ -22,6 +22,7 @@ import {
   type GradeDaPagina,
 } from "@/lib/catalogo-layout";
 import { URL_DAS_FONTES, mensagemValida } from "@/lib/catalogo-mensagem";
+import { capaLayoutValido } from "@/lib/catalogo-capa";
 import { CapaDoCatalogo } from "./capa";
 import s from "./catalogo-pdf.module.css";
 
@@ -244,7 +245,7 @@ export default function CatalogoPdfPage() {
       </div>
 
       <div className={s.folhas}>
-        <CapaDoCatalogo capa={dados.capa} nomeCatalogo={dados.nomeCatalogo} mensagem={mensagemValida(dados.mensagemCapa)} />
+        <CapaDoCatalogo capa={dados.capa} nomeCatalogo={dados.nomeCatalogo} mensagem={mensagemValida(dados.mensagemCapa)} layout={capaLayoutValido(dados.capaLayout)} />
 
         {porPagina === 1
           ? pecas.map((p, i) => (

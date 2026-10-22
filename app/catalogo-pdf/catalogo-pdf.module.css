@@ -48,15 +48,11 @@
   break-inside: avoid;
 }
 
-/* Capa */
+/* Capa: a imagem de fundo e uma camada solta (.capaLivre) com a marca, o nome do catálogo e a mensagem. Cada um fica
+   no lugar de sempre ou onde o João arrastou (posição em % da capa, pelo centro do elemento). */
 
 .capa {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  padding-top: 7cqw;
-  text-align: center;
+  display: block;
   color: #fff;
   background-size: cover;
   background-position: center;
@@ -69,66 +65,76 @@
   background: linear-gradient(rgba(40, 22, 18, 0.55), rgba(40, 22, 18, 0.18) 45%, rgba(40, 22, 18, 0.12));
 }
 
-.capa > * {
-  position: relative;
-}
-
-/* Capas com as pessoas à direita: o logo e o nome ficam centralizados na metade esquerda, livre. */
-.capaEsquerda {
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 0;
-  padding-left: 6cqw;
-  text-align: center;
-  width: 100%;
-}
-
+/* Capas com as pessoas à direita: o escurecido fica na metade esquerda, onde ficam a marca e o nome. */
 .capaEsquerda::before {
   background: linear-gradient(90deg, rgba(40, 22, 18, 0.42), rgba(40, 22, 18, 0.2) 45%, rgba(40, 22, 18, 0));
 }
 
-.capaEsquerda .capaMarca,
-.capaEsquerda .capaCatalogo {
-  width: 36cqw;
-  align-self: flex-start;
+.capa > .capaLivre {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  pointer-events: none;
 }
 
-.capaEsquerda .capaLogo {
-  width: 36cqw;
-}
-
-.capaEsquerda .capaCatalogo {
-  margin-right: 0;
-}
-
-.capaMarca {
+.livreMarca {
+  position: absolute;
   margin: 0;
   line-height: 0;
+  transform: translate(-50%, -50%);
 }
 
-.capaLogo {
+.livreLogo {
   display: block;
-  width: 34cqw;
+  width: 100%;
   filter: brightness(0) invert(1) drop-shadow(0 0.2cqw 1.6cqw rgba(30, 16, 12, 0.7));
 }
 
-.capaCatalogo {
-  margin: 1.6cqw 0 0;
-  font-size: 1.05cqw;
+.livreNome {
+  position: absolute;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
   font-weight: 500;
   letter-spacing: 0.5em;
-  margin-right: -0.5em;
+  padding-left: 0.5em;
   text-transform: uppercase;
   text-shadow: 0 0 1.4cqw rgba(40, 22, 18, 0.55);
 }
 
+/* Na pré-visualização da tela de montar: dá para pegar e arrastar */
+.arrastavel {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: 1px dashed transparent;
+  outline-offset: 0.6cqw;
+}
+
+.arrastavel:hover {
+  outline-color: rgba(255, 255, 255, 0.9);
+}
+
+.arrastavel:active {
+  cursor: grabbing;
+}
+
 /* Mensagem sobre a capa (slogan, pergunta, oferta): fica fora da área da marca e do nome do catálogo.
    Nas capas com o texto no alto, ocupa o que sobra abaixo da marca; nas capas com texto à esquerda, a metade direita. */
-.capa > .capaMensagem {
+.capaMensagem {
   position: absolute;
   display: flex;
   flex-direction: column;
   padding: 4cqw 5cqw;
+  pointer-events: none;
+}
+
+.mensagemLivre {
+  position: absolute;
+  width: max-content;
+  max-width: 62%;
+  transform: translate(-50%, -50%);
   pointer-events: none;
 }
 
@@ -139,8 +145,8 @@
   bottom: 0;
 }
 
-.capa > .mensagemLateral {
-  left: 48cqw;
+.mensagemLateral {
+  left: 44cqw;
   right: 0;
   top: 0;
   bottom: 0;
