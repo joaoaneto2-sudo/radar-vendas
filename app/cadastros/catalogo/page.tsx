@@ -114,6 +114,18 @@ export default function CriarCatalogoPage() {
     () => contarMarcacao(filtrarPecas(items, filtro, selecionados, "categorias"), (p) => p.category, selecionados),
     [items, filtro, selecionados]
   );
+  const colecoesDisponiveis = useMemo(() => {
+    const mapa = new Map<string, { nome: string; total: number; marcadas: number }>();
+    for (const p of items) {
+      for (const c of p.colecoes ?? []) {
+        const atual = mapa.get(c) ?? { nome: c, total: 0, marcadas: 0 };
+        atual.total++;
+        if (selecionados.has(p.id)) atual.marcadas++;
+        mapa.set(c, atual);
+      }
+    }
+    return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [items, selecionados]);
   const fabricantesDisponiveis = useMemo(
     () => contarMarcacao(items, (p) => p.manufacturer_name, selecionados),
     [items, selecionados]
@@ -137,11 +149,17 @@ export default function CriarCatalogoPage() {
     }));
   }
 
-  function alternarLista(campo: "fabricantes" | "fornecedores", nome: string) {
+  function alternarLista(campo: "fabricantes" | "fornecedores" | "colecoes", nome: string) {
     setFiltro((f) => ({
       ...f,
       [campo]: f[campo].includes(nome) ? f[campo].filter((x) => x !== nome) : [...f[campo], nome],
     }));
+    if (campo === "colecoes") {
+      // Com uma coleção só, o catálogo ganha o nome dela (a menos que o nome já tenha sido mudado à mão).
+      const novas = filtro.colecoes.includes(nome) ? filtro.colecoes.filter((x) => x !== nome) : [...filtro.colecoes, nome];
+      const nomeAindaAutomatico = nomeCatalogo === NOME_PADRAO || colecoesDisponiveis.some((c) => c.nome === nomeCatalogo);
+      if (nomeAindaAutomatico) setNomeCatalogo(novas.length === 1 ? novas[0] : NOME_PADRAO);
+    }
   }
 
   function toggleSelecionado(id: number) {
@@ -273,6 +291,33 @@ export default function CriarCatalogoPage() {
               mostradas". Também dá para marcar peça por peça na lista, ou sortear.
             </p>
 
+            {colecoesDisponiveis.length > 0 && (
+              <>
+                <div className="hint" style={{ marginBottom: 6 }}>
+                  Coleção especial: pastas escolhidas para uma ação (por exemplo, a Escolhas de Fernanda). Marque uma para ver só as peças dela.
+                </div>
+                <div className="store-toggles" style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className={"toggle-chip" + (filtro.colecoes.length === 0 ? " on" : "")}
+                    title="Sem escolher nenhuma, entram todas as peças"
+                    onClick={() => mudarFiltro({ colecoes: [] })}
+                  >
+                    Todas as peças
+                  </button>
+                  {colecoesDisponiveis.map((c) => (
+                    <button
+                      key={c.nome}
+                      type="button"
+                      className={"toggle-chip" + (filtro.colecoes.includes(c.nome) ? " on" : "")}
+                      onClick={() => alternarLista("colecoes", c.nome)}
+                    >
+                      ⭐ {c.nome} ({c.marcadas}/{c.total})
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <div className="hint" style={{ marginBottom: 6 }}>
               Tipo de peça. "Todos" ou só os que você marcar. O número mostra quantas estão marcadas do total.
             </div>

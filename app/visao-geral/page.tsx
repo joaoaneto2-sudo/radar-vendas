@@ -79,7 +79,7 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
          FROM sale_payments p JOIN sales s ON s.id = p.sale_id
         WHERE p.status = 'prevista' AND s.status = 'ativa' AND s.price_tier <> 'atacado'`
     ),
-    db.query(`SELECT category, stock_qty, show_online, sale_channel, active FROM products WHERE active`),
+    db.query(`SELECT category, stock_qty, show_online, sale_channel, availability, active FROM products WHERE active`),
     getFinanceSummary(db),
     // Meta do mês: partes das faturas do cartão, e o dinheiro que já entrou (parcelas recebidas e comissões)
     db.query(
@@ -141,7 +141,7 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
     const categoria = (p.category as string | null) || "Sem categoria";
     estoque.set(categoria, (estoque.get(categoria) ?? 0) + Number(p.stock_qty ?? 0));
     if (p.show_online) pecasNoSite += 1;
-    if (p.sale_channel !== "atacado" && Number(p.stock_qty ?? 0) <= 2) estoqueBaixo += 1;
+    if (p.sale_channel !== "atacado" && p.availability !== "encomenda" && Number(p.stock_qty ?? 0) <= 2) estoqueBaixo += 1;
   }
   const estoquePorCategoria: Parte[] = [...estoque.entries()]
     .map(([rotulo, quantidade]) => ({ rotulo, cents: 0, quantidade }))

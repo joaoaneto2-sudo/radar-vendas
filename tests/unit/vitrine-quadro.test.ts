@@ -88,3 +88,14 @@ describe("texto da falta", () => {
     expect(textoDaFalta(["foto principal", "descrição"])).toBe("Faltam: foto principal, descrição");
   });
 });
+
+describe("quadro da vitrine: peça sob encomenda", () => {
+  it("estoque zero em peça sob encomenda não é 'Esgotada' (ela só precisa dos dados do site)", () => {
+    const q = montarQuadroDaVitrine([
+      completa(1, "Esgotada de verdade", { stock_qty: 0 }),
+      completa(2, "Sob encomenda", { stock_qty: 0, availability: "encomenda" }),
+    ]);
+    expect(q.atencao.map((c) => [c.peca.id, c.motivos])).toEqual([[1, ["Esgotada"]]]);
+    expect(ids(q.podemEntrar)).toEqual([2]);
+  });
+});

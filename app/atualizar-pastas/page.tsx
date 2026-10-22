@@ -11,6 +11,8 @@ import { fabricanteParecido } from "@/lib/importar-lote";
 import { semAcento } from "@/lib/catalogo-filtro";
 import {
   assinatura,
+  ehPastaDeColecao,
+  planejarColecao,
   planejarPasta,
   resumoDoPlano,
   type ArquivoDaPasta,
@@ -102,9 +104,27 @@ export default function AtualizarPastasPage() {
       if (!res.ok) throw new Error("Não foi possível carregar as peças do Radar.");
       const produtos: Product[] = ((await res.json()).items || []).filter((p: Product) => p.active !== false && p.sale_channel !== "atacado");
       const nomesDeFabricante = [...new Set(produtos.map((p) => p.manufacturer_name).filter(Boolean) as string[])].map((name) => ({ name }));
+      const paraPecaDoRadar = (p: Product): PecaDoRadar => ({
+        id: p.id,
+        nome: p.name ?? "",
+        codigo: p.manufacturer_code ?? null,
+        custo: p.cost === null || p.cost === undefined || p.cost === "" ? null : Number(p.cost),
+        custoDaPasta: p.custo_da_pasta === null || p.custo_da_pasta === undefined || p.custo_da_pasta === "" ? null : Number(p.custo_da_pasta),
+        temFoto: !!p.photo_url,
+        temModelo: !!p.modelo_photo_url,
+        fotoOrigem: p.foto_origem ?? null,
+        modeloOrigem: p.modelo_origem ?? null,
+      });
+      const fabricantesNoRadar = nomesDeFabricante.map((f) => ({ nome: f.name, pecas: produtos.filter((p) => p.manufacturer_name === f.name).map(paraPecaDoRadar) }));
       const lidos: PlanoLido[] = [];
       for (const dir of await fonte.diretorios()) {
         const arquivos = await dir.arquivos();
+        // Pasta de coleção especial (ex.: Escolhas de Fernanda): peças de vários fabricantes, sem estoque, numa coleção.
+        if (ehPastaDeColecao(dir.nome)) {
+          const planoDaColecao = planejarColecao(dir.nome, arquivos as ArquivoDaPasta[], fabricantesNoRadar);
+          lidos.push({ ...planoDaColecao, arquivos: new Map(arquivos.map((a) => [a.nome, a])) });
+          continue;
+        }
         const chave = semAcento(dir.nome);
         const fab = nomesDeFabricante.find((f) => semAcento(f.name) === chave) ?? fabricanteParecido(nomesDeFabricante, chave);
         const doRadar: PecaDoRadar[] = produtos
@@ -206,7 +226,11 @@ export default function AtualizarPastasPage() {
             if (peca.modelo?.nome === r.de) peca.modelo = { nome: novo.nome, tamanho: novo.tamanho, modificadoEm: novo.modificadoEm };
           }
           // 2) enviar as fotos que mudaram
-          const item: any = { fabricante: plano.fabricante, nome: peca.nome, custo: peca.custo, categoria: peca.categoria, codigo: peca.codigo };
+          const item: any = { fabricante: peca.fabricante ?? plano.fabricante, nome: peca.nome, custo: peca.custo, categoria: peca.categoria, codigo: peca.codigo };
+          if (plano.colecao) {
+            item.colecao = plano.fabricante; // nome da pasta especial
+            item.semEstoque = true; // peça escolhida, ainda não temos: sem estoque e sob encomenda
+          }
           if (peca.subir.close && peca.close) {
             item.fotoPrincipal = await enviarFoto(plano.arquivos.get(peca.close.nome)!);
             item.fotoOrigem = assinatura(peca.close);
@@ -220,7 +244,7 @@ export default function AtualizarPastasPage() {
             item.catalogo = { kind: "limpa", fx: 50, fy: 50, zoom: 1 };
             fotos++;
           }
-          if (peca.situacao !== "igual" || item.fotoPrincipal || item.fotoModelo) itens.push(item);
+          if (peca.situacao !== "igual" || item.fotoPrincipal || item.fotoModelo || plano.colecao) itens.push(item);
         } catch (e) {
           falhas.push(`${plano.fabricante}: ${peca.nome}: ${e instanceof Error ? e.message : "erro"}`);
         }
@@ -346,7 +370,7 @@ export default function AtualizarPastasPage() {
                   <tbody>
                     {trabalho.map(({ pasta, peca }) => (
                       <tr key={`${pasta}|${peca.codigo}|${peca.nome}`}>
-                        <td>{pasta}</td>
+                        <td>{peca.fabricante ?? pasta}</td>
                         <td>{peca.nome}</td>
                         <td>
                           {peca.codigo}
@@ -369,6 +393,18 @@ export default function AtualizarPastasPage() {
               </div>
             )}
           </section>
+
+          {planos.some((p) => p.colecao) && (
+            <div className="banner banner-info" role="status" style={{ marginBottom: 16, alignItems: "flex-start" }}>
+              <span>⭐</span>
+              <span>
+                <strong>Pasta especial:</strong> {planos.filter((p) => p.colecao).map((p) => p.fabricante).join(", ")}. As peças dela entram no Radar{" "}
+                <strong>sem estoque e sob encomenda</strong> (são peças escolhidas, ainda não compradas) e ficam numa coleção com o nome da pasta, que aparece no
+                Criar catálogo. O valor que está no nome do arquivo é tratado como <strong>custo</strong> (preço de venda = custo × 2,5). Os arquivos desta pasta
+                não são renomeados.
+              </span>
+            </div>
+          )}
 
           {planos.some((p) => p.alertas.length > 0) && (
             <section className="card" style={{ marginBottom: 16 }}>

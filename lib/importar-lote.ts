@@ -23,6 +23,8 @@ export interface ItemDoLote {
   catalogo?: { kind: "limpa" | "modelo"; fx: number; fy: number; zoom: number }; // ausente: peça nova = foto limpa, existente = não mexe
   fotoOrigem?: string | null; // assinatura do arquivo da pasta de onde veio a foto principal (nome|tamanho|data)
   modeloOrigem?: string | null; // idem, da foto da modelo
+  colecao?: string | null; // coleção especial da pasta (ex.: "Escolhas de Fernanda"): a peça entra nela
+  semEstoque?: boolean; // peça nova entra sem estoque e sob encomenda (peça escolhida, que ainda não temos)
 }
 
 export type ResultadoDoItem = {
@@ -92,7 +94,8 @@ export function validarLote(corpo: unknown): { ok: true; itens: ItemDoLote[] } |
     vistos.add(chave);
     const codigo = typeof it.codigo === "string" ? it.codigo.trim() : "";
     if (codigo && !/^\p{Lu}+-(BR|CO|PU|AN|OU|PI|CJ)-\d{3}$/u.test(codigo)) return { ok: false, message: `Peça ${n} (${nome}): código inválido.` };
-    itens.push({ fabricante, nome, custo, categoria, fotoPrincipal: principal, fotoModelo: modelo, codigo: codigo || null, catalogo, fotoOrigem: origem(it.fotoOrigem), modeloOrigem: origem(it.modeloOrigem) });
+    const colecao = typeof it.colecao === "string" && it.colecao.trim() !== "" ? it.colecao.trim().slice(0, 80) : undefined;
+    itens.push({ fabricante, nome, custo, categoria, fotoPrincipal: principal, fotoModelo: modelo, codigo: codigo || null, catalogo, fotoOrigem: origem(it.fotoOrigem), modeloOrigem: origem(it.modeloOrigem), colecao, semEstoque: it.semEstoque === true });
   }
   return { ok: true, itens };
 }
@@ -144,6 +147,7 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
   try {
     await client.query("BEGIN");
     const fabricantes = new Map<string, number>();
+    const criadasNestaRodada = new Set<number>(); // o aviso de "mesmo custo" só compara com peças que já existiam
     for (const it of itens) {
       const chaveFab = semAcento(it.fabricante);
       let fabId: number | undefined = fabricantes.get(chaveFab);
@@ -195,21 +199,26 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
         resultado.atualizadas++;
       } else {
         const custoNovo = it.custo;
-        const parecida = custoNovo === null ? undefined : pecas.find((p) => p.cost !== null && Math.abs(Number(p.cost) - custoNovo) < 0.001);
+        const parecida = custoNovo === null ? undefined : pecas.find((p) => !criadasNestaRodada.has(p.id) && p.cost !== null && Math.abs(Number(p.cost) - custoNovo) < 0.001);
         if (parecida) aviso = `já existe "${parecida.name}" deste fabricante com o mesmo custo (${custoNovo!.toFixed(2)}): pode ser a mesma peça com outro nome`;
         const preco = custoNovo === null ? null : Math.round(custoNovo * markup * 100) / 100;
         const novo = await client.query(
           `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active,
              photo_url, show_online, availability, show_catalog, catalog_photo, foto_origem)
-           VALUES ($1,$2,$3,$4,$5,1,'varejo',true,$6,false,'pronta_entrega',true,$7::jsonb,$8) RETURNING id`,
-          [it.categoria, it.nome, fabricanteId, it.custo, preco, it.fotoPrincipal ?? null, foto ?? JSON.stringify({ kind: "limpa", fx: 50, fy: 50, zoom: 1 }), it.fotoOrigem ?? null]
+           VALUES ($1,$2,$3,$4,$5,$9,'varejo',true,$6,false,$10,true,$7::jsonb,$8) RETURNING id`,
+          [it.categoria, it.nome, fabricanteId, it.custo, preco, it.fotoPrincipal ?? null, foto ?? JSON.stringify({ kind: "limpa", fx: 50, fy: 50, zoom: 1 }), it.fotoOrigem ?? null, it.semEstoque ? 0 : 1, it.semEstoque ? "encomenda" : "pronta_entrega"]
         );
         id = novo.rows[0].id as number;
+        criadasNestaRodada.add(id);
         resultado.criadas++;
       }
 
       const avisoCodigo = await cuidarDoCodigo(client, id, fabricanteId, it.codigo ?? null, existente?.manufacturer_code ?? null);
       if (avisoCodigo) aviso = aviso ? `${aviso}; ${avisoCodigo}` : avisoCodigo;
+
+      if (it.colecao) {
+        await client.query(`INSERT INTO colecoes_pecas (colecao, product_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [it.colecao, id]);
+      }
 
       if (it.fotoModelo !== undefined) {
         await client.query(`DELETE FROM product_photos WHERE product_id = $1 AND kind = 'modelo'`, [id]);

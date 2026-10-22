@@ -16,7 +16,9 @@ const SELECT = `
          (SELECT pp.url FROM product_photos pp WHERE pp.product_id = p.id AND pp.kind = 'modelo'
            ORDER BY pp.position, pp.id LIMIT 1) AS modelo_photo_url,
          (SELECT COALESCE(json_agg(json_build_object('url', pp.url, 'kind', pp.kind) ORDER BY pp.position, pp.id), '[]'::json)
-            FROM product_photos pp WHERE pp.product_id = p.id) AS galeria
+            FROM product_photos pp WHERE pp.product_id = p.id) AS galeria,
+         (SELECT COALESCE(array_agg(cp.colecao ORDER BY cp.colecao), ARRAY[]::text[])
+            FROM colecoes_pecas cp WHERE cp.product_id = p.id) AS colecoes
   FROM products p
   LEFT JOIN manufacturers m ON m.id = p.manufacturer_id
   LEFT JOIN suppliers s ON s.id = p.supplier_id

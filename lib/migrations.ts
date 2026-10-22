@@ -768,6 +768,19 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE products ADD COLUMN IF NOT EXISTS modelo_origem TEXT`,
     ],
   },
+  {
+    id: "021",
+    name: "colecoes especiais: pecas escolhidas para uma acao (ex.: Escolhas de Fernanda), usadas no Criar catalogo",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS colecoes_pecas (
+        colecao TEXT NOT NULL,
+        product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (colecao, product_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS colecoes_pecas_peca_idx ON colecoes_pecas (product_id)`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

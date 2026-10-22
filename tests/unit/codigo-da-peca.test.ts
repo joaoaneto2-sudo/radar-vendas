@@ -62,6 +62,12 @@ describe("tipoPeloNome e CATEGORIA_DO_TIPO", () => {
     expect(tipoPeloNome("Escapulário em aço")).toBe("PI");
     expect(tipoPeloNome("Conjunto vintage")).toBe("CJ");
     expect(tipoPeloNome("Coisa qualquer")).toBe("OU");
+    // a ordem das palavras-chave
+    expect(tipoPeloNome("Pulseira corrente com fecho cravejado")).toBe("PU");
+    expect(tipoPeloNome("Colar com pingente em estrela")).toBe("CO");
+    expect(tipoPeloNome("Conjunto de colar e brinco")).toBe("CJ");
+    expect(tipoPeloNome("Corrente e choker mediando 50cm")).toBe("CO");
+    expect(tipoPeloNome("Pingente quadrado na pedra legítima")).toBe("PI");
     expect(CATEGORIA_DO_TIPO.BR).toBe("Brincos");
     expect(CATEGORIA_DO_TIPO.AN).toBe("Anéis");
   });

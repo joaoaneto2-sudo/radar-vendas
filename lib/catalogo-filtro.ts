@@ -8,6 +8,7 @@ export type FiltroCatalogo = {
   categorias: string[];
   fabricantes: string[];
   fornecedores: string[];
+  colecoes: string[]; // coleções especiais (ex.: Escolhas de Fernanda)
   busca: string;
   situacao: SituacaoMarcacao;
   precoMin: string; // texto digitado ("" = sem limite); aceita vírgula: "89,90"
@@ -21,6 +22,7 @@ export const SEM_FILTRO: FiltroCatalogo = {
   categorias: [],
   fabricantes: [],
   fornecedores: [],
+  colecoes: [],
   busca: "",
   situacao: "todas",
   precoMin: "",
@@ -40,6 +42,7 @@ type PecaFiltravel = {
   stock_qty?: number | null;
   photo_url?: string | null;
   show_catalog?: boolean | null;
+  colecoes?: string[] | null;
 };
 
 export const semAcento = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
@@ -58,6 +61,7 @@ export function temFiltro(f: FiltroCatalogo): boolean {
     f.categorias.length > 0 ||
     f.fabricantes.length > 0 ||
     f.fornecedores.length > 0 ||
+    f.colecoes.length > 0 ||
     f.busca.trim() !== "" ||
     f.situacao !== "todas" ||
     lerValor(f.precoMin) !== null ||
@@ -82,6 +86,7 @@ export function filtrarPecas<T extends PecaFiltravel>(
     if (ignorar !== "categorias" && filtro.categorias.length > 0 && !filtro.categorias.includes(p.category ?? "")) return false;
     if (filtro.fabricantes.length > 0 && !filtro.fabricantes.includes(p.manufacturer_name ?? "")) return false;
     if (filtro.fornecedores.length > 0 && !filtro.fornecedores.includes(p.supplier_name ?? "")) return false;
+    if (filtro.colecoes.length > 0 && !(p.colecoes ?? []).some((c) => filtro.colecoes.includes(c))) return false;
     if (busca && !semAcento(p.name ?? "").includes(busca)) return false;
     if (min !== null || max !== null) {
       const preco = p.price === null || p.price === undefined || p.price === "" ? null : Number(p.price);

@@ -10,6 +10,7 @@
 
 import { CATEGORIA_DO_TIPO, ehProvisorio, proximoCodigo, siglaDoNome, tipoPeloNome } from "./codigo-da-peca";
 import { semAcento } from "./catalogo-filtro";
+import { fabricanteParecido } from "./importar-lote";
 
 export interface ArquivoDaPasta {
   nome: string;
@@ -74,6 +75,7 @@ export function lerArquivo(arquivo: ArquivoDaPasta): ArquivoLido {
 const custoBR = (n: number) => n.toFixed(2).replace(".", ",");
 
 export interface PecaPlanejada {
+  fabricante?: string; // só nas pastas de coleção, onde cada peça é de um fabricante
   nome: string;
   codigo: string;
   codigoNovo: boolean; // o código foi dado agora (nome sem código ou provisório)
@@ -90,7 +92,8 @@ export interface PecaPlanejada {
 }
 
 export interface PlanoDaPasta {
-  fabricante: string;
+  colecao?: boolean; // pasta especial (ex.: Escolhas de Fernanda): peças de vários fabricantes, sem estoque
+  fabricante: string; // nome da pasta (na coleção, o nome da coleção)
   pecas: PecaPlanejada[];
   avulsas: string[]; // fotos que não entraram em nenhuma peça (nome fora do padrão ou sem par)
   alertas: string[];
@@ -220,4 +223,133 @@ export function resumoDoPlano(planos: PlanoDaPasta[]) {
     renomeacoes: pecas.reduce((s, p) => s + p.renomear.length, 0),
     alertas: planos.reduce((s, p) => s + p.alertas.length, 0),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Pastas de coleção especial (ex.: "Escolhas de Fernanda"): peças escolhidas para uma ação, de vários fabricantes.
+// Cada peça tem duas fotos: a de produto, com o nome "Fabricante - descrição - valor" (o close), e a foto da modelo,
+// com o nome só da descrição. As peças entram no Radar sem estoque (sob encomenda) e numa coleção, para o Criar
+// catálogo. Os arquivos desta pasta NÃO são renomeados.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Pasta que começa com "Escolhas de " ou "Coleção " é uma coleção especial, não um fabricante. */
+export const ehPastaDeColecao = (nome: string): boolean => /^(escolhas de|colecao)\b/.test(semAcento(nome));
+
+// Grafias de fabricante que aparecem nos nomes dos arquivos e o nome certo no Radar (chave sem acento e em minúsculas).
+export const ALIAS_DE_FABRICANTE: Record<string, string> = {
+  zarpelon: "Zarpellon",
+  zarpellon: "Zarpellon",
+  millano: "Milano",
+  "nino bran": "Nino",
+  "nino bran joias": "Nino",
+};
+
+/** Nome do fabricante no Radar para o que está escrito no arquivo; nulo se não achar. */
+export function resolverFabricante(prefixo: string, nomesNoRadar: string[]): string | null {
+  const chave = norm(prefixo);
+  const alias = ALIAS_DE_FABRICANTE[chave];
+  const alvo = alias ? norm(alias) : chave;
+  const exato = nomesNoRadar.find((n) => norm(n) === alvo);
+  if (exato) return exato;
+  if (alias) return alias;
+  return fabricanteParecido(nomesNoRadar.map((name) => ({ name })), alvo)?.name ?? null;
+}
+
+const RE_FAB_DESC_VALOR = /^(.+?)\s*-\s*(.+?)\s*-\s*([\d.,_]*)\s*$/;
+const capitalizar = (t: string) => {
+  const limpo = t.replace(/\s+/g, " ").trim();
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1);
+};
+
+export interface FabricanteNoRadar {
+  nome: string;
+  pecas: PecaDoRadar[];
+}
+
+export function planejarColecao(colecao: string, arquivos: ArquivoDaPasta[], fabricantesNoRadar: FabricanteNoRadar[]): PlanoDaPasta {
+  const alertas: string[] = [];
+  const nomes = fabricantesNoRadar.map((f) => f.nome);
+  let lidos = arquivos.filter((a) => ehImagem(a.nome));
+
+  // Duas versões do mesmo arquivo (mesmo nome, extensões diferentes): vale a mais nova.
+  const porStem = new Map<string, ArquivoDaPasta[]>();
+  for (const a of lidos) porStem.set(semExtensao(a.nome.normalize("NFC")).toLowerCase(), [...(porStem.get(semExtensao(a.nome.normalize("NFC")).toLowerCase()) ?? []), a]);
+  const fora = new Set<ArquivoDaPasta>();
+  for (const grupo of porStem.values()) {
+    if (grupo.length < 2) continue;
+    const [maisNova, ...resto] = [...grupo].sort((a, b) => b.modificadoEm - a.modificadoEm);
+    for (const r of resto) fora.add(r);
+    alertas.push(`${colecao}: duas versões do mesmo arquivo (${grupo.map((g) => g.nome).join(" e ")}); usei a mais nova, ${maisNova.nome}`);
+  }
+  lidos = lidos.filter((a) => !fora.has(a));
+
+  type Close = { arquivo: ArquivoDaPasta; fabricante: string; desc: string; custo: number | null };
+  const closes: Close[] = [];
+  const simples: { arquivo: ArquivoDaPasta; desc: string }[] = [];
+  for (const a of lidos) {
+    const base = semExtensao(a.nome.normalize("NFC")).trim();
+    const m = /^whatsapp image/i.test(base) ? null : base.match(RE_FAB_DESC_VALOR);
+    if (!m) {
+      simples.push({ arquivo: a, desc: base });
+      continue;
+    }
+    const fabricante = resolverFabricante(m[1], nomes);
+    if (!fabricante) {
+      alertas.push(`${colecao}: o fabricante "${m[1].trim()}" (arquivo "${a.nome}") não existe no Radar; cadastre o fabricante ou acerte o nome do arquivo`);
+      continue;
+    }
+    closes.push({ arquivo: a, fabricante, desc: m[2], custo: lerCusto(m[3]) });
+  }
+
+  const consumidas = new Set<ArquivoDaPasta>();
+  const usadosPorFabricante = new Map<string, { manufacturer_code: string | null }[]>();
+  const pecas: PecaPlanejada[] = [];
+  const nomesJaVistos = new Set<string>();
+
+  for (const c of closes) {
+    const nome = capitalizar(c.desc);
+    const chave = `${norm(c.fabricante)}|${norm(nome)}`;
+    if (nomesJaVistos.has(chave)) {
+      alertas.push(`${colecao}: a peça "${nome}" (${c.fabricante}) aparece duas vezes; usei só a primeira (${c.arquivo.nome} ficou de fora)`);
+      continue;
+    }
+    nomesJaVistos.add(chave);
+
+    const modelo = simples.find((x) => !consumidas.has(x.arquivo) && norm(x.desc) === norm(c.desc));
+    consumidas.add(c.arquivo);
+    if (modelo) consumidas.add(modelo.arquivo);
+
+    const doFab = fabricantesNoRadar.find((f) => norm(f.nome) === norm(c.fabricante));
+    const pecasDoFab = doFab?.pecas ?? [];
+    const porNome = pecasDoFab.filter((p) => norm(p.nome) === norm(nome));
+    const noRadar = porNome.length === 1 ? porNome[0] : undefined;
+
+    const tipo = tipoPeloNome(nome);
+    const categoria = CATEGORIA_DO_TIPO[tipo] ?? "Outros";
+    if (!usadosPorFabricante.has(c.fabricante)) usadosPorFabricante.set(c.fabricante, pecasDoFab.map((p) => ({ manufacturer_code: p.codigo })));
+    const usados = usadosPorFabricante.get(c.fabricante)!;
+    let codigo: string;
+    let codigoNovo = false;
+    if (noRadar?.codigo && !ehProvisorio(noRadar.codigo)) codigo = noRadar.codigo;
+    else {
+      codigo = proximoCodigo(usados, c.fabricante, categoria);
+      usados.push({ manufacturer_code: codigo });
+      codigoNovo = true;
+    }
+
+    const subirClose = !(noRadar && (noRadar.fotoOrigem === assinatura(c.arquivo) || (noRadar.fotoOrigem === null && noRadar.temFoto)));
+    const subirModelo = !!modelo && !(noRadar && (noRadar.modeloOrigem === assinatura(modelo.arquivo) || (noRadar.modeloOrigem === null && noRadar.temModelo)));
+    const mudouCusto = !!noRadar && c.custo !== null && (noRadar.custo === null || Math.abs(noRadar.custo - c.custo) > 0.001) && !(noRadar.custoDaPasta != null && Math.abs(noRadar.custoDaPasta - c.custo) < 0.001);
+    const mudouCodigo = !!noRadar && noRadar.codigo !== codigo;
+    if (c.custo === null) alertas.push(`${colecao}: "${nome}" está sem valor no nome do arquivo (a peça entra com o alerta "Falta preço de custo")`);
+    pecas.push({
+      fabricante: c.fabricante, nome, codigo, codigoNovo, categoria, custo: c.custo, close: c.arquivo, modelo: modelo?.arquivo ?? null,
+      radarId: noRadar?.id ?? null, situacao: !noRadar ? "nova" : subirClose || subirModelo || mudouCusto || mudouCodigo ? "atualizar" : "igual",
+      subir: { close: subirClose, modelo: subirModelo }, catalogoKind: "limpa", custoNoRadar: noRadar?.custo ?? null, renomear: [],
+    });
+  }
+
+  const sobras = simples.filter((x) => !consumidas.has(x.arquivo));
+  for (const x of sobras) alertas.push(`${colecao}: a foto "${x.arquivo.nome}" não tem fabricante e valor no nome nem par com outra foto, e foi deixada de fora`);
+  return { colecao: true, fabricante: colecao, pecas, avulsas: sobras.map((x) => x.arquivo.nome), alertas };
 }

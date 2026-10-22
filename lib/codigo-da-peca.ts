@@ -53,11 +53,12 @@ export const CATEGORIA_DO_TIPO: Record<string, string> = Object.fromEntries(Obje
 /** Chute do tipo pelo nome da peça (peça nova sem código ainda). Sem pista, OU (outros). */
 export function tipoPeloNome(nome: string): string {
   const n = nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  // Ordem importa: "pulseira corrente" é pulseira, "colar com pingente" é colar, "conjunto de colar e brinco" é conjunto.
+  if (/\b(conjunto|kit)\b/.test(n)) return "CJ";
   if (/\b(brinco|brincos|argola|argolas|ear)\b/.test(n)) return "BR";
-  if (/\b(colar|choker|chocker|gargantilha|corrente|cordao)\b/.test(n)) return "CO";
   if (/\b(pulseira|bracelete|braceletes|relogio)\b/.test(n)) return "PU";
+  if (/\b(colar|choker|chocker|gargantilha|corrente|cordao)\b/.test(n)) return "CO";
   if (/\b(anel|alianca|meia alianca)\b/.test(n)) return "AN";
   if (/\b(pingente|escapulario|medalha|medalhao)\b/.test(n)) return "PI";
-  if (/\b(conjunto|kit)\b/.test(n)) return "CJ";
   return "OU";
 }

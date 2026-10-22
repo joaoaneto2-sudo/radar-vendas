@@ -102,6 +102,8 @@ export type Product = {
   modelo_photo_url?: string | null;
   // Todas as fotos extras da peça, em ordem (a da modelo tem kind "modelo"). A principal é photo_url.
   galeria?: { url: string; kind: "limpa" | "modelo" | null }[];
+  // Coleções especiais a que a peça pertence (ex.: "Escolhas de Fernanda"), migração 021.
+  colecoes?: string[];
   // Custo que está no nome do arquivo da pasta quando difere do cadastro (migração 019). Gera o alerta "Custo diverge da pasta".
   custo_da_pasta?: number | string | null;
   // Assinatura do arquivo de onde veio cada foto (migração 020): nome|tamanho|data. A varredura das pastas compara com ela.

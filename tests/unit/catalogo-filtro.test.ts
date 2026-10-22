@@ -148,3 +148,24 @@ describe("temPreco", () => {
     expect(temPreco({ price: 89.9 })).toBe(true);
   });
 });
+
+describe("filtro por coleção especial", () => {
+  const lista = [
+    { id: 1, name: "A", colecoes: ["Escolhas de Fernanda"] },
+    { id: 2, name: "B", colecoes: ["Escolhas de Fernanda", "Outra"] },
+    { id: 3, name: "C", colecoes: [] },
+    { id: 4, name: "D" },
+  ];
+  const nenhuma = new Set<number>();
+
+  it("mostra só as peças da coleção escolhida; sem escolher nenhuma, todas", () => {
+    expect(filtrarPecas(lista, { ...SEM_FILTRO, colecoes: ["Escolhas de Fernanda"] }, nenhuma).map((p) => p.id)).toEqual([1, 2]);
+    expect(filtrarPecas(lista, { ...SEM_FILTRO, colecoes: ["Outra"] }, nenhuma).map((p) => p.id)).toEqual([2]);
+    expect(filtrarPecas(lista, { ...SEM_FILTRO, colecoes: ["Escolhas de Fernanda", "Outra"] }, nenhuma)).toHaveLength(2);
+    expect(filtrarPecas(lista, SEM_FILTRO, nenhuma)).toHaveLength(4);
+  });
+
+  it("temFiltro enxerga a coleção", () => {
+    expect(temFiltro({ ...SEM_FILTRO, colecoes: ["X"] })).toBe(true);
+  });
+});

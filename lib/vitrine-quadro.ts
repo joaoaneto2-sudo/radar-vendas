@@ -17,6 +17,7 @@ export interface PecaDoQuadro {
   photo_url?: string | null;
   price?: number | string | null;
   public_description?: string | null;
+  availability?: string | null; // "encomenda": estoque zero é normal, não é "esgotada"
 }
 
 export interface CartaoDeAtencao<T> {
@@ -46,7 +47,7 @@ export function montarQuadroDaVitrine<T extends PecaDoQuadro>(pecas: T[]): Quadr
     if (peca.sale_channel === "atacado" || peca.active === false) continue;
 
     const motivos: string[] = [];
-    if (peca.stock_qty <= 0) motivos.push("Esgotada");
+    if (peca.stock_qty <= 0 && peca.availability !== "encomenda") motivos.push("Esgotada");
     const falta = faltaParaPublicar({ photoUrl: peca.photo_url, price: peca.price, description: peca.public_description });
     if (falta.length > 0) motivos.push(textoDaFalta(falta));
 

@@ -465,6 +465,19 @@ describe.skipIf(!disponivel)("regras de proteção do banco", () => {
     });
   });
 
+  describe("coleções especiais (migração 021)", () => {
+    it("peça entra numa coleção uma vez só e sai da coleção quando a peça é apagada", async () => {
+      const pool = await bancoPronto();
+      const id = (await pool.query(`INSERT INTO products (name, price) VALUES ('Da coleção', 100) RETURNING id`)).rows[0].id;
+      await pool.query(`INSERT INTO colecoes_pecas (colecao, product_id) VALUES ('Escolhas', $1)`, [id]);
+      await expect(pool.query(`INSERT INTO colecoes_pecas (colecao, product_id) VALUES ('Escolhas', $1)`, [id])).rejects.toThrow();
+      await pool.query(`INSERT INTO colecoes_pecas (colecao, product_id) VALUES ('Outra', $1)`, [id]);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM colecoes_pecas WHERE product_id = $1`, [id])).rows[0].n).toBe(2);
+      await pool.query(`DELETE FROM products WHERE id = $1`, [id]);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM colecoes_pecas WHERE product_id = $1`, [id])).rows[0].n).toBe(0);
+    });
+  });
+
   describe("origem das fotos (migração 020)", () => {
     it("peça nova nasce sem origem de foto e guarda a assinatura quando informada", async () => {
       const pool = await bancoPronto();

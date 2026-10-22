@@ -257,6 +257,46 @@ describe.skipIf(!disponivel)("importar lote de peças das pastas", () => {
     expect(linha.catalog_photo).toEqual({ kind: "limpa", fx: 50, fy: 50, zoom: 1 });
   });
 
+  it("coleção especial: a peça entra na coleção; peça nova de coleção nasce sem estoque e sob encomenda; peça que já existe mantém o estoque", async () => {
+    const fab = (await pool.query(`INSERT INTO manufacturers (name) VALUES ('Fabricante LT') RETURNING id`)).rows[0].id;
+    await pool.query(
+      `INSERT INTO products (category, name, manufacturer_id, cost, price, stock_qty, sale_channel, active, availability) VALUES ('Brincos', 'LT Em estoque', $1, 40, 100, 3, 'varejo', true, 'pronta_entrega')`,
+      [fab]
+    );
+    const r = await importarLote(
+      pool,
+      [
+        { fabricante: "Fabricante LT", nome: "LT Escolhida nova", custo: 59, categoria: "Brincos", colecao: "Escolhas de Teste", semEstoque: true },
+        { fabricante: "Fabricante LT", nome: "LT Em estoque", custo: 40, categoria: "Brincos", colecao: "Escolhas de Teste", semEstoque: true },
+      ],
+      true
+    );
+    expect(r).toMatchObject({ criadas: 1, atualizadas: 1 });
+    const nova = (await pool.query(`SELECT stock_qty, availability, cost, price FROM products WHERE name = 'LT Escolhida nova'`)).rows[0];
+    expect([nova.stock_qty, nova.availability, Number(nova.cost), Number(nova.price)]).toEqual([0, "encomenda", 59, 147.5]);
+    const antiga = (await pool.query(`SELECT stock_qty, availability FROM products WHERE name = 'LT Em estoque'`)).rows[0];
+    expect([antiga.stock_qty, antiga.availability]).toEqual([3, "pronta_entrega"]);
+    const membros = await pool.query(`SELECT p.name FROM colecoes_pecas cp JOIN products p ON p.id = cp.product_id WHERE cp.colecao = 'Escolhas de Teste' ORDER BY p.name`);
+    expect(membros.rows.map((x) => x.name)).toEqual(["LT Em estoque", "LT Escolhida nova"]);
+    // rodar de novo não duplica a participação
+    await importarLote(pool, [{ fabricante: "Fabricante LT", nome: "LT Escolhida nova", custo: 59, categoria: "Brincos", colecao: "Escolhas de Teste", semEstoque: true }], true);
+    expect((await pool.query(`SELECT count(*)::int AS n FROM colecoes_pecas WHERE colecao = 'Escolhas de Teste'`)).rows[0].n).toBe(2);
+  });
+
+  it("peças novas do mesmo lote com o mesmo custo não geram aviso de duplicada entre si", async () => {
+    const r = await importarLote(
+      pool,
+      [
+        { fabricante: "Fabricante LT", nome: "LT Gemea um", custo: 59, categoria: "Brincos" },
+        { fabricante: "Fabricante LT", nome: "LT Gemea dois", custo: 59, categoria: "Brincos" },
+      ],
+      true
+    );
+    expect(r.criadas).toBe(2);
+    expect(r.itens.map((i) => i.aviso)).toEqual([undefined, undefined]);
+    await pool.query(`DELETE FROM manufacturers WHERE name = 'Fabricante LT'`);
+  });
+
   it("se algo falha no meio, nada é gravado", async () => {
     const ruim = item({ nome: "LT Segunda", categoria: "Brincos", catalogo: { kind: "limpa", fx: 50, fy: 50, zoom: 1 } });
     // custo gigante estoura a coluna NUMERIC(12,2) no segundo item
