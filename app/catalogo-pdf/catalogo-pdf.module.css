@@ -122,6 +122,96 @@
   text-shadow: 0 0 1.4cqw rgba(40, 22, 18, 0.55);
 }
 
+/* Mensagem sobre a capa (slogan, pergunta, oferta): fica fora da área da marca e do nome do catálogo.
+   Nas capas com o texto no alto, ocupa o que sobra abaixo da marca; nas capas com texto à esquerda, a metade direita. */
+.capa > .capaMensagem {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  padding: 4cqw 5cqw;
+  pointer-events: none;
+}
+
+.mensagemAbaixoDaMarca {
+  left: 0;
+  right: 0;
+  top: 27cqw;
+  bottom: 0;
+}
+
+.mensagemLateral {
+  left: 46cqw;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+
+.mensagemCaixa {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8cqw;
+  max-width: 100%;
+}
+
+.mensagemComFundo {
+  padding: 1.8cqw 2.6cqw;
+  border-radius: 1.4cqw;
+  background: rgba(40, 22, 18, 0.42);
+}
+
+.mensagemBloco {
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  max-width: 100%;
+}
+
+.mensagemTexto {
+  display: inline-block;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  text-shadow: 0 0 1.2cqw rgba(30, 16, 12, 0.5), 0 0.1cqw 0.5cqw rgba(30, 16, 12, 0.45);
+}
+
+.mensagemComFundo .mensagemTexto {
+  text-shadow: none;
+}
+
+/* Texto dourado com brilho de metal (o degradê aparece só nas letras) */
+.mensagemDourada {
+  background: linear-gradient(180deg, #fff3c9 0%, #f0cf78 40%, #b98a2f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 0.15cqw 0.5cqw rgba(30, 16, 12, 0.55));
+}
+
+/* Linha dentro de uma faixa dourada, como num cartaz de oferta */
+.mensagemFaixa {
+  padding: 0.35em 0.9em;
+  border-radius: 0.5em;
+  background: linear-gradient(135deg, #fbe7a6 0%, #e3b64f 45%, #f5d77f 70%, #bd8b30 100%);
+  box-shadow: 0 0.3cqw 1.4cqw rgba(30, 16, 12, 0.35), inset 0 0 0 0.12cqw rgba(255, 244, 200, 0.7);
+  text-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.mensagemGrande {
+  line-height: 0.95;
+}
+
+/* Traço dourado embaixo da linha, mais fino nas pontas */
+.mensagemTraco {
+  display: block;
+  width: 78%;
+  height: 0.22cqw;
+  margin-top: 0.5cqw;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, #e9c46a 18%, #fff3c9 50%, #e9c46a 82%, transparent);
+}
+
 /* Página da peça */
 
 .painel {

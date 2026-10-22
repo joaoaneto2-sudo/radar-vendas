@@ -10,6 +10,23 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Product, formatBRL } from "@/lib/format";
 import { CAPAS, CatalogoFoto, POR_PAGINA_MAX, POR_PAGINA_PADRAO } from "@/lib/catalogo-layout";
+import { CRITERIOS_DE_ORDEM, moverPara, moverUmaCasa, ordenarPor, pecasNaOrdem, type CriterioDeOrdem } from "@/lib/catalogo-ordem";
+import {
+  BLOCO_NOVO,
+  FONTES_DA_MENSAGEM,
+  MAXIMO_DE_BLOCOS,
+  MENSAGEM_PADRAO,
+  MODELOS_DE_MENSAGEM,
+  TEXTO_MAXIMO_DO_BLOCO,
+  URL_DAS_FONTES,
+  mensagemValida,
+  type BlocoDaMensagem,
+  type ColunaDaMensagem,
+  type LinhaDaMensagem,
+  type MensagemDaCapa,
+} from "@/lib/catalogo-mensagem";
+import { CapaDoCatalogo } from "@/app/catalogo-pdf/capa";
+import estiloDoCatalogo from "@/app/catalogo-pdf/catalogo-pdf.module.css";
 import { FOTOS_POR_PECA_MAX, fotosDaPagina, fotosDisponiveis, fotosEscolhidas, type PadraoDeFotos } from "@/lib/catalogo-fotos";
 import {
   contarMarcacao,
@@ -48,6 +65,7 @@ export type CatalogoPdfDados = {
   clienteNome: string | null;
   destaqueIds: number[];
   pecas: PecaCatalogo[];
+  mensagemCapa?: MensagemDaCapa | null; // mensagem sobre a capa (slogan, pergunta, oferta); ausente = sem mensagem
 };
 
 type Rascunho = {
@@ -59,6 +77,8 @@ type Rascunho = {
   variar: boolean;
   fotosPorPeca?: PadraoDeFotos;
   escolhaDeFotos?: Record<number, string[]>;
+  ordem?: number[];
+  mensagem?: MensagemDaCapa;
 };
 
 /** Enquadramento da peça no catálogo: o foco escolhido (onde está a joia na foto da modelo) vale só para peça com close + modelo. */
@@ -86,6 +106,10 @@ export default function CriarCatalogoPage() {
   const [escolhaDeFotos, setEscolhaDeFotos] = useState<Record<number, string[]>>({});
   const [destaqueIds, setDestaqueIds] = useState<Set<number>>(new Set());
   const [foco, setFoco] = useState<Record<number, { x: number; y: number }>>({});
+  const [ordem, setOrdem] = useState<number[]>([]); // ids na ordem das páginas; quem não está aqui segue a ordem da lista
+  const [mensagem, setMensagem] = useState<MensagemDaCapa>(MENSAGEM_PADRAO);
+  const [arrastando, setArrastando] = useState<number | null>(null);
+  const [soltarSobre, setSoltarSobre] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -115,6 +139,8 @@ export default function CriarCatalogoPage() {
             setVariar(r.variar);
             if (r.fotosPorPeca) setFotosPorPeca(r.fotosPorPeca);
             if (r.escolhaDeFotos) setEscolhaDeFotos(r.escolhaDeFotos);
+            if (Array.isArray(r.ordem)) setOrdem(r.ordem.filter((id) => existentes.has(id)));
+            if (r.mensagem && Array.isArray(r.mensagem.blocos) && r.mensagem.blocos.length > 0) setMensagem({ ...MENSAGEM_PADRAO, ...r.mensagem });
           }
         } catch {
           // sem rascunho ou sessionStorage indisponível: começa vazio
@@ -151,7 +177,7 @@ export default function CriarCatalogoPage() {
   );
   const filtroAtivo = temFiltro(filtro);
   const exibidasMarcadas = exibidas.filter((p) => selecionados.has(p.id)).length;
-  const pecasSelecionadas = items.filter((p) => selecionados.has(p.id));
+  const pecasSelecionadas = useMemo(() => pecasNaOrdem(items.filter((p) => selecionados.has(p.id)), ordem), [items, selecionados, ordem]);
 
   function mudarFiltro(parte: Partial<FiltroCatalogo>) {
     setFiltro((f) => ({ ...f, ...parte }));
@@ -204,7 +230,9 @@ export default function CriarCatalogoPage() {
   const quantidadeValida = Math.floor(Number(quantidadeSorteio));
   function sortear() {
     if (!(quantidadeValida > 0) || exibidas.length === 0) return;
-    setSelecionados(new Set(sortearPecas(exibidas, quantidadeValida).map((p) => p.id)));
+    const sorteadas = sortearPecas(exibidas, quantidadeValida);
+    setSelecionados(new Set(sorteadas.map((p) => p.id)));
+    setOrdem(sorteadas.map((p) => p.id));
     setDestaqueIds(new Set());
   }
 
@@ -250,13 +278,45 @@ export default function CriarCatalogoPage() {
   }
 
   function toggleDestaque(id: number) {
+    const ficaEmDestaque = !destaqueIds.has(id);
     setDestaqueIds((prev) => {
       const novo = new Set(prev);
       if (novo.has(id)) novo.delete(id);
       else novo.add(id);
       return novo;
     });
+    // Peça em destaque abre o catálogo (depois das outras em destaque); a ordem pode ser mudada em seguida.
+    if (ficaEmDestaque) {
+      const ids = pecasSelecionadas.map((p) => p.id);
+      const ultimoDestaque = ids.reduce((fim, x, i) => (destaqueIds.has(x) ? i : fim), -1);
+      setOrdem(moverPara(ids, id, ultimoDestaque + 1));
+    }
   }
+
+  // Ordem das páginas: botões, arrastar ou um critério pronto.
+  const idsNaOrdem = pecasSelecionadas.map((p) => p.id);
+  function ordenarAutomatico(criterio: CriterioDeOrdem) {
+    setOrdem(ordenarPor(pecasSelecionadas, criterio));
+  }
+  function soltarPeca(idAlvo: number) {
+    if (arrastando !== null && arrastando !== idAlvo) setOrdem(moverPara(idsNaOrdem, arrastando, idsNaOrdem.indexOf(idAlvo)));
+    setArrastando(null);
+    setSoltarSobre(null);
+  }
+
+  function mudarMensagem(parte: Partial<MensagemDaCapa>) {
+    setMensagem((prev) => ({ ...prev, ...parte }));
+  }
+  function mudarBloco(indice: number, parte: Partial<BlocoDaMensagem>) {
+    setMensagem((prev) => ({ ...prev, blocos: prev.blocos.map((b, i) => (i === indice ? { ...b, ...parte } : b)) }));
+  }
+  function adicionarBloco() {
+    setMensagem((prev) => (prev.blocos.length >= MAXIMO_DE_BLOCOS ? prev : { ...prev, blocos: [...prev.blocos, { ...BLOCO_NOVO }] }));
+  }
+  function tirarBloco(indice: number) {
+    setMensagem((prev) => (prev.blocos.length <= 1 ? prev : { ...prev, blocos: prev.blocos.filter((_, i) => i !== indice) }));
+  }
+  const temMensagem = mensagemValida(mensagem) !== null;
 
   function gerarPdf() {
     if (pecasSelecionadas.length === 0) return;
@@ -271,6 +331,7 @@ export default function CriarCatalogoPage() {
       variar,
       clienteNome: null,
       destaqueIds: Array.from(destaqueIds).filter((id) => selecionados.has(id)),
+      mensagemCapa: mensagemValida(mensagem),
       pecas: pecasSelecionadas.map((p) => ({
         id: p.id,
         name: p.name || "",
@@ -284,7 +345,7 @@ export default function CriarCatalogoPage() {
     };
     try {
       sessionStorage.setItem("radar-catalogo-pdf", JSON.stringify(dados));
-      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos };
+      const rascunho: Rascunho = { ids: Array.from(selecionados), nomeCatalogo: nome, logo, capa, porPagina, variar, fotosPorPeca, escolhaDeFotos, ordem: idsNaOrdem, mensagem };
       sessionStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(rascunho));
     } catch {
       // sessionStorage indisponível: segue mesmo assim, a página de impressão avisa se não achar nada.
@@ -583,6 +644,92 @@ export default function CriarCatalogoPage() {
                 <label>Nome do catálogo (aparece na capa)</label>
                 <input type="text" value={nomeCatalogo} onChange={(e) => setNomeCatalogo(e.target.value)} />
               </div>
+              {pecasSelecionadas.length > 1 && (
+                <details className="field field--full" open>
+                  <summary style={{ cursor: "pointer" }}>Ordem das peças no catálogo ({pecasSelecionadas.length})</summary>
+                  <p className="hint" style={{ margin: "8px 0" }}>
+                    A lista abaixo é a ordem das páginas. Arraste uma peça para outro lugar, ou use as setas. Peça marcada como destaque vai para o começo.
+                  </p>
+                  <div className="toolbar" style={{ marginBottom: 8 }}>
+                    <select
+                      value=""
+                      aria-label="Ordenar automaticamente"
+                      onChange={(e) => {
+                        if (e.target.value) ordenarAutomatico(e.target.value as CriterioDeOrdem);
+                      }}
+                    >
+                      <option value="">Ordenar automaticamente...</option>
+                      {CRITERIOS_DE_ORDEM.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome}
+                        </option>
+                      ))}
+                    </select>
+                    {ordem.length > 0 && (
+                      <button type="button" className="btn btn-ghost btn-small" onClick={() => setOrdem([])}>
+                        Voltar à ordem da lista
+                      </button>
+                    )}
+                  </div>
+                  <ol style={{ maxHeight: 420, overflowY: "auto", margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 6 }}>
+                    {pecasSelecionadas.map((p, i) => (
+                      <li
+                        key={p.id}
+                        draggable
+                        onDragStart={() => setArrastando(p.id)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          if (soltarSobre !== p.id) setSoltarSobre(p.id);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          soltarPeca(p.id);
+                        }}
+                        onDragEnd={() => {
+                          setArrastando(null);
+                          setSoltarSobre(null);
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "4px 8px",
+                          border: "1px solid var(--border)",
+                          borderTop: soltarSobre === p.id && arrastando !== p.id ? "3px solid var(--accent)" : "1px solid var(--border)",
+                          borderRadius: 10,
+                          background: arrastando === p.id ? "var(--surface-soft)" : "transparent",
+                          opacity: arrastando === p.id ? 0.55 : 1,
+                          cursor: "grab",
+                        }}
+                      >
+                        <span className="hint" style={{ width: 26, textAlign: "right" }}>
+                          {i + 1}
+                        </span>
+                        {p.photo_url ? <img src={p.photo_url} alt="" className="thumb" draggable={false} /> : <span className="thumb-placeholder">💎</span>}
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          {p.name || `#${p.id}`}
+                          {destaqueIds.has(p.id) && <span className="hint"> · destaque</span>}
+                        </span>
+                        <span className="hint">{formatBRL(p.price)}</span>
+                        <span style={{ display: "flex", gap: 2 }}>
+                          <button type="button" className="btn btn-ghost btn-small" title="Para o começo" aria-label={`Colocar ${p.name} no começo`} disabled={i === 0} onClick={() => setOrdem(moverPara(idsNaOrdem, p.id, 0))}>
+                            ⤒
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-small" title="Subir uma" aria-label={`Subir ${p.name}`} disabled={i === 0} onClick={() => setOrdem(moverUmaCasa(idsNaOrdem, p.id, -1))}>
+                            ↑
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-small" title="Descer uma" aria-label={`Descer ${p.name}`} disabled={i === pecasSelecionadas.length - 1} onClick={() => setOrdem(moverUmaCasa(idsNaOrdem, p.id, 1))}>
+                            ↓
+                          </button>
+                          <button type="button" className="btn btn-ghost btn-small" title="Para o fim" aria-label={`Colocar ${p.name} no fim`} disabled={i === pecasSelecionadas.length - 1} onClick={() => setOrdem(moverPara(idsNaOrdem, p.id, idsNaOrdem.length))}>
+                            ⤓
+                          </button>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              )}
               <div className="field field--full">
                 <label>Peças por página</label>
                 <div className="radio-row">
@@ -808,6 +955,140 @@ export default function CriarCatalogoPage() {
                   <input type="checkbox" checked={logo} onChange={(e) => setLogo(e.target.checked)} style={{ marginRight: 8 }} />
                   Mostrar o logo da Fernanda Brilhante na capa
                 </label>
+              </div>
+              <div className="field field--full">
+                <link rel="stylesheet" href={URL_DAS_FONTES} />
+                <label>Mensagem sobre a capa (opcional)</label>
+                <div className="hint" style={{ marginBottom: 8 }}>
+                  Um slogan, uma pergunta ou uma oferta, de 1 a {MAXIMO_DE_BLOCOS} linhas, cada uma com a sua fonte, tamanho e cor. Fica fora da área da marca e do
+                  nome do catálogo. Dica: o que você escrever entre *asteriscos* sai maior (ex.: Até *25% OFF*).
+                </div>
+                <div className="hint" style={{ marginBottom: 6 }}>
+                  Comece por um modelo e troque os textos (isso troca as linhas que estão aí):
+                </div>
+                <div className="radio-row" style={{ marginBottom: 10 }}>
+                  {MODELOS_DE_MENSAGEM.map((m) => (
+                    <button type="button" key={m.id} className="radio-chip" onClick={() => setMensagem(structuredClone(m.mensagem))}>
+                      {m.nome}
+                    </button>
+                  ))}
+                  {temMensagem && (
+                    <button type="button" className="btn btn-ghost btn-small" onClick={() => setMensagem(MENSAGEM_PADRAO)}>
+                      Sem mensagem
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {mensagem.blocos.map((b, i) => (
+                    <div key={i} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 10, display: "grid", gap: 8 }}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <input
+                          type="text"
+                          style={{ flex: 1 }}
+                          maxLength={TEXTO_MAXIMO_DO_BLOCO}
+                          value={b.texto}
+                          aria-label={`Texto da linha ${i + 1}`}
+                          placeholder={i === 0 ? "Ex.: Psiu..." : "Ex.: Até *25% OFF*"}
+                          onChange={(e) => mudarBloco(i, { texto: e.target.value })}
+                        />
+                        {mensagem.blocos.length > 1 && (
+                          <button type="button" className="btn btn-ghost btn-small" onClick={() => tirarBloco(i)}>
+                            Tirar linha
+                          </button>
+                        )}
+                      </div>
+                      <div className="radio-row">
+                        {FONTES_DA_MENSAGEM.map((fonte) => (
+                          <button
+                            type="button"
+                            key={fonte.id}
+                            className={"radio-chip" + (b.fonte === fonte.id ? " selected" : "")}
+                            aria-pressed={b.fonte === fonte.id}
+                            style={{ fontFamily: fonte.css, fontWeight: fonte.pesoNormal, fontSize: 16 }}
+                            onClick={() => mudarBloco(i, { fonte: fonte.id })}
+                          >
+                            {fonte.nome}
+                          </button>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
+                        <div className="radio-row" aria-label="Tamanho">
+                          {([["p", "Pequeno"], ["m", "Médio"], ["g", "Grande"], ["gg", "Enorme"], ["xg", "Gigante"]] as const).map(([v, nome]) => (
+                            <button type="button" key={v} className={"radio-chip" + (b.tamanho === v ? " selected" : "")} aria-pressed={b.tamanho === v} onClick={() => mudarBloco(i, { tamanho: v })}>
+                              {nome}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="radio-row" aria-label="Cor">
+                          {([["branco", "Branca"], ["dourado", "Dourada"], ["escuro", "Marrom"], ["preto", "Preta"]] as const).map(([v, nome]) => (
+                            <button type="button" key={v} className={"radio-chip" + (b.cor === v ? " selected" : "")} aria-pressed={b.cor === v} onClick={() => mudarBloco(i, { cor: v })}>
+                              {nome}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="radio-row" aria-label="Estilo">
+                          {([["texto", "Texto solto"], ["faixa", "Faixa dourada"]] as const).map(([v, nome]) => (
+                            <button type="button" key={v} className={"radio-chip" + (b.estilo === v ? " selected" : "")} aria-pressed={b.estilo === v} onClick={() => mudarBloco(i, { estilo: v })}>
+                              {nome}
+                            </button>
+                          ))}
+                        </div>
+                        <label>
+                          <input type="checkbox" checked={b.sublinhado} onChange={(e) => mudarBloco(i, { sublinhado: e.target.checked })} style={{ marginRight: 6 }} />
+                          Traço dourado embaixo
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                  {mensagem.blocos.length < MAXIMO_DE_BLOCOS && (
+                    <div>
+                      <button type="button" className="btn btn-ghost btn-small" onClick={adicionarBloco}>
+                        + Adicionar outra linha
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {temMensagem && (
+                  <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+                    <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-start" }}>
+                      <div>
+                        <div className="hint" style={{ marginBottom: 6 }}>
+                          Posição na capa
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 30px)", gap: 4 }}>
+                          {(["topo", "meio", "base"] as LinhaDaMensagem[]).flatMap((linha) =>
+                            (["esq", "centro", "dir"] as ColunaDaMensagem[]).map((coluna) => {
+                              const ativa = mensagem.linha === linha && mensagem.coluna === coluna;
+                              return (
+                                <button
+                                  type="button"
+                                  key={linha + coluna}
+                                  aria-label={`Mensagem ${linha === "topo" ? "em cima" : linha === "meio" ? "no meio" : "embaixo"}, ${coluna === "esq" ? "à esquerda" : coluna === "dir" ? "à direita" : "no centro"}`}
+                                  aria-pressed={ativa}
+                                  onClick={() => mudarMensagem({ linha, coluna })}
+                                  style={{
+                                    height: 30,
+                                    borderRadius: 6,
+                                    cursor: "pointer",
+                                    border: "1px solid var(--border-strong)",
+                                    background: ativa ? "var(--accent)" : "transparent",
+                                  }}
+                                />
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                      <label style={{ maxWidth: 360 }}>
+                        <input type="checkbox" checked={mensagem.fundo} onChange={(e) => mudarMensagem({ fundo: e.target.checked })} style={{ marginRight: 8 }} />
+                        Fundo escuro suave atrás da mensagem (ajuda a ler sobre qualquer foto)
+                      </label>
+                    </div>
+                    <div className={estiloDoCatalogo.catalogo} style={{ maxWidth: 620 }}>
+                      <CapaDoCatalogo capa={capa} nomeCatalogo={nomeCatalogo.trim() || "Catálogo"} mensagem={mensagemValida(mensagem)} />
+                    </div>
+                  </div>
+                )}
               </div>
               {pecasSelecionadas.length > 0 && (
                 <details className="field field--full">

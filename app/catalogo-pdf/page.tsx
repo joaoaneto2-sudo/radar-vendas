@@ -13,8 +13,6 @@ import type { CatalogoPdfDados, PecaCatalogo } from "@/app/cadastros/catalogo/pa
 import {
   agruparPorPagina,
   aplicarEscolhaDeFotos,
-  CAPAS,
-  CAPAS_COM_TEXTO_A_ESQUERDA,
   decidirPagina,
   desenhoDaPagina,
   enquadramento,
@@ -23,11 +21,12 @@ import {
   precoDaLegenda,
   type GradeDaPagina,
 } from "@/lib/catalogo-layout";
+import { URL_DAS_FONTES, mensagemValida } from "@/lib/catalogo-mensagem";
+import { CapaDoCatalogo } from "./capa";
 import s from "./catalogo-pdf.module.css";
 
 const LOJA = "Fernanda Brilhante";
 const LOGO_MARCA_DAGUA = "/marca/logo-escura.png";
-const LOGO_CAPA = "/marca/logo-clara.png";
 
 const ESTILO_IMPRESSAO = `
   @page { size: A4 landscape; margin: 0; }
@@ -218,9 +217,8 @@ export default function CatalogoPdfPage() {
     );
   }
 
-  const destaques = dados.pecas.filter((p) => dados.destaqueIds.includes(p.id));
-  const normais = dados.pecas.filter((p) => !dados.destaqueIds.includes(p.id));
-  const capa = dados.capa || CAPAS[0];
+  // A ordem das peças é a que o João deixou na tela "Criar catálogo"; destaque só põe o rótulo.
+  const pecas = dados.pecas;
   const porPagina = porPaginaValido(dados.porPagina);
   const grade = gradeDaPagina(porPagina);
 
@@ -231,6 +229,7 @@ export default function CatalogoPdfPage() {
         rel="stylesheet"
         href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&display=swap"
       />
+      <link rel="stylesheet" href={URL_DAS_FONTES} />
 
       <div className={s.barra}>
         <a className="btn btn-ghost" href="/cadastros/catalogo">
@@ -245,30 +244,21 @@ export default function CatalogoPdfPage() {
       </div>
 
       <div className={s.folhas}>
-        {/* Se a imagem da capa não existir, o degradê rosa por baixo aparece sozinho. */}
-        <section
-          className={`${s.pagina} ${s.capa} ${CAPAS_COM_TEXTO_A_ESQUERDA.includes(capa) ? s.capaEsquerda : ""}`}
-          style={{ backgroundImage: `url("${capa}"), linear-gradient(135deg, #f2d6cd, #deb2a6)` }}
-        >
-          <h1 className={s.capaMarca}>
-            <img className={s.capaLogo} src={LOGO_CAPA} alt={LOJA} />
-          </h1>
-          <p className={s.capaCatalogo}>{dados.nomeCatalogo}</p>
-        </section>
+        <CapaDoCatalogo capa={dados.capa} nomeCatalogo={dados.nomeCatalogo} mensagem={mensagemValida(dados.mensagemCapa)} />
 
         {porPagina === 1
-          ? [...destaques, ...normais].map((p, i) => (
+          ? pecas.map((p, i) => (
               <PaginaDaPeca
                 key={p.id}
                 peca={p}
                 numero={i + 2}
-                destaque={i < destaques.length}
+                destaque={dados.destaqueIds.includes(p.id)}
                 colecao={dados.nomeCatalogo}
                 logo={dados.logo}
                 desenho={desenhoDaPagina(i, dados.variar !== false)}
               />
             ))
-          : agruparPorPagina([...destaques, ...normais], porPagina).map((grupo, i) => (
+          : agruparPorPagina(pecas, porPagina).map((grupo, i) => (
               <PaginaEmGrade
                 key={grupo[0].id}
                 pecas={grupo}
