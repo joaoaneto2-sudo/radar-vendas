@@ -130,3 +130,56 @@ describe("relatório do dia: clientes", () => {
     expect(montarRelatorioDoDia(dados())).not.toContain("Clientes:");
   });
 });
+
+describe("relatório do dia: TOP FIVE", () => {
+  const v = (sale_date: string, sale_value: string, product_type: string, supplier: string, extra = {}) => ({
+    sale_date, sale_value, product_type, supplier, price_tier: "varejo", status: "ativa", ...extra,
+  });
+  const vendas = [
+    v("2026-11-02", "300", "1 brinco pizza dourado", "MILLANO"),
+    v("2026-11-03", "200", "Brinco pizza dourado", "Milano"),
+    v("2026-11-04", "916", "7 peças", "vários"),
+    v("2026-11-05", "478", "choker", "Zarpelon"),
+    v("2026-11-05", "100", "anel", "Bia Belluti"),
+    v("2026-11-06", "90", "anel", "Bia Belutti"),
+    v("2026-11-06", "50", "pulseira", "Glamour"),
+    v("2026-11-06", "40", "colar", "Max"),
+    v("2026-11-06", "30", "tornozeleira", "Outro"),
+    v("2026-11-06", "999", "cancelada", "Cancelada", { status: "cancelada" }),
+    v("2026-11-20", "5000", "depois de hoje", "Futuro"),
+    v("2026-10-16", "740", "13 peças", "MILLANO", { price_tier: "atacado" }),
+    v("2026-09-24", "513", "conjunto", "Bia Belluti"),
+  ];
+
+  it("junta grafias, tira quantidade e genéricos, ordena por valor e corta em 5", async () => {
+    const { topDoMes } = await import("../../lib/relatorio-do-dia");
+    const pecas = topDoMes(vendas, "2026-11", "2026-11-07", (x) => String(x.product_type).replace(/^\d+\s*/, ""));
+    expect(pecas.map((p) => [p.nome, p.vendas, p.cents])).toEqual([
+      ["Brinco pizza dourado", 2, 50000],
+      ["Choker", 1, 47800],
+      ["Anel", 2, 19000],
+      ["Pulseira", 1, 5000],
+      ["Colar", 1, 4000],
+    ]);
+    const forn = topDoMes(vendas, "2026-11", "2026-11-07", (x) => String(x.supplier));
+    expect(forn.map((f) => f.nome)).toEqual(["Milano", "Zarpelon", "Bia Belluti", "Glamour", "Max"]);
+  });
+
+  it("texto com os três meses, peças e fornecedores", () => {
+    const texto = montarRelatorioDoDia({
+      dia: DIA,
+      vendas,
+      aReceber: [],
+      meta: { hoje: DIA, partes: [], despesas: [], vendas, entradas: [] },
+    });
+    expect(texto).toContain("🏆 *TOP FIVE · Peças*");
+    expect(texto).toContain("🏆 *TOP FIVE · Fornecedores*");
+    expect(texto).toContain("🥇 Brinco pizza dourado · 2 vendas · R$ 500,00");
+    expect(texto).toContain("🥇 Milano · 2 vendas · R$ 500,00");
+    expect(texto).toContain("*Outubro*");
+    expect(texto).toContain("🥇 Millano · 1 venda · R$ 740,00");
+    expect(texto).toContain("🥇 Conjunto · 1 venda · R$ 513,00");
+    expect(texto).not.toContain("Cancelada");
+    expect(texto).not.toContain("Futuro");
+  });
+});

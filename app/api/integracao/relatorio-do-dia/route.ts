@@ -25,9 +25,11 @@ export async function GET(req: NextRequest) {
     const [vendas, aReceber, despesas, partes, recebidas, comissoes, clientes] = await Promise.all([
       db.query(
         `SELECT to_char(s.sale_date, 'YYYY-MM-DD') AS sale_date, s.sale_value, s.price_tier, s.status,
-                s.payment_method, s.seller, s.product_type, s.client_name, s.client_id, s.cost,
+                s.payment_method, s.seller, s.product_type, s.client_name, s.client_id, s.cost, s.supplier,
+                pr.name AS product_name,
                 CASE WHEN m.represented THEN m.commission_pct END AS commission_pct
-           FROM sales s LEFT JOIN manufacturers m ON m.id = s.manufacturer_id`
+           FROM sales s LEFT JOIN manufacturers m ON m.id = s.manufacturer_id
+           LEFT JOIN products pr ON pr.id = s.product_id`
       ),
       db.query(
         `SELECT to_char(p.due_date, 'YYYY-MM-DD') AS due_date, p.amount, s.client_name

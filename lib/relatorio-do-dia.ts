@@ -9,6 +9,104 @@ import { mesDe, nomeDoMes, resumoMensal, type DadosDaMeta } from "./meta-mensal"
 export interface VendaDoRelatorio extends VendaLinha {
   cost?: number | string | null;
   client_id?: number | null;
+  supplier?: string | null;
+  product_name?: string | null; // nome da peça cadastrada, quando a venda está ligada a uma
+}
+
+// ---------- TOP FIVE (peças e fornecedores) ----------
+
+const semAcentoMin = (t: string) =>
+  t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+// Textos que não dizem qual peça ou qual fornecedor: ficam fora do ranking.
+const GENERICOS = new Set(["", "peca", "pecas", "varios", "varias", "diversos", "diversas", "-", "sem"]);
+
+/** Chave para juntar grafias diferentes: "MILLANO", "Milano", "Millano " e "Bia Belluti"/"Bia Belutti". */
+function chaveDoNome(t: string): string {
+  return semAcentoMin(t).replace(/[^a-z0-9 ]/g, "").replace(/(.)\1+/g, "$1").trim();
+}
+
+/** "1 brinco pizza dourado" vira "brinco pizza dourado"; "7 peças" vira "peças" (genérico). */
+function nomeDaPeca(v: VendaDoRelatorio): string {
+  const bruto = (v.product_name || v.product_type || "").trim();
+  return bruto.replace(/^\d+\s*(x\s*)?/i, "").trim();
+}
+
+function capitalizar(t: string): string {
+  const limpo = t.replace(/\s+/g, " ").trim();
+  if (limpo === limpo.toUpperCase() && limpo.length > 3) {
+    return limpo.toLowerCase().replace(/(^|\s)\S/g, (l) => l.toUpperCase());
+  }
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1);
+}
+
+export interface ItemDoRanking {
+  nome: string;
+  vendas: number;
+  cents: Cents;
+}
+
+/** Top N do mês por valor vendido (varejo e atacado, só vendas ativas). Empate: mais vendas, depois nome. */
+export function topDoMes(
+  vendas: VendaDoRelatorio[],
+  mes: string,
+  ateODia: string,
+  nomeDe: (v: VendaDoRelatorio) => string,
+  n = 5
+): ItemDoRanking[] {
+  const grupos = new Map<string, { nomes: Map<string, number>; vendas: number; cents: Cents }>();
+  for (const v of vendas) {
+    const d = String(v.sale_date).slice(0, 10);
+    if (!ativa(v) || mesDe(d) !== mes || d > ateODia) continue;
+    const nome = nomeDe(v);
+    const chave = chaveDoNome(nome);
+    if (GENERICOS.has(chave) || GENERICOS.has(semAcentoMin(nome))) continue;
+    const g = grupos.get(chave) ?? { nomes: new Map(), vendas: 0, cents: 0 };
+    g.nomes.set(nome.trim(), (g.nomes.get(nome.trim()) ?? 0) + 1);
+    g.vendas += 1;
+    g.cents += v.sale_value === null || v.sale_value === "" || v.sale_value === undefined ? 0 : toCents(v.sale_value);
+    grupos.set(chave, g);
+  }
+  return [...grupos.values()]
+    .map((g) => {
+      // Mostra a grafia mais usada.
+      const nome = [...g.nomes.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+      return { nome: capitalizar(nome), vendas: g.vendas, cents: g.cents };
+    })
+    .sort((a, b) => b.cents - a.cents || b.vendas - a.vendas || a.nome.localeCompare(b.nome, "pt-BR"))
+    .slice(0, n);
+}
+
+const MEDALHAS = ["🥇", "🥈", "🥉", "4.", "5."];
+
+function blocoDoRanking(titulo: string, meses: { mes: string; ate: string }[], vendas: VendaDoRelatorio[], nomeDe: (v: VendaDoRelatorio) => string): string[] {
+  const linhas = [`🏆 *TOP FIVE · ${titulo}*`];
+  for (const { mes, ate } of meses) {
+    const nome = nomeDoMes(mes);
+    linhas.push(`*${nome.charAt(0).toUpperCase() + nome.slice(1)}*`);
+    const top = topDoMes(vendas, mes, ate, nomeDe);
+    if (top.length === 0) linhas.push("• sem vendas com esse dado");
+    top.forEach((t, i) =>
+      linhas.push(`${MEDALHAS[i]} ${t.nome} · ${t.vendas} venda${t.vendas === 1 ? "" : "s"} · ${formatCentsBRL(t.cents).replace(/ /g, " ")}`)
+    );
+  }
+  return linhas;
+}
+
+function secaoTopFive(vendas: VendaDoRelatorio[], dia: string): string[] {
+  const mes = mesDe(dia);
+  const mes1 = mesDe(addDaysISO(`${mes}-01`, -1));
+  const mes2 = mesDe(addDaysISO(`${mes1}-01`, -1));
+  const meses = [
+    { mes, ate: dia },
+    { mes: mes1, ate: "9999-12-31" },
+    { mes: mes2, ate: "9999-12-31" },
+  ];
+  return [
+    ...blocoDoRanking("Peças", meses, vendas, nomeDaPeca),
+    "",
+    ...blocoDoRanking("Fornecedores", meses, vendas, (v) => (v.supplier || "").trim()),
+  ];
 }
 
 export interface ClienteDoRelatorio {
@@ -200,6 +298,9 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
     linhas.push("");
     linhas.push(`⚠️ ${semCusto} venda${semCusto === 1 ? "" : "s"} do mês sem custo no Radar: completar para ver o lucro.`);
   }
+
+  linhas.push("");
+  linhas.push(...secaoTopFive(dados.vendas, dia));
 
   if (dados.clientes) {
     linhas.push("");
