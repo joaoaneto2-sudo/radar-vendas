@@ -781,6 +781,22 @@ export const MIGRATIONS: Migration[] = [
       `CREATE INDEX IF NOT EXISTS colecoes_pecas_peca_idx ON colecoes_pecas (product_id)`,
     ],
   },
+  {
+    id: "022",
+    name: "vendas lancadas pelo Roberto a partir das mensagens do WhatsApp (uma linha por mensagem, para nao lancar duas vezes)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS vendas_whatsapp (
+        message_id TEXT PRIMARY KEY,
+        situacao TEXT NOT NULL CHECK (situacao IN ('gravada', 'ja_existe', 'recusada')),
+        sale_id INTEGER REFERENCES sales(id) ON DELETE SET NULL,
+        avisos TEXT,
+        texto TEXT NOT NULL,
+        origem TEXT,
+        enviada_em TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

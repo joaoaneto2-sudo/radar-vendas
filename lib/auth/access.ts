@@ -13,6 +13,9 @@ export type AccessDecision =
 // Páginas e rotas que funcionam sem estar logado (senão ninguém conseguiria entrar).
 export const PUBLIC_PAGES = ["/login", "/primeiro-acesso"];
 export const PUBLIC_API = ["/api/auth/login", "/api/auth/register", "/api/auth/logout"];
+// Rotas de integração (o Roberto, robô do WhatsApp): não usam login de pessoa.
+// Cada uma confere a própria chave secreta (cabeçalho Authorization) e recusa sem ela.
+export const INTEGRATION_API_PREFIX = "/api/integracao/";
 
 export interface AccessInput {
   pathname: string;
@@ -39,7 +42,11 @@ export async function decideAccess(entrada: AccessInput): Promise<AccessDecision
     }
   }
 
-  if (PUBLIC_PAGES.includes(entrada.pathname) || PUBLIC_API.includes(entrada.pathname)) {
+  if (
+    PUBLIC_PAGES.includes(entrada.pathname) ||
+    PUBLIC_API.includes(entrada.pathname) ||
+    entrada.pathname.startsWith(INTEGRATION_API_PREFIX)
+  ) {
     return { action: "allow" };
   }
 
