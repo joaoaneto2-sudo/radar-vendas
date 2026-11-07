@@ -77,6 +77,95 @@ export function topDoMes(
     .slice(0, n);
 }
 
+// ---------- Ritmo do mês (meta diária) ----------
+
+/** Meta de vendas por dia de trabalho (varejo), em centavos. Combinada com o João em 07/11/2026. */
+export const META_DIARIA_CENTS = 100000;
+
+/** Dias normais de trabalho no salão: terça (2) a sábado (6). */
+const DIAS_DE_TRABALHO = new Set([2, 3, 4, 5, 6]);
+
+const diaDaSemanaNum = (d: string) => new Date(`${d}T12:00:00Z`).getUTCDay();
+
+export interface Ritmo {
+  hojeCents: Cents;
+  diasTrabalhados: number; // até hoje: terça a sábado + domingo/segunda que tiveram venda
+  diasRestantes: number; // depois de hoje até o fim do mês (só terça a sábado)
+  vendidoCents: Cents;
+  vendas: number;
+  mediaPorDiaCents: Cents;
+  ticketMedioCents: Cents;
+  metaAteHojeCents: Cents;
+  metaDoMesCents: Cents;
+  tendenciaCents: Cents; // média por dia x dias de trabalho do mês
+  precisaPorDiaCents: Cents; // para bater a meta do mês nos dias que faltam
+}
+
+export function ritmoDoMesDiario(vendas: VendaDoRelatorio[], dia: string): Ritmo {
+  const mes = mesDe(dia);
+  const varejo = vendas.filter(
+    (v) => ativa(v) && v.price_tier !== "atacado" && mesDe(String(v.sale_date)) === mes && String(v.sale_date).slice(0, 10) <= dia
+  );
+  const diasComVenda = new Set(varejo.map((v) => String(v.sale_date).slice(0, 10)));
+
+  let diasTrabalhados = 0;
+  for (let d = `${mes}-01`; d <= dia; d = addDaysISO(d, 1)) {
+    if (DIAS_DE_TRABALHO.has(diaDaSemanaNum(d)) || diasComVenda.has(d)) diasTrabalhados += 1;
+  }
+  let diasRestantes = 0;
+  for (let d = addDaysISO(dia, 1); mesDe(d) === mes; d = addDaysISO(d, 1)) {
+    if (DIAS_DE_TRABALHO.has(diaDaSemanaNum(d))) diasRestantes += 1;
+  }
+
+  const vendidoCents = varejo.reduce((t, v) => t + valorVendido(v), 0);
+  const hojeCents = varejo.filter((v) => String(v.sale_date).slice(0, 10) === dia).reduce((t, v) => t + valorVendido(v), 0);
+  const mediaPorDiaCents = diasTrabalhados > 0 ? Math.round(vendidoCents / diasTrabalhados) : 0;
+  const diasDoMes = diasTrabalhados + diasRestantes;
+  const metaDoMesCents = META_DIARIA_CENTS * diasDoMes;
+  const falta = Math.max(0, metaDoMesCents - vendidoCents);
+  return {
+    hojeCents,
+    diasTrabalhados,
+    diasRestantes,
+    vendidoCents,
+    vendas: varejo.length,
+    mediaPorDiaCents,
+    ticketMedioCents: varejo.length > 0 ? Math.round(vendidoCents / varejo.length) : 0,
+    metaAteHojeCents: META_DIARIA_CENTS * diasTrabalhados,
+    metaDoMesCents,
+    tendenciaCents: mediaPorDiaCents * diasDoMes,
+    precisaPorDiaCents: diasRestantes > 0 ? Math.ceil(falta / diasRestantes) : falta,
+  };
+}
+
+function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
+  const r = ritmoDoMesDiario(vendas, dia);
+  const pct = (a: Cents, b: Cents) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  const reaisR = (c: Cents) => formatCentsBRL(c).replace(/ /g, " ");
+  const linhas = [`📈 *Ritmo do mês* · meta ${reaisR(META_DIARIA_CENTS)} por dia`];
+  const trabalhaHoje = DIAS_DE_TRABALHO.has(diaDaSemanaNum(dia)) || r.hojeCents > 0;
+  if (trabalhaHoje) {
+    const ok = r.hojeCents >= META_DIARIA_CENTS ? "✅" : "⚠️";
+    linhas.push(`• Hoje: ${reaisR(r.hojeCents)} · ${pct(r.hojeCents, META_DIARIA_CENTS)}% da meta ${ok}`);
+  } else {
+    linhas.push("• Hoje: dia de folga, sem vendas");
+  }
+  linhas.push(`• Média por dia: ${reaisR(r.mediaPorDiaCents)} (${r.diasTrabalhados} dia${r.diasTrabalhados === 1 ? "" : "s"} de trabalho)`);
+  linhas.push(`• Ticket médio: ${reaisR(r.ticketMedioCents)} (${r.vendas} venda${r.vendas === 1 ? "" : "s"})`);
+  linhas.push(`• Meta até hoje: ${reaisR(r.metaAteHojeCents)} · vendido ${reaisR(r.vendidoCents)} (${pct(r.vendidoCents, r.metaAteHojeCents)}%)`);
+  const seta = r.tendenciaCents >= r.metaDoMesCents ? "🟢" : "🔴";
+  linhas.push(`• Tendência do mês: ${reaisR(r.tendenciaCents)} de ${reaisR(r.metaDoMesCents)} (${pct(r.tendenciaCents, r.metaDoMesCents)}%) ${seta}`);
+  if (r.vendidoCents >= r.metaDoMesCents) {
+    linhas.push("• Meta do mês batida! 🎉");
+  } else if (r.diasRestantes > 0) {
+    linhas.push(`• Para bater a meta: ${reaisR(r.precisaPorDiaCents)} por dia nos ${r.diasRestantes} dias que faltam`);
+  } else {
+    linhas.push(`• Faltaram ${reaisR(r.metaDoMesCents - r.vendidoCents)} para a meta do mês`);
+  }
+  linhas.push("_Dias de trabalho: terça a sábado; domingo ou segunda com venda contam como dia trabalhado._");
+  return linhas;
+}
+
 const MEDALHAS = ["🥇", "🥈", "🥉", "4.", "5."];
 
 function blocoDoRanking(titulo: string, meses: { mes: string; ate: string }[], vendas: VendaDoRelatorio[], nomeDe: (v: VendaDoRelatorio) => string): string[] {
@@ -279,6 +368,10 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
         : `⏳ Faltam ${reais(-resumo.saldoCents)} até dia 30`
     );
   }
+  linhas.push("");
+
+  // --- Ritmo do mês (meta diária)
+  linhas.push(...secaoDoRitmo(dados.vendas, dia));
   linhas.push("");
 
   // --- A receber

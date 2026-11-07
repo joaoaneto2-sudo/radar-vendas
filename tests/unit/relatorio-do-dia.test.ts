@@ -200,3 +200,61 @@ describe("relatório do dia: até quando", () => {
     expect(montarRelatorioDoDia(dados())).not.toContain("Dados até");
   });
 });
+
+describe("relatório do dia: ritmo do mês (meta R$ 1.000 por dia)", () => {
+  const venda = (sale_date: string, sale_value: string, extra = {}) => ({
+    sale_date, sale_value, price_tier: "varejo", status: "ativa", ...extra,
+  });
+  // Novembro/2026: dia 1 é domingo. Até sáb 07: dias de trabalho ter 03 a sáb 07 = 5.
+  const vendas = [
+    venda("2026-11-02", "500"), // segunda com venda: conta +1 dia
+    venda("2026-11-04", "1000"),
+    venda("2026-11-07", "1200"),
+    venda("2026-11-07", "300"),
+    venda("2026-11-06", "999", { status: "cancelada" }),
+    venda("2026-11-05", "5000", { price_tier: "atacado" }),
+    venda("2026-10-31", "800"),
+  ];
+
+  it("conta terça a sábado e a segunda que teve venda", async () => {
+    const { ritmoDoMesDiario } = await import("../../lib/relatorio-do-dia");
+    const r = ritmoDoMesDiario(vendas, "2026-11-07");
+    expect(r.diasTrabalhados).toBe(6);
+    // depois de 07/11: ter 10 a sáb 14, 17-21, 24-28 = 15 dias
+    expect(r.diasRestantes).toBe(15);
+    expect(r.vendidoCents).toBe(300000);
+    expect(r.hojeCents).toBe(150000);
+    expect(r.mediaPorDiaCents).toBe(50000);
+    expect(r.ticketMedioCents).toBe(75000);
+    expect(r.metaAteHojeCents).toBe(600000);
+    expect(r.metaDoMesCents).toBe(2100000);
+    expect(r.tendenciaCents).toBe(1050000);
+    expect(r.precisaPorDiaCents).toBe(120000);
+  });
+
+  it("texto da seção", () => {
+    const texto = montarRelatorioDoDia({
+      dia: "2026-11-07",
+      vendas,
+      aReceber: [],
+      meta: { hoje: "2026-11-07", partes: [], despesas: [], vendas, entradas: [] },
+    });
+    expect(texto).toContain("📈 *Ritmo do mês* · meta R$ 1.000,00 por dia");
+    expect(texto).toContain("• Hoje: R$ 1.500,00 · 150% da meta ✅");
+    expect(texto).toContain("• Média por dia: R$ 500,00 (6 dias de trabalho)");
+    expect(texto).toContain("• Ticket médio: R$ 750,00 (4 vendas)");
+    expect(texto).toContain("• Meta até hoje: R$ 6.000,00 · vendido R$ 3.000,00 (50%)");
+    expect(texto).toContain("• Tendência do mês: R$ 10.500,00 de R$ 21.000,00 (50%) 🔴");
+    expect(texto).toContain("• Para bater a meta: R$ 1.200,00 por dia nos 15 dias que faltam");
+  });
+
+  it("segunda sem venda é folga", () => {
+    const texto = montarRelatorioDoDia({
+      dia: "2026-11-09",
+      vendas,
+      aReceber: [],
+      meta: { hoje: "2026-11-09", partes: [], despesas: [], vendas, entradas: [] },
+    });
+    expect(texto).toContain("• Hoje: dia de folga, sem vendas");
+  });
+});
