@@ -8,6 +8,15 @@ import { mesDe, nomeDoMes, resumoMensal, type DadosDaMeta } from "./meta-mensal"
 
 export interface VendaDoRelatorio extends VendaLinha {
   cost?: number | string | null;
+  client_id?: number | null;
+}
+
+export interface ClienteDoRelatorio {
+  id: number;
+  full_name: string;
+  phone?: string | null;
+  birthday?: string | null; // AAAA-MM-DD
+  city?: string | null;
 }
 
 export interface ParcelaDoRelatorio {
@@ -21,6 +30,84 @@ export interface DadosDoRelatorio {
   vendas: VendaDoRelatorio[]; // todas as vendas (o relatório filtra dia e mês)
   aReceber: ParcelaDoRelatorio[]; // parcelas previstas (ainda não recebidas), sem atacado
   meta: DadosDaMeta; // mesmos dados da tela Visão geral
+  clientes?: ClienteDoRelatorio[]; // cadastro de clientes (sem isso, a seção de clientes não aparece)
+}
+
+const MAX_NOMES = 10;
+
+function listaDeNomes(nomes: string[]): string {
+  if (nomes.length <= MAX_NOMES) return nomes.join(", ");
+  return `${nomes.slice(0, MAX_NOMES).join(", ")} e mais ${nomes.length - MAX_NOMES}`;
+}
+
+/** Quem comprou num mês: o cadastro, quando a venda está ligada a um; senão, o nome escrito na venda. */
+function compradoresDoMes(vendas: VendaDoRelatorio[], mes: string, ateODia: string): number {
+  const quem = new Set<string>();
+  for (const v of vendas) {
+    const d = String(v.sale_date).slice(0, 10);
+    if (!ativa(v) || mesDe(d) !== mes || d > ateODia) continue;
+    if (v.client_id) quem.add(`id:${v.client_id}`);
+    else if (v.client_name) quem.add(`nome:${v.client_name.trim().toLowerCase()}`);
+  }
+  return quem.size;
+}
+
+function secaoDeClientes(clientes: ClienteDoRelatorio[], vendas: VendaDoRelatorio[], dia: string): string[] {
+  const linhas: string[] = [];
+  const mes = mesDe(dia);
+  const mes1 = mesDe(addDaysISO(`${mes}-01`, -1));
+  const mes2 = mesDe(addDaysISO(`${mes1}-01`, -1));
+  const rotulo = (m: string) => nomeDoMes(m);
+
+  linhas.push(`👥 *Clientes:* ${clientes.length} cadastrado${clientes.length === 1 ? "" : "s"}`);
+  linhas.push(
+    `🛒 Compraram: ${rotulo(mes)} ${compradoresDoMes(vendas, mes, dia)} · ` +
+      `${rotulo(mes1)} ${compradoresDoMes(vendas, mes1, "9999-12-31")} · ` +
+      `${rotulo(mes2)} ${compradoresDoMes(vendas, mes2, "9999-12-31")}`
+  );
+
+  // Cadastro incompleto: sem telefone ou sem aniversário (os dois que o relatório e as campanhas usam).
+  const incompletos = clientes
+    .map((c) => {
+      const falta: string[] = [];
+      if (!c.phone || String(c.phone).replace(/\D/g, "").length < 10) falta.push("telefone");
+      if (!c.birthday) falta.push("aniversário");
+      return { nome: c.full_name, falta };
+    })
+    .filter((c) => c.falta.length > 0)
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  if (incompletos.length > 0) {
+    linhas.push(`📝 Cadastro a completar: ${incompletos.length}`);
+    const semOsDois = incompletos.filter((c) => c.falta.length === 2).map((c) => c.nome);
+    const semTelefone = incompletos.filter((c) => c.falta.length === 1 && c.falta[0] === "telefone").map((c) => c.nome);
+    const semAniversario = incompletos.filter((c) => c.falta.length === 1 && c.falta[0] === "aniversário").map((c) => c.nome);
+    if (semOsDois.length) linhas.push(`• Sem telefone e aniversário: ${listaDeNomes(semOsDois)}`);
+    if (semTelefone.length) linhas.push(`• Sem telefone: ${listaDeNomes(semTelefone)}`);
+    if (semAniversario.length) linhas.push(`• Sem aniversário: ${listaDeNomes(semAniversario)}`);
+  } else {
+    linhas.push("📝 Todos os cadastros estão completos.");
+  }
+
+  // Aniversariantes: hoje, nos próximos 7 dias e no mês.
+  const mmdd = (d: string) => d.slice(5, 10);
+  const comAniversario = clientes
+    .filter((c) => c.birthday && /^\d{4}-\d{2}-\d{2}/.test(String(c.birthday)))
+    .map((c) => ({ nome: c.full_name, md: mmdd(String(c.birthday)) }));
+  const proximos7 = new Set(Array.from({ length: 7 }, (_, i) => mmdd(addDaysISO(dia, i + 1))));
+  const hoje = comAniversario.filter((c) => c.md === mmdd(dia)).map((c) => c.nome);
+  const semana = comAniversario
+    .filter((c) => proximos7.has(c.md))
+    .sort((a, b) => a.md.localeCompare(b.md))
+    .map((c) => `${c.nome} (${c.md.slice(3, 5)}/${c.md.slice(0, 2)})`);
+  const doMes = comAniversario
+    .filter((c) => c.md.slice(0, 2) === mmdd(dia).slice(0, 2))
+    .sort((a, b) => a.md.localeCompare(b.md))
+    .map((c) => `${c.nome} (${c.md.slice(3, 5)})`);
+  linhas.push("🎂 *Aniversariantes*");
+  linhas.push(`• Hoje: ${hoje.length ? listaDeNomes(hoje) : "ninguém"}`);
+  linhas.push(`• Próximos 7 dias: ${semana.length ? listaDeNomes(semana) : "ninguém"}`);
+  linhas.push(`• No mês: ${doMes.length ? listaDeNomes(doMes) : "ninguém"}`);
+  return linhas;
 }
 
 const reais = (c: Cents) => formatCentsBRL(c).replace(/ /g, " ");
@@ -112,6 +199,11 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   if (semCusto > 0) {
     linhas.push("");
     linhas.push(`⚠️ ${semCusto} venda${semCusto === 1 ? "" : "s"} do mês sem custo no Radar: completar para ver o lucro.`);
+  }
+
+  if (dados.clientes) {
+    linhas.push("");
+    linhas.push(...secaoDeClientes(dados.clientes, dados.vendas, dia));
   }
 
   linhas.push("");

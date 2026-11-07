@@ -70,3 +70,63 @@ describe("relatório do dia para o grupo", () => {
     expect(vazio).not.toContain("Meta do mês");
   });
 });
+
+describe("relatório do dia: clientes", () => {
+  const vendas = [
+    { sale_date: "2026-11-07", sale_value: "100", price_tier: "varejo", status: "ativa", client_id: 1, client_name: "Ana" },
+    { sale_date: "2026-11-02", sale_value: "100", price_tier: "varejo", status: "ativa", client_id: 1, client_name: "Ana" },
+    { sale_date: "2026-11-03", sale_value: "100", price_tier: "atacado", status: "ativa", client_id: 2, client_name: "Bia" },
+    { sale_date: "2026-11-04", sale_value: "100", price_tier: "varejo", status: "cancelada", client_id: 3, client_name: "Carla" },
+    { sale_date: "2026-10-10", sale_value: "100", price_tier: "varejo", status: "ativa", client_id: null, client_name: "Sem Cadastro" },
+    { sale_date: "2026-09-10", sale_value: "100", price_tier: "varejo", status: "ativa", client_id: 3, client_name: "Carla" },
+  ];
+  const clientes = [
+    { id: 1, full_name: "Ana", phone: "81999990000", birthday: "1990-11-07" },
+    { id: 2, full_name: "Bia", phone: null, birthday: "1985-11-10" },
+    { id: 3, full_name: "Carla", phone: "81988887777", birthday: null },
+    { id: 4, full_name: "Dora", phone: "719", birthday: null },
+    { id: 5, full_name: "Eva", phone: "81977776666", birthday: "2000-11-25" },
+    { id: 6, full_name: "Fê", phone: "81977776666", birthday: "2000-12-01" },
+  ];
+  const texto = montarRelatorioDoDia({
+    dia: DIA,
+    vendas,
+    aReceber: [],
+    meta: { hoje: DIA, partes: [], despesas: [], vendas, entradas: [] },
+    clientes,
+  });
+
+  it("total cadastrado e quem comprou em cada um dos três meses (sem canceladas)", () => {
+    expect(texto).toContain("👥 *Clientes:* 6 cadastrados");
+    expect(texto).toContain("🛒 Compraram: novembro 2 · outubro 1 · setembro 1");
+  });
+
+  it("lista quem falta completar e o que falta", () => {
+    expect(texto).toContain("📝 Cadastro a completar: 3");
+    expect(texto).toContain("• Sem telefone e aniversário: Dora");
+    expect(texto).toContain("• Sem telefone: Bia");
+    expect(texto).toContain("• Sem aniversário: Carla");
+  });
+
+  it("aniversariantes de hoje, dos próximos 7 dias e do mês", () => {
+    expect(texto).toContain("• Hoje: Ana");
+    expect(texto).toContain("• Próximos 7 dias: Bia (10/11)");
+    expect(texto).toContain("• No mês: Ana (07), Bia (10), Eva (25)");
+    expect(texto).not.toContain("Fê (");
+  });
+
+  it("aniversário na virada do mês entra nos próximos 7 dias", () => {
+    const fimDoMes = montarRelatorioDoDia({
+      dia: "2026-11-28",
+      vendas: [],
+      aReceber: [],
+      meta: { hoje: "2026-11-28", partes: [], despesas: [], vendas: [], entradas: [] },
+      clientes,
+    });
+    expect(fimDoMes).toContain("• Próximos 7 dias: Fê (01/12)");
+  });
+
+  it("sem a lista de clientes, a seção não aparece", () => {
+    expect(montarRelatorioDoDia(dados())).not.toContain("Clientes:");
+  });
+});

@@ -22,10 +22,10 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureSchema();
-    const [vendas, aReceber, despesas, partes, recebidas, comissoes] = await Promise.all([
+    const [vendas, aReceber, despesas, partes, recebidas, comissoes, clientes] = await Promise.all([
       db.query(
         `SELECT to_char(s.sale_date, 'YYYY-MM-DD') AS sale_date, s.sale_value, s.price_tier, s.status,
-                s.payment_method, s.seller, s.product_type, s.client_name, s.cost,
+                s.payment_method, s.seller, s.product_type, s.client_name, s.client_id, s.cost,
                 CASE WHEN m.represented THEN m.commission_pct END AS commission_pct
            FROM sales s LEFT JOIN manufacturers m ON m.id = s.manufacturer_id`
       ),
@@ -54,6 +54,9 @@ export async function GET(req: NextRequest) {
            FROM receipts
           WHERE kind = 'comissao_fabricante' AND status = 'recebida' AND received_date IS NOT NULL`
       ),
+      db.query(
+        `SELECT id, full_name, phone, city, to_char(birthday, 'YYYY-MM-DD') AS birthday FROM clients`
+      ),
     ]);
 
     const texto = montarRelatorioDoDia({
@@ -67,6 +70,7 @@ export async function GET(req: NextRequest) {
         vendas: vendas.rows,
         entradas: [...recebidas.rows, ...comissoes.rows],
       },
+      clientes: clientes.rows,
     });
     return NextResponse.json({ dia, texto });
   } catch (err) {
