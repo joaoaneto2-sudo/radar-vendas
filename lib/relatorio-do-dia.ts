@@ -129,6 +129,14 @@ export interface DadosDoRelatorio {
   aReceber: ParcelaDoRelatorio[]; // parcelas previstas (ainda não recebidas), sem atacado
   meta: DadosDaMeta; // mesmos dados da tela Visão geral
   clientes?: ClienteDoRelatorio[]; // cadastro de clientes (sem isso, a seção de clientes não aparece)
+  geradoEm?: string; // ISO: quando o relatório foi montado
+  ultimaVendaLida?: { postadaEm: string; cliente: string | null } | null; // última mensagem de venda que o Roberto lançou
+}
+
+/** "2026-11-07T19:53:16Z" vira "07/11 às 16:53" (horário de Recife, UTC-3). */
+export function dataHoraRecife(iso: string): string {
+  const d = new Date(new Date(iso).getTime() - 3 * 3600 * 1000).toISOString();
+  return `${d.slice(8, 10)}/${d.slice(5, 7)} às ${d.slice(11, 16)}`;
 }
 
 const MAX_NOMES = 10;
@@ -222,6 +230,12 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   const mes = mesDe(dia);
   const linhas: string[] = [];
   linhas.push(`📊 *RELATÓRIO DO DIA* · ${diaDaSemana(dia)}, ${dataBR(dia)}`);
+  if (dados.geradoEm) linhas.push(`🕒 Dados até ${dataHoraRecife(dados.geradoEm)}`);
+  if (dados.ultimaVendaLida) {
+    const quem = dados.ultimaVendaLida.cliente ? ` (${dados.ultimaVendaLida.cliente})` : "";
+    linhas.push(`✅ Última venda do grupo lida: ${dataHoraRecife(dados.ultimaVendaLida.postadaEm)}${quem}`);
+    linhas.push("_Se alguma venda postada até esse horário não aparece aqui, avise._");
+  }
   linhas.push("");
 
   // --- Hoje

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureSchema();
-    const [vendas, aReceber, despesas, partes, recebidas, comissoes, clientes] = await Promise.all([
+    const [vendas, aReceber, despesas, partes, recebidas, comissoes, clientes, ultima] = await Promise.all([
       db.query(
         `SELECT to_char(s.sale_date, 'YYYY-MM-DD') AS sale_date, s.sale_value, s.price_tier, s.status,
                 s.payment_method, s.seller, s.product_type, s.client_name, s.client_id, s.cost, s.supplier,
@@ -59,7 +59,15 @@ export async function GET(req: NextRequest) {
       db.query(
         `SELECT id, full_name, phone, city, to_char(birthday, 'YYYY-MM-DD') AS birthday FROM clients`
       ),
+      // Última mensagem de venda que o Roberto lançou (gravada ou reconhecida como repetida).
+      db.query(
+        `SELECT w.enviada_em, s.client_name
+           FROM vendas_whatsapp w LEFT JOIN sales s ON s.id = w.sale_id
+          WHERE w.situacao IN ('gravada', 'ja_existe') AND w.enviada_em IS NOT NULL
+          ORDER BY w.enviada_em DESC LIMIT 1`
+      ),
     ]);
+    const u = ultima.rows[0];
 
     const texto = montarRelatorioDoDia({
       dia,
@@ -73,6 +81,10 @@ export async function GET(req: NextRequest) {
         entradas: [...recebidas.rows, ...comissoes.rows],
       },
       clientes: clientes.rows,
+      geradoEm: new Date().toISOString(),
+      ultimaVendaLida: u
+        ? { postadaEm: new Date(u.enviada_em).toISOString(), cliente: u.client_name ?? null }
+        : null,
     });
     return NextResponse.json({ dia, texto });
   } catch (err) {

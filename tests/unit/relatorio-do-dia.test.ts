@@ -183,3 +183,20 @@ describe("relatório do dia: TOP FIVE", () => {
     expect(texto).not.toContain("Futuro");
   });
 });
+
+describe("relatório do dia: até quando", () => {
+  it("mostra a hora do relatório e a última venda lida, no horário de Recife", () => {
+    const texto = montarRelatorioDoDia({
+      ...dados(),
+      geradoEm: "2026-11-07T23:00:00Z",
+      ultimaVendaLida: { postadaEm: "2026-11-07T19:53:16Z", cliente: "Nelia" },
+    });
+    const linhas = texto.split("\n");
+    expect(linhas[1]).toBe("🕒 Dados até 07/11 às 20:00");
+    expect(linhas[2]).toBe("✅ Última venda do grupo lida: 07/11 às 16:53 (Nelia)");
+  });
+
+  it("sem essas informações, não mostra as linhas", () => {
+    expect(montarRelatorioDoDia(dados())).not.toContain("Dados até");
+  });
+});
