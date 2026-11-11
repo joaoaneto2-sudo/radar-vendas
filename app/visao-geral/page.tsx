@@ -25,6 +25,7 @@ import {
 import { NAO_INFORMADA } from "@/lib/sale-finance";
 import { acumuladoDoMes, comparativoAteHoje, resumoMensal, ritmoDoMes, tendenciaDasVendas, type DadosDaMeta } from "@/lib/meta-mensal";
 import MetaDoMes from "@/app/meta-do-mes";
+import { metaDosCartoes } from "@/lib/meta-cartoes";
 import FaixaDoAcordo from "@/app/faixa-do-acordo";
 import { lerAcordo } from "@/lib/agreement-db";
 import { BarraDupla, BarrasHorizontais, BarrasVerticais, CORES, Progresso, Quadro, Rosca } from "@/app/charts";
@@ -100,6 +101,7 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
   ]);
 
   const todas = vendasRes.rows as VendaLinha[];
+  const cartoes = metaDosCartoes(todas, hoje);
   const doPeriodo = vendasDoPeriodo(todas, intervalo);
   const vendas = doPeriodo.filter((v) => v.price_tier !== "atacado");
 
@@ -182,6 +184,46 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
       <FaixaDoAcordo
         dados={{ joaoSharePct: acordo.joaoSharePct, initialStockCents: acordo.initialStockCents, partnershipStart: acordo.partnershipStart, debt: cascade.debt }}
       />
+
+      <h2 className="dash-section">Meta dos cartões</h2>
+      <div className="stat-grid auto dash-kpis">
+        <Numero
+          rotulo="Vendas desde 01/11"
+          valor={reais(cartoes.acumuladoCents)}
+          nota={`${cartoes.vendas} venda(s) de varejo; 10% Riachuelo e 90% Santander`}
+          tom="accent"
+        />
+      </div>
+      <div className="dash-grid">
+        {cartoes.cartoes.map((c) => (
+          <Quadro
+            key={c.nome}
+            titulo={`Cartão ${c.nome}`}
+            nota={`${reais(c.totalCents)} · vence ${c.vence.slice(8, 10)}/${c.vence.slice(5, 7)} · ${Math.round(c.parte * 100)}% de cada venda`}
+          >
+            <Progresso
+              titulo="Guardado"
+              fracao={c.totalCents > 0 ? Math.min(c.guardadoCents / c.totalCents, 1) : 1}
+              detalhe={c.quitado ? "Fatura coberta" : `Faltam ${reais(c.faltaGuardarCents)} de ${reais(c.totalCents)}`}
+              cor={c.parte < 0.5 ? CORES[1] : CORES[0]}
+            />
+            <div className="mini-stats">
+              <div>
+                <span>Já guardado</span>
+                <strong>{reais(c.guardadoCents)}</strong>
+              </div>
+              <div>
+                <span>Precisa vender</span>
+                <strong>{c.quitado ? reais(0) : reais(c.precisaVenderCents)}</strong>
+              </div>
+              <div>
+                <span>{c.vencido ? "Situação" : `Por dia (${c.diasDeVenda} dia(s) de venda)`}</span>
+                <strong>{c.vencido ? (c.quitado ? "Pago" : "Venceu") : c.quitado ? reais(0) : reais(c.precisaPorDiaCents)}</strong>
+              </div>
+            </div>
+          </Quadro>
+        ))}
+      </div>
 
       <MetaDoMes
         ritmo={ritmo}

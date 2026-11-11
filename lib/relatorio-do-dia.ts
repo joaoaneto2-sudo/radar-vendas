@@ -1,7 +1,8 @@
 import { formatCentsBRL, toCents, type Cents } from "./finance/money";
 import { addDaysISO } from "./finance/dates";
 import { valorBrutoDoAtacado, valorVendido, type VendaLinha } from "./dashboard";
-import { mesDe, nomeDoMes, resumoMensal, type DadosDaMeta } from "./meta-mensal";
+import { mesDe, nomeDoMes, type DadosDaMeta } from "./meta-mensal";
+import { metaDosCartoes } from "./meta-cartoes";
 
 // Relatório do fim do dia que o Roberto posta no grupo do WhatsApp.
 // Função pura: recebe os dados já lidos do banco e devolve o texto pronto.
@@ -140,29 +141,42 @@ export function ritmoDoMesDiario(vendas: VendaDoRelatorio[], dia: string): Ritmo
 
 function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
   const r = ritmoDoMesDiario(vendas, dia);
-  const pct = (a: Cents, b: Cents) => (b > 0 ? Math.round((a / b) * 100) : 0);
   const reaisR = (c: Cents) => formatCentsBRL(c).replace(/ /g, " ");
-  const linhas = [`📈 *Ritmo do mês* · meta ${reaisR(META_DIARIA_CENTS)} por dia`];
+  const linhas = ["📈 *Ritmo do mês*"];
   const trabalhaHoje = DIAS_DE_TRABALHO.has(diaDaSemanaNum(dia)) || r.hojeCents > 0;
-  if (trabalhaHoje) {
-    const ok = r.hojeCents >= META_DIARIA_CENTS ? "✅" : "⚠️";
-    linhas.push(`• Hoje: ${reaisR(r.hojeCents)} · ${pct(r.hojeCents, META_DIARIA_CENTS)}% da meta ${ok}`);
-  } else {
-    linhas.push("• Hoje: dia de folga, sem vendas");
-  }
+  linhas.push(trabalhaHoje ? `• Hoje: ${reaisR(r.hojeCents)}` : "• Hoje: dia de folga, sem vendas");
   linhas.push(`• Média por dia: ${reaisR(r.mediaPorDiaCents)} (${r.diasTrabalhados} dia${r.diasTrabalhados === 1 ? "" : "s"} de trabalho)`);
   linhas.push(`• Ticket médio: ${reaisR(r.ticketMedioCents)} (${r.vendas} venda${r.vendas === 1 ? "" : "s"})`);
-  linhas.push(`• Meta até hoje: ${reaisR(r.metaAteHojeCents)} · vendido ${reaisR(r.vendidoCents)} (${pct(r.vendidoCents, r.metaAteHojeCents)}%)`);
-  const seta = r.tendenciaCents >= r.metaDoMesCents ? "🟢" : "🔴";
-  linhas.push(`• Tendência do mês: ${reaisR(r.tendenciaCents)} de ${reaisR(r.metaDoMesCents)} (${pct(r.tendenciaCents, r.metaDoMesCents)}%) ${seta}`);
-  if (r.vendidoCents >= r.metaDoMesCents) {
-    linhas.push("• Meta do mês batida! 🎉");
-  } else if (r.diasRestantes > 0) {
-    linhas.push(`• Para bater a meta: ${reaisR(r.precisaPorDiaCents)} por dia nos ${r.diasRestantes} dias que faltam`);
-  } else {
-    linhas.push(`• Faltaram ${reaisR(r.metaDoMesCents - r.vendidoCents)} para a meta do mês`);
-  }
   linhas.push("_Dias de trabalho: terça a sábado; domingo ou segunda com venda contam como dia trabalhado._");
+  return linhas;
+}
+
+/** Meta dos cartões: quanto já está guardado para cada fatura e quanto falta vender até o vencimento. */
+export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string[] {
+  const m = metaDosCartoes(vendas, dia);
+  const reaisR = (c: Cents) => formatCentsBRL(c).replace(/ /g, " ");
+  const linhas = [
+    "💳 *Meta dos cartões*",
+    `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.acumuladoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
+  ];
+  for (const c of m.cartoes) {
+    const pct = Math.round(c.parte * 100);
+    linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)} · ${pct}% de cada venda`);
+    linhas.push(`• Guardado: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.min(999, Math.round((c.guardadoCents / c.totalCents) * 100)) : 0}%)`);
+    if (c.quitado) {
+      linhas.push("• Fatura coberta ✅");
+    } else if (c.vencido) {
+      linhas.push(`• Venceu ${dataBR(c.vence)} faltando ${reaisR(c.faltaGuardarCents)} 🔴`);
+    } else {
+      linhas.push(`• Falta guardar: ${reaisR(c.faltaGuardarCents)}`);
+      linhas.push(`• Precisa vender: ${reaisR(c.precisaVenderCents)}`);
+      linhas.push(
+        c.diasDeVenda > 0
+          ? `• Por dia: ${reaisR(c.precisaPorDiaCents)} nos ${c.diasDeVenda} dia${c.diasDeVenda === 1 ? "" : "s"} de venda até o vencimento`
+          : "• Não há mais dia de venda antes do vencimento ⚠️"
+      );
+    }
+  }
   return linhas;
 }
 
@@ -357,20 +371,13 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   linhas.push(`📅 *${nome.charAt(0).toUpperCase() + nome.slice(1)} até hoje:* ${reais(vendidoMes)} em ${varejoMes.length} venda${varejoMes.length === 1 ? "" : "s"}`);
   if (atacadoMes > 0) linhas.push(`• Atacado no mês: ${reais(atacadoMes)}`);
 
-  // --- Meta do mês (dinheiro que entrou x contas do mês)
-  const resumo = resumoMensal({ ...dados.meta, hoje: dia }).find((r) => r.mes === mes);
-  if (resumo && resumo.metaCents > 0) {
-    const pct = Math.min(999, Math.round((resumo.entrouCents / resumo.metaCents) * 100));
-    linhas.push(`🎯 *Meta do mês:* ${reais(resumo.metaCents)} · entrou ${reais(resumo.entrouCents)} (${pct}%)`);
-    linhas.push(
-      resumo.saldoCents >= 0
-        ? `✅ Meta batida, sobra de ${reais(resumo.saldoCents)}`
-        : `⏳ Faltam ${reais(-resumo.saldoCents)} até dia 30`
-    );
-  }
   linhas.push("");
 
-  // --- Ritmo do mês (meta diária)
+  // --- Meta dos cartões
+  linhas.push(...secaoDosCartoes(dados.vendas, dia));
+  linhas.push("");
+
+  // --- Ritmo do mês
   linhas.push(...secaoDoRitmo(dados.vendas, dia));
   linhas.push("");
 

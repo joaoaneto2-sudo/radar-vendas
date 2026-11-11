@@ -47,9 +47,9 @@ describe("relatório do dia para o grupo", () => {
     expect(texto).toContain("📅 *Novembro até hoje:* R$ 630,00 em 2 vendas");
   });
 
-  it("meta do mês: entrou x meta e quanto falta", () => {
-    expect(texto).toContain("🎯 *Meta do mês:* R$ 1.000,00 · entrou R$ 600,00 (60%)");
-    expect(texto).toContain("⏳ Faltam R$ 400,00 até dia 30");
+  it("a meta antiga (contas do mês) saiu: agora é a meta dos cartões", () => {
+    expect(texto).not.toContain("🎯 *Meta do mês:*");
+    expect(texto).toContain("💳 *Meta dos cartões*");
   });
 
   it("a receber: atrasadas e próximos 7 dias, sem o que vence depois", () => {
@@ -239,13 +239,12 @@ describe("relatório do dia: ritmo do mês (meta R$ 1.000 por dia)", () => {
       aReceber: [],
       meta: { hoje: "2026-11-07", partes: [], despesas: [], vendas, entradas: [] },
     });
-    expect(texto).toContain("📈 *Ritmo do mês* · meta R$ 1.000,00 por dia");
-    expect(texto).toContain("• Hoje: R$ 1.500,00 · 150% da meta ✅");
+    expect(texto).toContain("📈 *Ritmo do mês*");
+    expect(texto).not.toContain("meta R$ 1.000,00 por dia");
+    expect(texto).toContain("• Hoje: R$ 1.500,00");
     expect(texto).toContain("• Média por dia: R$ 500,00 (6 dias de trabalho)");
     expect(texto).toContain("• Ticket médio: R$ 750,00 (4 vendas)");
-    expect(texto).toContain("• Meta até hoje: R$ 6.000,00 · vendido R$ 3.000,00 (50%)");
-    expect(texto).toContain("• Tendência do mês: R$ 10.500,00 de R$ 21.000,00 (50%) 🔴");
-    expect(texto).toContain("• Para bater a meta: R$ 1.200,00 por dia nos 15 dias que faltam");
+    expect(texto).not.toContain("Para bater a meta");
   });
 
   it("segunda sem venda é folga", () => {
