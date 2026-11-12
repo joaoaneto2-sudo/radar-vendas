@@ -155,20 +155,22 @@ describe("tabela mês a mês", () => {
 });
 
 describe("ritmo do mês", () => {
-  it("médias por dia, o que falta e o que precisa entrar por dia", () => {
+  it("médias pelos dias trabalhados (dias com venda) e o que falta nos dias de terça a sábado", () => {
     const r = ritmoDoMes(DADOS, 50000);
     expect(r.diasPassados).toBe(19);
-    expect(r.diasRestantes).toBe(11);
+    expect(r.diasTrabalhados).toBe(2); // 02 e 10/09 tiveram venda
+    // depois de sáb 19/09 até qua 30/09, terça a sábado: 22-26, 29 e 30 = 7
+    expect(r.diasRestantes).toBe(7);
     expect(r.metaCents).toBe(150000);
     expect(r.entrouCents).toBe(90000);
     expect(r.faltaCents).toBe(60000);
-    expect(r.mediaVendaPorDia).toBe(Math.round(100000 / 19));
-    expect(r.mediaEntradaPorDia).toBe(Math.round(90000 / 19));
-    expect(r.necessidadePorDia).toBe(Math.ceil(60000 / 11));
+    expect(r.mediaVendaPorDia).toBe(50000);
+    expect(r.mediaEntradaPorDia).toBe(45000);
+    expect(r.necessidadePorDia).toBe(Math.ceil(60000 / 7));
     expect(r.vendasEquivalentes).toBe(2); // 600 de falta, ticket de 500
-    expect(r.projecaoEntradaCents).toBe(90000 + Math.round(90000 / 19) * 11);
-    expect(r.vaiBater).toBe(r.projecaoEntradaCents >= 150000);
-    expect(r.projecaoVendidoCents).toBe(Math.round(100000 / 19) * 30);
+    expect(r.projecaoEntradaCents).toBe(90000 + 45000 * 7);
+    expect(r.vaiBater).toBe(true);
+    expect(r.projecaoVendidoCents).toBe(100000 + 50000 * 7);
   });
 
   it("meta batida: nada falta e a sobra aparece", () => {
@@ -204,7 +206,8 @@ describe("gráfico acumulado do mês", () => {
     expect(pontos[9].real).toBe(50000); // dia 10
     expect(pontos[18]).toEqual({ dia: 19, real: 90000, projetado: 90000 }); // hoje
     expect(pontos[19].real).toBeNull();
-    expect(pontos[19].projetado).toBe(90000 + r.mediaEntradaPorDia);
+    expect(pontos[19].projetado).toBe(90000); // domingo 20: não trabalha
+    expect(pontos[21].projetado).toBe(90000 + r.mediaEntradaPorDia); // terça 22
     expect(pontos[29].projetado).toBe(r.projecaoEntradaCents);
   });
 });

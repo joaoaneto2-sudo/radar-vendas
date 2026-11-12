@@ -202,6 +202,11 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
           />
         )}
       </div>
+      <p className="stat-note">
+        {`Faltam ${cartoes.cartoes.filter((c) => !c.vencido).map((c) => `${c.diasDeVenda} dias de venda até ${c.vence.slice(8, 10)}/${c.vence.slice(5, 7)}`).join(" e ")}. `}
+        Observação: as metas, a média ({reais(cartoes.mediaPorDiaCents)} por dia em {cartoes.diasTrabalhados} dias com venda) e a tendência consideram
+        que não trabalhamos domingo nem segunda; dia sem venda não entra na média.
+      </p>
       <div className="dash-grid">
         {cartoes.cartoes.map((c) => (
           <Quadro

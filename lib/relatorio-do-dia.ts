@@ -157,8 +157,17 @@ export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string
   const linhas = [
     "💳 *Meta dos cartões*",
     `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.acumuladoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
-    `• Média por dia: ${reaisR(m.mediaPorDiaCents)} (${m.diasTrabalhados} dia${m.diasTrabalhados === 1 ? "" : "s"} de trabalho)`,
+    `• Dias com venda desde ${dataBR(m.inicio)}: ${m.diasTrabalhados} · média de ${reaisR(m.mediaPorDiaCents)} por dia`,
   ];
+  const ultimo = m.cartoes[m.cartoes.length - 1];
+  if (ultimo) {
+    const falta = m.cartoes
+      .filter((c) => !c.vencido)
+      .map((c) => `${c.diasDeVenda} dia${c.diasDeVenda === 1 ? "" : "s"} de venda até ${dataBR(c.vence)}`)
+      .join(" e ");
+    if (falta) linhas.push(`• Faltam ${falta}`);
+    linhas.push("_Obs.: metas, média e tendência consideram que não trabalhamos domingo nem segunda; dia sem venda (folga) não entra na média._");
+  }
   const previsao = (saldo: Cents) => (saldo >= 0 ? `sobram ${reaisR(saldo)} ✅` : `faltam ${reaisR(-saldo)} ⚠️`);
   for (const c of m.cartoes) {
     linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)} até as 20h · ${Math.round(c.parte * 100)}% de cada venda`);

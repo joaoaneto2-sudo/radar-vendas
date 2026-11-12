@@ -182,8 +182,9 @@ export function resumoMensal(dados: DadosDaMeta): MesResumo[] {
 export interface Ritmo {
   mes: string;
   diaDaMeta: string; // data de referência (dia 30)
-  diasPassados: number; // do dia 1 até hoje, contando hoje
-  diasRestantes: number; // de amanhã até o dia da meta
+  diasPassados: number; // do dia 1 até hoje, contando hoje (calendário, para o gráfico)
+  diasTrabalhados: number; // dias do mês com venda lançada até hoje (base das médias)
+  diasRestantes: number; // dias de trabalho (terça a sábado) de amanhã até o dia da meta
   metaCents: Cents;
   entrouCents: Cents;
   vendidoCents: Cents;
@@ -198,6 +199,21 @@ export interface Ritmo {
   vaiBater: boolean;
 }
 
+/** Dias de trabalho da Fernanda: terça (2) a sábado (6). Domingo e segunda ela não trabalha. */
+const DIAS_DE_TRABALHO = new Set([2, 3, 4, 5, 6]);
+const ehDiaDeTrabalho = (d: string) => DIAS_DE_TRABALHO.has(new Date(`${d}T12:00:00Z`).getUTCDay());
+
+/** Dias de trabalho depois de `de` até `ate` (inclusive). */
+export function diasDeTrabalhoEntre(de: string, ate: string): number {
+  let n = 0;
+  for (let d = addDaysISO(de, 1); d <= ate; d = addDaysISO(d, 1)) if (ehDiaDeTrabalho(d)) n += 1;
+  return n;
+}
+
+/**
+ * Médias e tendência pelos dias TRABALHADOS (João, 12/11/2026): só conta o dia que teve venda
+ * lançada (folga sem venda não puxa a média para baixo) e, para frente, só terça a sábado.
+ */
 export function ritmoDoMes(dados: DadosDaMeta, ticketMedioCents: Cents): Ritmo {
   const mes = mesDe(dados.hoje);
   const alvo = diaDaMeta(mes);
@@ -206,9 +222,16 @@ export function ritmoDoMes(dados: DadosDaMeta, ticketMedioCents: Cents): Ritmo {
   const vendido = vendidoNoMes(dados.vendas, mes);
 
   const diasPassados = diaDe(dados.hoje);
-  const diasRestantes = Math.max(diaDe(alvo) - diasPassados, 0);
-  const mediaVenda = Math.round(vendido / diasPassados);
-  const mediaEntrada = Math.round(entrou / diasPassados);
+  const diasComVenda = new Set(
+    dados.vendas
+      .filter((v) => v.status !== "cancelada" && valorVendido(v) > 0 && mesDe(v.sale_date) === mes && String(v.sale_date).slice(0, 10) <= dados.hoje)
+      .map((v) => String(v.sale_date).slice(0, 10))
+  );
+  const diasTrabalhados = diasComVenda.size;
+  const base = Math.max(diasTrabalhados, 1);
+  const diasRestantes = dados.hoje < alvo ? diasDeTrabalhoEntre(dados.hoje, alvo) : 0;
+  const mediaVenda = Math.round(vendido / base);
+  const mediaEntrada = Math.round(entrou / base);
   const falta = Math.max(meta - entrou, 0);
   const projecaoEntrada = entrou + mediaEntrada * diasRestantes;
 
@@ -216,6 +239,7 @@ export function ritmoDoMes(dados: DadosDaMeta, ticketMedioCents: Cents): Ritmo {
     mes,
     diaDaMeta: alvo,
     diasPassados,
+    diasTrabalhados,
     diasRestantes,
     metaCents: meta,
     entrouCents: entrou,
@@ -227,7 +251,7 @@ export function ritmoDoMes(dados: DadosDaMeta, ticketMedioCents: Cents): Ritmo {
     necessidadePorDia: meta > 0 && falta > 0 ? Math.ceil(falta / Math.max(diasRestantes, 1)) : null,
     vendasEquivalentes: falta > 0 && ticketMedioCents > 0 ? Math.ceil(falta / ticketMedioCents) : null,
     projecaoEntradaCents: projecaoEntrada,
-    projecaoVendidoCents: mediaVenda * diasNoMes(mes),
+    projecaoVendidoCents: vendido + mediaVenda * diasDeTrabalhoEntre(dados.hoje, `${mes}-${String(diasNoMes(mes)).padStart(2, "0")}`),
     vaiBater: meta > 0 && projecaoEntrada >= meta,
   };
 }
@@ -254,7 +278,8 @@ export function acumuladoDoMes(dados: DadosDaMeta, ritmo: Ritmo): PontoAcumulado
     if (dia <= ritmo.diasPassados) {
       pontos.push({ dia, real: soma, projetado: dia === ritmo.diasPassados ? soma : null });
     } else {
-      pontos.push({ dia, real: null, projetado: ritmo.entrouCents + ritmo.mediaEntradaPorDia * (dia - ritmo.diasPassados) });
+      const data = `${ritmo.mes}-${String(dia).padStart(2, "0")}`;
+      pontos.push({ dia, real: null, projetado: ritmo.entrouCents + ritmo.mediaEntradaPorDia * diasDeTrabalhoEntre(dados.hoje, data) });
     }
   }
   return pontos;
