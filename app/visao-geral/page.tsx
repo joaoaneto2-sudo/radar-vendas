@@ -188,37 +188,30 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
       <h2 className="dash-section">Meta dos cartões</h2>
       <div className="stat-grid auto dash-kpis">
         <Numero
-          rotulo="Vendas desde 01/11"
-          valor={reais(cartoes.acumuladoCents)}
-          nota={`${cartoes.vendas} venda(s) de varejo; 10% Riachuelo e 90% Santander`}
+          rotulo="Caixa desde 01/11"
+          valor={reais(cartoes.vendidoCents)}
+          nota={`${cartoes.vendas} venda(s) de varejo; paga primeiro o cartão que vence antes`}
           tom="accent"
         />
+        {cartoes.sobraCents > 0 && <Numero rotulo="Sobra depois dos cartões" valor={reais(cartoes.sobraCents)} tom="gold" />}
       </div>
       <div className="dash-grid">
         {cartoes.cartoes.map((c) => (
-          <Quadro
-            key={c.nome}
-            titulo={`Cartão ${c.nome}`}
-            nota={`${reais(c.totalCents)} · vence ${c.vence.slice(8, 10)}/${c.vence.slice(5, 7)} · ${Math.round(c.parte * 100)}% de cada venda`}
-          >
+          <Quadro key={c.nome} titulo={`Cartão ${c.nome}`} nota={`${reais(c.totalCents)} · vence ${c.vence.slice(8, 10)}/${c.vence.slice(5, 7)} até as 20h`}>
             <Progresso
-              titulo="Guardado"
+              titulo="Coberto pelo caixa"
               fracao={c.totalCents > 0 ? Math.min(c.guardadoCents / c.totalCents, 1) : 1}
-              detalhe={c.quitado ? "Fatura coberta" : `Faltam ${reais(c.faltaGuardarCents)} de ${reais(c.totalCents)}`}
-              cor={c.parte < 0.5 ? CORES[1] : CORES[0]}
+              detalhe={c.coberto ? "Fatura coberta" : `Faltam ${reais(c.faltaCents)} de ${reais(c.totalCents)}`}
+              cor={c.nome === "Riachuelo" ? CORES[1] : CORES[0]}
             />
             <div className="mini-stats">
               <div>
-                <span>Já guardado</span>
-                <strong>{reais(c.guardadoCents)}</strong>
+                <span>Precisa vender até o vencimento</span>
+                <strong>{c.vencido ? (c.coberto ? "Pago" : "Venceu") : reais(c.precisaVenderCents)}</strong>
               </div>
               <div>
-                <span>Precisa vender</span>
-                <strong>{c.quitado ? reais(0) : reais(c.precisaVenderCents)}</strong>
-              </div>
-              <div>
-                <span>{c.vencido ? "Situação" : `Por dia (${c.diasDeVenda} dia(s) de venda)`}</span>
-                <strong>{c.vencido ? (c.quitado ? "Pago" : "Venceu") : c.quitado ? reais(0) : reais(c.precisaPorDiaCents)}</strong>
+                <span>{`Por dia (${c.diasDeVenda} dia(s) de venda)`}</span>
+                <strong>{c.vencido || c.coberto ? reais(0) : reais(c.precisaPorDiaCents)}</strong>
               </div>
             </div>
           </Quadro>

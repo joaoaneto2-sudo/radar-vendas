@@ -151,32 +151,34 @@ function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
   return linhas;
 }
 
-/** Meta dos cartões: quanto já está guardado para cada fatura e quanto falta vender até o vencimento. */
+/** Meta dos cartões: caixa único, faturas pagas em ordem de vencimento, vendas até as 20h do vencimento. */
 export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string[] {
   const m = metaDosCartoes(vendas, dia);
   const reaisR = (c: Cents) => formatCentsBRL(c).replace(/ /g, " ");
   const linhas = [
     "💳 *Meta dos cartões*",
-    `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.acumuladoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
+    `• Caixa (vendas desde ${dataBR(m.inicio)}): ${reaisR(m.vendidoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
+    "_Paga primeiro o cartão que vence antes; a sobra e as vendas seguintes pagam o próximo. Conta a venda até as 20h do dia do vencimento._",
   ];
   for (const c of m.cartoes) {
-    const pct = Math.round(c.parte * 100);
-    linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)} · ${pct}% de cada venda`);
-    linhas.push(`• Guardado: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.min(999, Math.round((c.guardadoCents / c.totalCents) * 100)) : 0}%)`);
-    if (c.quitado) {
+    linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)}`);
+    if (c.vencido) {
+      linhas.push(c.coberto ? "• Paga com o caixa ✅" : `• Venceu faltando ${reaisR(c.faltaCents)} 🔴`);
+      continue;
+    }
+    linhas.push(`• Já coberto pelo caixa: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.round((c.guardadoCents / c.totalCents) * 100) : 0}%)`);
+    if (c.coberto) {
       linhas.push("• Fatura coberta ✅");
-    } else if (c.vencido) {
-      linhas.push(`• Venceu ${dataBR(c.vence)} faltando ${reaisR(c.faltaGuardarCents)} 🔴`);
     } else {
-      linhas.push(`• Falta guardar: ${reaisR(c.faltaGuardarCents)}`);
-      linhas.push(`• Precisa vender: ${reaisR(c.precisaVenderCents)}`);
+      linhas.push(`• Falta: ${reaisR(c.faltaCents)}`);
       linhas.push(
         c.diasDeVenda > 0
-          ? `• Por dia: ${reaisR(c.precisaPorDiaCents)} nos ${c.diasDeVenda} dia${c.diasDeVenda === 1 ? "" : "s"} de venda até o vencimento`
-          : "• Não há mais dia de venda antes do vencimento ⚠️"
+          ? `• Meta: vender ${reaisR(c.precisaVenderCents)} até ${dataBR(c.vence)} · ${reaisR(c.precisaPorDiaCents)} por dia nos ${c.diasDeVenda} dia${c.diasDeVenda === 1 ? "" : "s"} de venda`
+          : `• Meta: vender ${reaisR(c.precisaVenderCents)} até as 20h de hoje ⚠️`
       );
     }
   }
+  if (m.sobraCents > 0) linhas.push(`• Sobra depois de pagar os cartões: ${reaisR(m.sobraCents)}`);
   return linhas;
 }
 
