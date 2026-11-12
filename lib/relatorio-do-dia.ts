@@ -151,34 +151,46 @@ function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
   return linhas;
 }
 
-/** Meta dos cartões: caixa único, faturas pagas em ordem de vencimento, vendas até as 20h do vencimento. */
+/** Meta dos cartões: plano 10%/90% e, como observação, a sugestão do caixa único para não pagar juros. */
 export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string[] {
   const m = metaDosCartoes(vendas, dia);
-  const reaisR = (c: Cents) => formatCentsBRL(c).replace(/ /g, " ");
+  const reaisR = (c: Cents) => formatCentsBRL(c).replace(/\u00a0/g, " ");
+  const dias = (n: number) => `${n} dia${n === 1 ? "" : "s"} de venda`;
   const linhas = [
     "💳 *Meta dos cartões*",
-    `• Caixa (vendas desde ${dataBR(m.inicio)}): ${reaisR(m.vendidoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
-    "_Paga primeiro o cartão que vence antes; a sobra e as vendas seguintes pagam o próximo. Conta a venda até as 20h do dia do vencimento._",
+    `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.acumuladoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
   ];
   for (const c of m.cartoes) {
-    linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)}`);
-    if (c.vencido) {
-      linhas.push(c.coberto ? "• Paga com o caixa ✅" : `• Venceu faltando ${reaisR(c.faltaCents)} 🔴`);
-      continue;
-    }
-    linhas.push(`• Já coberto pelo caixa: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.round((c.guardadoCents / c.totalCents) * 100) : 0}%)`);
-    if (c.coberto) {
+    linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)} até as 20h · ${Math.round(c.parte * 100)}% de cada venda`);
+    linhas.push(`• Guardado: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.min(999, Math.round((c.guardadoCents / c.totalCents) * 100)) : 0}%)`);
+    if (c.quitado) {
       linhas.push("• Fatura coberta ✅");
+    } else if (c.vencido) {
+      linhas.push(`• Venceu faltando ${reaisR(c.faltaGuardarCents)} 🔴`);
     } else {
-      linhas.push(`• Falta: ${reaisR(c.faltaCents)}`);
+      linhas.push(`• Falta guardar: ${reaisR(c.faltaGuardarCents)}`);
       linhas.push(
         c.diasDeVenda > 0
-          ? `• Meta: vender ${reaisR(c.precisaVenderCents)} até ${dataBR(c.vence)} · ${reaisR(c.precisaPorDiaCents)} por dia nos ${c.diasDeVenda} dia${c.diasDeVenda === 1 ? "" : "s"} de venda`
+          ? `• Meta: vender ${reaisR(c.precisaVenderCents)} · ${reaisR(c.precisaPorDiaCents)} por dia nos ${dias(c.diasDeVenda)}`
           : `• Meta: vender ${reaisR(c.precisaVenderCents)} até as 20h de hoje ⚠️`
       );
     }
   }
-  if (m.sobraCents > 0) linhas.push(`• Sobra depois de pagar os cartões: ${reaisR(m.sobraCents)}`);
+  const s = m.sugestao;
+  if (s) {
+    linhas.push("");
+    linhas.push("💡 *Sugestão para não pagar juros*");
+    linhas.push(
+      s.primeiroCoberto
+        ? `• Pagar a ${s.primeiro} inteira com o caixa (sobram ${reaisR(s.sobraDepoisDoPrimeiroCents)}) e juntar a sobra com as vendas para pagar a ${s.ultimo} inteira em ${dataBR(s.ultimoVence)}.`
+        : `• Faltam ${reaisR(s.faltaPrimeiroCents)} no caixa para pagar a ${s.primeiro} inteira; depois, juntar a sobra com as vendas para pagar a ${s.ultimo} em ${dataBR(s.ultimoVence)}.`
+    );
+    linhas.push(
+      s.precisaVenderCents > 0
+        ? `• Meta: vender ${reaisR(s.precisaVenderCents)} até ${dataBR(s.ultimoVence)} · ${reaisR(s.precisaPorDiaCents)} por dia nos ${dias(s.diasDeVenda)}`
+        : "• O caixa já cobre as duas faturas ✅"
+    );
+  }
   return linhas;
 }
 
