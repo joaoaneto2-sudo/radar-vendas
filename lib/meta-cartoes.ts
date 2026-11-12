@@ -16,13 +16,18 @@ export interface Cartao {
   totalCents: Cents;
   parte: number; // fração de cada venda guardada para este cartão no plano principal
   vence: string; // AAAA-MM-DD
+  desde?: string; // vendas que contam para esta fatura começam neste dia (padrão: INICIO_META_CARTOES)
 }
 
 export const INICIO_META_CARTOES = "2026-11-01";
 
 export const CARTOES: Cartao[] = [
-  { nome: "Riachuelo", totalCents: toCents("2290.00"), parte: 0.1, vence: "2026-11-13" },
+  // Valores da fatura da Riachuelo (cartão final 3108) de 13/11/2026: saldo R$ 2.290,68;
+  // próxima fatura (13/12) R$ 1.853,16 = parcelas R$ 1.837,17 + anuidade R$ 15,99.
+  { nome: "Riachuelo", totalCents: toCents("2290.68"), parte: 0.1, vence: "2026-11-13" },
   { nome: "Santander", totalCents: toCents("11500.00"), parte: 0.9, vence: "2026-12-02" },
+  // A Riachuelo de dezembro junta os 10% das vendas feitas depois do vencimento de novembro.
+  { nome: "Riachuelo (dez)", totalCents: toCents("1853.16"), parte: 0.1, vence: "2026-12-13", desde: "2026-11-14" },
 ];
 
 /** Dias normais de trabalho: terça (2) a sábado (6). */
@@ -106,11 +111,18 @@ export function metaDosCartoes(
   const previsto = (dias: number) => acumuladoCents + mediaPorDiaCents * dias;
   const ordem = [...cartoes].sort((a, b) => a.vence.localeCompare(b.vence));
 
+  const vendidoDesde = (de: string) =>
+    contam.filter((v) => String(v.sale_date).slice(0, 10) >= de).reduce((t, v) => t + valorVendido(v), 0);
   const situacoes = ordem.map((c) => {
-    const guardadoCents = Math.round(acumuladoCents * c.parte);
+    const desde = c.desde ?? inicio;
+    const acumuladoDoCartao = vendidoDesde(desde);
+    const guardadoCents = Math.round(acumuladoDoCartao * c.parte);
     const faltaGuardarCents = Math.max(0, c.totalCents - guardadoCents);
     const precisaVenderCents = c.parte > 0 ? Math.ceil(faltaGuardarCents / c.parte) : 0;
-    const diasDeVenda = diasDeVendaAte(dia, c.vence);
+    // Os dias de venda desta fatura começam no maior entre amanhã e o "desde" dela.
+    const aPartir = desde > dia ? addDaysISO(desde, -1) : dia;
+    const diasDeVenda = diasDeVendaAte(aPartir, c.vence);
+    const previstoNoVencimento = acumuladoDoCartao + mediaPorDiaCents * diasDeVenda;
     return {
       nome: c.nome,
       totalCents: c.totalCents,
@@ -123,16 +135,16 @@ export function metaDosCartoes(
       precisaPorDiaCents: porDia(precisaVenderCents, diasDeVenda),
       vencido: dia > c.vence,
       quitado: faltaGuardarCents === 0,
-      previsaoGuardadoCents: Math.round(previsto(diasDeVenda) * c.parte),
-      previsaoSaldoCents: Math.round(previsto(diasDeVenda) * c.parte) - c.totalCents,
+      previsaoGuardadoCents: Math.round(previstoNoVencimento * c.parte),
+      previsaoSaldoCents: Math.round(previstoNoVencimento * c.parte) - c.totalCents,
     };
   });
 
   let sugestao: SugestaoCaixaUnico | null = null;
   if (ordem.length >= 2 && dia <= ordem[0].vence) {
     const primeiro = ordem[0];
-    const ultimo = ordem[ordem.length - 1];
-    const totalFaturas = ordem.reduce((t, c) => t + c.totalCents, 0);
+    const ultimo = ordem[1];
+    const totalFaturas = primeiro.totalCents + ultimo.totalCents;
     const precisaVenderCents = Math.max(0, totalFaturas - acumuladoCents);
     const diasDeVenda = diasDeVendaAte(dia, ultimo.vence);
     sugestao = {
