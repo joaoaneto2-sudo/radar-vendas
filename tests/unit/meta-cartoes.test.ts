@@ -99,4 +99,19 @@ describe("meta dos cartões", () => {
     expect(texto).toContain("• Pagar a Riachuelo inteira com o caixa (sobram R$ 3.373,32)");
     expect(texto).toContain("• Meta: vender R$ 8.126,68 até 02/12 · R$ 541,78 por dia nos 15 dias de venda");
   });
+
+  it("projeção do caixa com os dados reais de 11/11 (5 dias com venda, média R$ 1.132,80)", () => {
+    const reais = [
+      venda("2026-11-04", "99"), venda("2026-11-05", "778"), venda("2026-11-06", "986"),
+      venda("2026-11-07", "1690"), venda("2026-11-11", "2111"),
+    ];
+    const p = metaDosCartoes(reais, "2026-11-11").projecaoDoCaixa;
+    expect(p.map((x) => x.nome)).toEqual(["Riachuelo", "Santander", "Riachuelo (dez)"]);
+    expect(p[0]).toMatchObject({ diasDeVenda: 2, noVencimentoCents: 792960, depoisDePagarCents: 563892 });
+    expect(p[1]).toMatchObject({ diasDeVenda: 13, noVencimentoCents: 2036532, depoisDePagarCents: 886532 });
+    expect(p[2]).toMatchObject({ diasDeVenda: 8, depoisDePagarCents: 1607456 });
+    const texto = montarRelatorioDoDia({ dia: "2026-11-11", vendas: reais, aReceber: [], meta: { hoje: "2026-11-11", partes: [], despesas: [], vendas: reais, entradas: [] } });
+    expect(texto).toContain("📊 *Projeção do caixa* (pagando tudo em dia, vendendo R$ 1.132,80 por dia)");
+    expect(texto).toContain("• 02/12 às 20h: R$ 20.365,32 (+R$ 14.726,40 em 13 dias) · paga Santander R$ 11.500,00 → fica R$ 8.865,32");
+  });
 });

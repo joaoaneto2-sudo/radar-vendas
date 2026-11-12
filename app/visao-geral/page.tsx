@@ -202,8 +202,22 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
           />
         )}
       </div>
+      {cartoes.projecaoDoCaixa.length > 0 && (
+        <div className="dash-grid">
+          <Quadro titulo="Projeção do caixa" nota={`pagando tudo em dia, vendendo ${reais(cartoes.mediaPorDiaCents)} por dia`} largo>
+            <div className="mini-stats">
+              {cartoes.projecaoDoCaixa.map((p) => (
+                <div key={p.nome}>
+                  <span>{`${p.vence.slice(8, 10)}/${p.vence.slice(5, 7)}: caixa ${reais(p.noVencimentoCents)}, paga ${p.nome} ${reais(p.totalCents)}`}</span>
+                  <strong>{p.depoisDePagarCents >= 0 ? `Fica ${reais(p.depoisDePagarCents)}` : `Faltariam ${reais(-p.depoisDePagarCents)}`}</strong>
+                </div>
+              ))}
+            </div>
+          </Quadro>
+        </div>
+      )}
       <p className="stat-note">
-        {`Faltam ${cartoes.cartoes.filter((c) => !c.vencido).map((c) => `${c.diasDeVenda} dias de venda até ${c.vence.slice(8, 10)}/${c.vence.slice(5, 7)}`).join(" e ")}. `}
+        {`Faltam${cartoes.cartoes.filter((c) => !c.vencido).map((c) => `${c.diasDeVenda} dias de venda até ${c.vence.slice(8, 10)}/${c.vence.slice(5, 7)}`).join(" e ")}. `}
         Observação: as metas, a média ({reais(cartoes.mediaPorDiaCents)} por dia em {cartoes.diasTrabalhados} dias com venda) e a tendência consideram
         que não trabalhamos domingo nem segunda; dia sem venda não entra na média.
       </p>

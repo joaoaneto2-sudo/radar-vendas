@@ -206,6 +206,18 @@ export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string
       `• Pela média, até ${dataBR(s.ultimoVence)} às 20h: caixa de ${reaisR(s.previsaoNoVencimentoCents)} · ${previsao(s.previsaoSaldoCents)}`
     );
   }
+  if (m.projecaoDoCaixa.length > 0) {
+    linhas.push("");
+    linhas.push(`📊 *Projeção do caixa* (pagando tudo em dia, vendendo ${reaisR(m.mediaPorDiaCents)} por dia)`);
+    linhas.push(`• Hoje: ${reaisR(m.projecaoDoCaixa[0].noVencimentoCents - m.projecaoDoCaixa[0].entraCents)}`);
+    for (const p of m.projecaoDoCaixa) {
+      linhas.push(
+        `• ${dataBR(p.vence)} às 20h: ${reaisR(p.noVencimentoCents)} (+${reaisR(p.entraCents)} em ${p.diasDeVenda} dia${p.diasDeVenda === 1 ? "" : "s"}) · paga ${p.nome} ${reaisR(p.totalCents)} → ` +
+          (p.depoisDePagarCents >= 0 ? `fica ${reaisR(p.depoisDePagarCents)}` : `faltariam ${reaisR(-p.depoisDePagarCents)} ⚠️`)
+      );
+    }
+    linhas.push("_Caixa = valor vendido; venda no crédito parcelado ainda não é dinheiro na mão._");
+  }
   return linhas;
 }
 

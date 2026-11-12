@@ -92,6 +92,18 @@ export interface MetaDosCartoes {
   diasTrabalhados: number;
   cartoes: SituacaoDoCartao[];
   sugestao: SugestaoCaixaUnico | null; // null quando o primeiro cartão já venceu
+  projecaoDoCaixa: PassoDoCaixa[]; // pagando cada fatura inteira no vencimento, vendendo na média
+}
+
+/** Um vencimento na projeção do caixa (valor vendido), pagando tudo em dia e vendendo na média. */
+export interface PassoDoCaixa {
+  nome: string;
+  vence: string;
+  totalCents: Cents;
+  diasDeVenda: number; // desde o passo anterior (ou desde hoje) até as 20h do vencimento
+  entraCents: Cents; // vendas previstas nesses dias pela média
+  noVencimentoCents: Cents; // caixa às 20h do vencimento, antes de pagar
+  depoisDePagarCents: Cents; // caixa depois de pagar a fatura inteira (negativo = faltaria)
 }
 
 export function metaDosCartoes(
@@ -140,6 +152,21 @@ export function metaDosCartoes(
     };
   });
 
+  // Projeção do caixa: tudo o que foi vendido é um caixa só; as faturas que já venceram são
+  // consideradas pagas; as próximas são pagas inteiras no vencimento, vendendo na média.
+  const projecaoDoCaixa: PassoDoCaixa[] = [];
+  let caixa = acumuladoCents - ordem.filter((c) => c.vence < dia).reduce((t, c) => t + c.totalCents, 0);
+  let desdeODia = dia;
+  for (const c of ordem.filter((x) => x.vence >= dia)) {
+    const diasDeVenda = diasDeVendaAte(desdeODia, c.vence);
+    const entraCents = mediaPorDiaCents * diasDeVenda;
+    const noVencimentoCents = caixa + entraCents;
+    const depoisDePagarCents = noVencimentoCents - c.totalCents;
+    projecaoDoCaixa.push({ nome: c.nome, vence: c.vence, totalCents: c.totalCents, diasDeVenda, entraCents, noVencimentoCents, depoisDePagarCents });
+    caixa = depoisDePagarCents;
+    desdeODia = c.vence;
+  }
+
   let sugestao: SugestaoCaixaUnico | null = null;
   if (ordem.length >= 2 && dia <= ordem[0].vence) {
     const primeiro = ordem[0];
@@ -162,5 +189,5 @@ export function metaDosCartoes(
     };
   }
 
-  return { inicio, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao };
+  return { inicio, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao, projecaoDoCaixa };
 }
