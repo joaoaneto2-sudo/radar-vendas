@@ -224,6 +224,14 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
                 <span>{`Por dia (${c.diasDeVenda} dia(s) de venda)`}</span>
                 <strong>{c.quitado || c.vencido ? reais(0) : reais(c.precisaPorDiaCents)}</strong>
               </div>
+              {!c.vencido && !c.quitado && (
+                <div>
+                  <span>{`Pela média (${reais(cartoes.mediaPorDiaCents)}/dia), no vencimento`}</span>
+                  <strong>
+                    {c.previsaoSaldoCents >= 0 ? `Sobram ${reais(c.previsaoSaldoCents)}` : `Faltam ${reais(-c.previsaoSaldoCents)}`}
+                  </strong>
+                </div>
+              )}
             </div>
           </Quadro>
         ))}

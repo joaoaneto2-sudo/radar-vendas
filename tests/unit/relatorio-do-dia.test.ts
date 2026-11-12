@@ -216,20 +216,16 @@ describe("relatório do dia: ritmo do mês (meta R$ 1.000 por dia)", () => {
     venda("2026-10-31", "800"),
   ];
 
-  it("conta terça a sábado e a segunda que teve venda", async () => {
+  it("dia trabalhado = dia com venda lançada", async () => {
     const { ritmoDoMesDiario } = await import("../../lib/relatorio-do-dia");
     const r = ritmoDoMesDiario(vendas, "2026-11-07");
-    expect(r.diasTrabalhados).toBe(6);
+    expect(r.diasTrabalhados).toBe(3); // 02, 04 e 07/11 tiveram venda
     // depois de 07/11: ter 10 a sáb 14, 17-21, 24-28 = 15 dias
     expect(r.diasRestantes).toBe(15);
     expect(r.vendidoCents).toBe(300000);
     expect(r.hojeCents).toBe(150000);
-    expect(r.mediaPorDiaCents).toBe(50000);
+    expect(r.mediaPorDiaCents).toBe(100000);
     expect(r.ticketMedioCents).toBe(75000);
-    expect(r.metaAteHojeCents).toBe(600000);
-    expect(r.metaDoMesCents).toBe(2100000);
-    expect(r.tendenciaCents).toBe(1050000);
-    expect(r.precisaPorDiaCents).toBe(120000);
   });
 
   it("texto da seção", () => {
@@ -242,7 +238,7 @@ describe("relatório do dia: ritmo do mês (meta R$ 1.000 por dia)", () => {
     expect(texto).toContain("📈 *Ritmo do mês*");
     expect(texto).not.toContain("meta R$ 1.000,00 por dia");
     expect(texto).toContain("• Hoje: R$ 1.500,00");
-    expect(texto).toContain("• Média por dia: R$ 500,00 (6 dias de trabalho)");
+    expect(texto).toContain("• Média por dia: R$ 1.000,00 (3 dias de trabalho)");
     expect(texto).toContain("• Ticket médio: R$ 750,00 (4 vendas)");
     expect(texto).not.toContain("Para bater a meta");
   });

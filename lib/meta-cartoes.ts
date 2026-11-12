@@ -33,12 +33,20 @@ const diaDaSemana = (d: string) => new Date(`${d}T12:00:00Z`).getUTCDay();
 export function diasDeVendaAte(dia: string, vence: string): number {
   let n = 0;
   for (let d = addDaysISO(dia, 1); d <= vence; d = addDaysISO(d, 1)) {
-    if (DIAS_DE_TRABALHO.has(diaDaSemana(d)) || d === vence) n += 1;
+    if (DIAS_DE_TRABALHO.has(diaDaSemana(d))) n += 1; // a Fernanda não trabalha domingo nem segunda
   }
   return n;
 }
 
 const porDia = (c: Cents, dias: number) => (dias > 0 ? Math.ceil(c / dias) : c);
+
+/**
+ * Dias trabalhados de `inicio` até `dia`: só os dias que tiveram venda lançada.
+ * (João, 12/11/2026: em 10/11 a Fernanda não trabalhou; dia sem venda não conta para a média.)
+ */
+export function diasTrabalhadosDesde(inicio: string, dia: string, diasComVenda: Set<string>): number {
+  return [...diasComVenda].filter((d) => d >= inicio && d <= dia).length;
+}
 
 export interface SituacaoDoCartao {
   nome: string;
@@ -52,6 +60,9 @@ export interface SituacaoDoCartao {
   precisaPorDiaCents: Cents;
   vencido: boolean;
   quitado: boolean;
+  // Previsão pela média diária: o guardado no vencimento se as vendas seguirem a média.
+  previsaoGuardadoCents: Cents;
+  previsaoSaldoCents: Cents; // positivo = sobra; negativo = falta
 }
 
 export interface SugestaoCaixaUnico {
@@ -64,12 +75,16 @@ export interface SugestaoCaixaUnico {
   precisaVenderCents: Cents; // até as 20h do último vencimento, para pagar as duas faturas inteiras
   diasDeVenda: number;
   precisaPorDiaCents: Cents;
+  previsaoNoVencimentoCents: Cents; // caixa previsto no último vencimento pela média
+  previsaoSaldoCents: Cents; // previsto menos as duas faturas (positivo = sobra)
 }
 
 export interface MetaDosCartoes {
   inicio: string;
   acumuladoCents: Cents;
   vendas: number;
+  mediaPorDiaCents: Cents; // média vendida por dia trabalhado desde o início
+  diasTrabalhados: number;
   cartoes: SituacaoDoCartao[];
   sugestao: SugestaoCaixaUnico | null; // null quando o primeiro cartão já venceu
 }
@@ -85,6 +100,10 @@ export function metaDosCartoes(
     return v.status !== "cancelada" && v.price_tier !== "atacado" && d >= inicio && d <= dia;
   });
   const acumuladoCents = contam.reduce((t, v) => t + valorVendido(v), 0);
+  const diasComVenda = new Set(contam.map((v) => String(v.sale_date).slice(0, 10)));
+  const diasTrabalhados = diasTrabalhadosDesde(inicio, dia, diasComVenda);
+  const mediaPorDiaCents = diasTrabalhados > 0 ? Math.round(acumuladoCents / diasTrabalhados) : 0;
+  const previsto = (dias: number) => acumuladoCents + mediaPorDiaCents * dias;
   const ordem = [...cartoes].sort((a, b) => a.vence.localeCompare(b.vence));
 
   const situacoes = ordem.map((c) => {
@@ -104,6 +123,8 @@ export function metaDosCartoes(
       precisaPorDiaCents: porDia(precisaVenderCents, diasDeVenda),
       vencido: dia > c.vence,
       quitado: faltaGuardarCents === 0,
+      previsaoGuardadoCents: Math.round(previsto(diasDeVenda) * c.parte),
+      previsaoSaldoCents: Math.round(previsto(diasDeVenda) * c.parte) - c.totalCents,
     };
   });
 
@@ -124,8 +145,10 @@ export function metaDosCartoes(
       precisaVenderCents,
       diasDeVenda,
       precisaPorDiaCents: porDia(precisaVenderCents, diasDeVenda),
+      previsaoNoVencimentoCents: previsto(diasDeVenda),
+      previsaoSaldoCents: previsto(diasDeVenda) - totalFaturas,
     };
   }
 
-  return { inicio, acumuladoCents, vendas: contam.length, cartoes: situacoes, sugestao };
+  return { inicio, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao };
 }

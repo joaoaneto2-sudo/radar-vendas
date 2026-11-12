@@ -109,10 +109,8 @@ export function ritmoDoMesDiario(vendas: VendaDoRelatorio[], dia: string): Ritmo
   );
   const diasComVenda = new Set(varejo.map((v) => String(v.sale_date).slice(0, 10)));
 
-  let diasTrabalhados = 0;
-  for (let d = `${mes}-01`; d <= dia; d = addDaysISO(d, 1)) {
-    if (DIAS_DE_TRABALHO.has(diaDaSemanaNum(d)) || diasComVenda.has(d)) diasTrabalhados += 1;
-  }
+  // Dia trabalhado = dia com venda lançada (João, 12/11/2026: folga sem venda não conta).
+  const diasTrabalhados = diasComVenda.size;
   let diasRestantes = 0;
   for (let d = addDaysISO(dia, 1); mesDe(d) === mes; d = addDaysISO(d, 1)) {
     if (DIAS_DE_TRABALHO.has(diaDaSemanaNum(d))) diasRestantes += 1;
@@ -147,7 +145,7 @@ function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
   linhas.push(trabalhaHoje ? `• Hoje: ${reaisR(r.hojeCents)}` : "• Hoje: dia de folga, sem vendas");
   linhas.push(`• Média por dia: ${reaisR(r.mediaPorDiaCents)} (${r.diasTrabalhados} dia${r.diasTrabalhados === 1 ? "" : "s"} de trabalho)`);
   linhas.push(`• Ticket médio: ${reaisR(r.ticketMedioCents)} (${r.vendas} venda${r.vendas === 1 ? "" : "s"})`);
-  linhas.push("_Dias de trabalho: terça a sábado; domingo ou segunda com venda contam como dia trabalhado._");
+  linhas.push("_Dia trabalhado = dia com venda lançada. Para frente, contam terça a sábado._");
   return linhas;
 }
 
@@ -159,7 +157,9 @@ export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string
   const linhas = [
     "💳 *Meta dos cartões*",
     `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.acumuladoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
+    `• Média por dia: ${reaisR(m.mediaPorDiaCents)} (${m.diasTrabalhados} dia${m.diasTrabalhados === 1 ? "" : "s"} de trabalho)`,
   ];
+  const previsao = (saldo: Cents) => (saldo >= 0 ? `sobram ${reaisR(saldo)} ✅` : `faltam ${reaisR(-saldo)} ⚠️`);
   for (const c of m.cartoes) {
     linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)} até as 20h · ${Math.round(c.parte * 100)}% de cada venda`);
     linhas.push(`• Guardado: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.min(999, Math.round((c.guardadoCents / c.totalCents) * 100)) : 0}%)`);
@@ -173,6 +173,9 @@ export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string
         c.diasDeVenda > 0
           ? `• Meta: vender ${reaisR(c.precisaVenderCents)} · ${reaisR(c.precisaPorDiaCents)} por dia nos ${dias(c.diasDeVenda)}`
           : `• Meta: vender ${reaisR(c.precisaVenderCents)} até as 20h de hoje ⚠️`
+      );
+      linhas.push(
+        `• Pela média, até ${dataBR(c.vence)} às 20h: ${reaisR(c.previsaoGuardadoCents)} guardados · ${previsao(c.previsaoSaldoCents)}`
       );
     }
   }
@@ -189,6 +192,9 @@ export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string
       s.precisaVenderCents > 0
         ? `• Meta: vender ${reaisR(s.precisaVenderCents)} até ${dataBR(s.ultimoVence)} · ${reaisR(s.precisaPorDiaCents)} por dia nos ${dias(s.diasDeVenda)}`
         : "• O caixa já cobre as duas faturas ✅"
+    );
+    linhas.push(
+      `• Pela média, até ${dataBR(s.ultimoVence)} às 20h: caixa de ${reaisR(s.previsaoNoVencimentoCents)} · ${previsao(s.previsaoSaldoCents)}`
     );
   }
   return linhas;
