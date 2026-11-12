@@ -6,6 +6,7 @@ import { getPool, ensureSchema } from "@/lib/db";
 import { tokenDaIntegracaoValido } from "@/lib/auth/integration-token";
 import { todayBR } from "@/lib/finance/dates";
 import { dadosDaArte } from "@/lib/arte-do-relatorio";
+import { ArteDoFechamento } from "@/lib/arte-render";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,12 +14,15 @@ export const dynamic = "force-dynamic";
 // Arte (PNG 1080x1350) que o Roberto posta no grupo junto com o texto do relatório do dia.
 // GET ?dia=AAAA-MM-DD (opcional; padrão: hoje em Brasília). Mesmo token da rota do relatório.
 
-const CAFE = "#2a1c13";
-const CAFE_CLARO = "#3a281c";
-const OURO = "#d4af6a";
-const CREME = "#f5ece0";
-const VERDE = "#8fd19e";
-const VERMELHO = "#f2a091";
+const MARCA = path.join(process.cwd(), "public", "marca");
+
+async function comoDataUrl(arquivo: string, tipo: string): Promise<string | null> {
+  try {
+    return `data:${tipo};base64,${(await readFile(path.join(MARCA, arquivo))).toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(req: NextRequest) {
   if (!tokenDaIntegracaoValido(req.headers.get("authorization"), process.env.ROBERTO_INTEGRATION_TOKEN)) {
@@ -35,78 +39,23 @@ export async function GET(req: NextRequest) {
   );
   const d = dadosDaArte(vendas.rows, dia);
 
-  let logo: string | null = null;
-  try {
-    const bytes = await readFile(path.join(process.cwd(), "public", "marca", "logo-clara.png"));
-    logo = `data:image/png;base64,${bytes.toString("base64")}`;
-  } catch {
-    logo = null;
-  }
+  const [logo, couro, serif, sans, sansBold, display] = await Promise.all([
+    comoDataUrl("logo-clara.png", "image/png"),
+    comoDataUrl("couro.jpg", "image/jpeg"),
+    readFile(path.join(MARCA, "fontes", "InstrumentSerif-Regular.ttf")),
+    readFile(path.join(MARCA, "fontes", "InstrumentSans-Regular.ttf")),
+    readFile(path.join(MARCA, "fontes", "InstrumentSans-Bold.ttf")),
+    readFile(path.join(MARCA, "fontes", "Italiana-Regular.ttf")),
+  ]);
 
-  const Caixa = ({ children, flex }: { children: React.ReactNode; flex?: number }) => (
-    <div style={{ display: "flex", flexDirection: "column", background: CAFE_CLARO, borderRadius: 28, padding: "26px 32px", flex: flex ?? 1 }}>
-      {children}
-    </div>
-  );
-
-  return new ImageResponse(
-    (
-      <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: CAFE, color: CREME, padding: "56px 60px", fontSize: 30 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", color: OURO, fontSize: 30, letterSpacing: 4 }}>FECHAMENTO DO DIA</div>
-            <div style={{ display: "flex", fontSize: 58, fontWeight: 700, marginTop: 6 }}>{d.titulo}</div>
-          </div>
-          {logo ? <img src={logo} width={330} height={90} /> : <div style={{ display: "flex" }} />}
-        </div>
-
-        <div style={{ display: "flex", gap: 24, marginTop: 34 }}>
-          <Caixa>
-            <div style={{ display: "flex", color: OURO, fontSize: 26 }}>HOJE</div>
-            <div style={{ display: "flex", fontSize: 54, fontWeight: 700 }}>{d.hojeValor}</div>
-            <div style={{ display: "flex", fontSize: 26 }}>{`${d.hojeVendas} venda${d.hojeVendas === 1 ? "" : "s"}`}</div>
-          </Caixa>
-          <Caixa>
-            <div style={{ display: "flex", color: OURO, fontSize: 26 }}>{d.mesNome.toUpperCase()}</div>
-            <div style={{ display: "flex", fontSize: 54, fontWeight: 700 }}>{d.mesValor}</div>
-            <div style={{ display: "flex", fontSize: 26 }}>{`média ${d.media}/dia · ${d.diasComVenda} dias com venda`}</div>
-          </Caixa>
-        </div>
-
-        <div style={{ display: "flex", color: OURO, fontSize: 30, letterSpacing: 3, marginTop: 36, marginBottom: 14 }}>META DOS CARTÕES</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {d.cartoes.map((c) => (
-            <Caixa key={c.nome}>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", fontWeight: 700 }}>{`${c.nome} · vence ${c.vence}`}</div>
-                <div style={{ display: "flex" }}>{`${c.parte} · ${c.total}`}</div>
-              </div>
-              <div style={{ display: "flex", height: 18, background: "#5a4535", borderRadius: 9, marginTop: 14, marginBottom: 12 }}>
-                <div style={{ display: "flex", width: `${Math.max(2, Math.round(c.fracao * 100))}%`, background: OURO, borderRadius: 9 }} />
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 26 }}>
-                <div style={{ display: "flex" }}>{`Guardado ${c.guardado}`}</div>
-                <div style={{ display: "flex", color: c.previsaoOk ? VERDE : VERMELHO }}>{`Pela média: ${c.previsao}`}</div>
-              </div>
-            </Caixa>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", color: OURO, fontSize: 30, letterSpacing: 3, marginTop: 34, marginBottom: 14 }}>PROJEÇÃO DO CAIXA</div>
-        <Caixa>
-          {d.projecao.map((p) => (
-            <div key={p.nome} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 28 }}>
-              <div style={{ display: "flex" }}>{`${p.vence} · paga ${p.nome} ${p.paga}`}</div>
-              <div style={{ display: "flex", color: p.ok ? VERDE : VERMELHO, fontWeight: 700 }}>{p.ok ? `fica ${p.fica}` : p.fica}</div>
-            </div>
-          ))}
-        </Caixa>
-
-        <div style={{ display: "flex", marginTop: "auto", fontSize: 22, color: "#bfa98c" }}>
-          {"Pela média por dia com venda; domingo e segunda não contam. Radar de Vendas."}
-        </div>
-      </div>
-    ),
-    { width: 1080, height: 1350 }
-  );
+  return new ImageResponse(<ArteDoFechamento d={d} logo={logo} couro={couro} />, {
+    width: 1080,
+    height: 1350,
+    fonts: [
+      { name: "Instrument Serif", data: serif, weight: 400, style: "normal" },
+      { name: "Instrument Sans", data: sans, weight: 400, style: "normal" },
+      { name: "Instrument Sans", data: sansBold, weight: 700, style: "normal" },
+      { name: "Italiana", data: display, weight: 400, style: "normal" },
+    ],
+  });
 }
