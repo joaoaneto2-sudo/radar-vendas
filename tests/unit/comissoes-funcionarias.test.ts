@@ -62,7 +62,7 @@ describe("meta dos cartões desconta as comissões", () => {
 });
 
 describe("relatório do dia mostra a comissão", () => {
-  const texto = montarRelatorioDoDia({
+  const texto = montarRelatorioDoDia({ pagamentos: [],
     dia: "2026-11-14",
     vendas,
     aReceber: [],
@@ -72,6 +72,35 @@ describe("relatório do dia mostra a comissão", () => {
     expect(texto).toContain("Comissão paga às funcionárias hoje: −R$");
     expect(texto).toMatch(/Vendido menos comissão: \*R\$\s1\.067,00\*/);
     expect(texto).toMatch(/Comissões pagas às funcionárias desde 01\/11: −R\$\s420,00/);
-    expect(texto).toMatch(/Caixa para os cartões \(vendas menos comissões\): R\$\s1\.709,00/);
+    expect(texto).toMatch(/Caixa para os cartões \(vendas menos comissões e pagamentos já feitos\): R\$\s1\.709,00/);
+  });
+});
+
+describe("pagamentos já feitos saem do caixa", () => {
+  const pagamentos = [
+    { date: "2026-11-02", cartao: "Santander (02/11)", descricao: "Resto da fatura Santander de 02/11", cents: 50000 },
+    { date: "2026-11-13", cartao: "Riachuelo", descricao: "Fatura Riachuelo de 13/11", cents: 129000 },
+  ];
+  const vendas2 = [venda("2026-11-03", "4000"), venda("2026-11-14", "1000")];
+  const m = metaDosCartoes(vendas2, "2026-11-14", CARTOES, INICIO_META_CARTOES, [{ date: "2026-11-14", cents: 6200 }], pagamentos);
+  const [riachuelo, santander, dez] = m.cartoes;
+
+  it("caixa = vendido − comissões − pagamentos", () => {
+    expect(m.vendidoCents).toBe(500000);
+    expect(m.pagamentosCents).toBe(179000);
+    expect(m.acumuladoCents).toBe(500000 - 6200 - 179000);
+  });
+  it("Riachuelo de novembro aparece como paga", () => {
+    expect(riachuelo.vencido).toBe(true);
+    expect(riachuelo.pagoCents).toBe(129000);
+    expect(riachuelo.pagoEm).toBe("2026-11-13");
+  });
+  it("Santander fica com o caixa que sobra depois da Riachuelo de dezembro", () => {
+    expect(dez.guardadoCents).toBe(Math.round((100000 - 6200) * 0.1));
+    expect(santander.guardadoCents).toBe(m.acumuladoCents - dez.guardadoCents);
+  });
+  it("projeção não desconta de novo a fatura já paga", () => {
+    const p0 = m.projecaoDoCaixa[0];
+    expect(p0.noVencimentoCents - p0.entraCents).toBe(m.acumuladoCents);
   });
 });

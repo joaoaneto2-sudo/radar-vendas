@@ -88,7 +88,7 @@ describe("relatório do dia: clientes", () => {
     { id: 5, full_name: "Eva", phone: "81977776666", birthday: "2000-11-25" },
     { id: 6, full_name: "Fê", phone: "81977776666", birthday: "2000-12-01" },
   ];
-  const texto = montarRelatorioDoDia({
+  const texto = montarRelatorioDoDia({ pagamentos: [],
     dia: DIA,
     vendas,
     aReceber: [],
@@ -116,7 +116,7 @@ describe("relatório do dia: clientes", () => {
   });
 
   it("aniversário na virada do mês entra nos próximos 7 dias", () => {
-    const fimDoMes = montarRelatorioDoDia({
+    const fimDoMes = montarRelatorioDoDia({ pagamentos: [],
       dia: "2026-11-28",
       vendas: [],
       aReceber: [],
@@ -166,7 +166,7 @@ describe("relatório do dia: TOP FIVE", () => {
   });
 
   it("texto com os três meses, peças e fornecedores", () => {
-    const texto = montarRelatorioDoDia({
+    const texto = montarRelatorioDoDia({ pagamentos: [],
       dia: DIA,
       vendas,
       aReceber: [],
@@ -186,7 +186,7 @@ describe("relatório do dia: TOP FIVE", () => {
 
 describe("relatório do dia: até quando", () => {
   it("mostra a hora do relatório e a última venda lida, no horário de Recife", () => {
-    const texto = montarRelatorioDoDia({
+    const texto = montarRelatorioDoDia({ pagamentos: [],
       ...dados(),
       geradoEm: "2026-11-07T23:00:00Z",
       ultimaVendaLida: { postadaEm: "2026-11-07T19:53:16Z", cliente: "Nelia" },
@@ -229,7 +229,7 @@ describe("relatório do dia: ritmo do mês (meta R$ 1.000 por dia)", () => {
   });
 
   it("texto da seção", () => {
-    const texto = montarRelatorioDoDia({
+    const texto = montarRelatorioDoDia({ pagamentos: [],
       dia: "2026-11-07",
       vendas,
       aReceber: [],
@@ -244,7 +244,7 @@ describe("relatório do dia: ritmo do mês (meta R$ 1.000 por dia)", () => {
   });
 
   it("segunda sem venda é folga", () => {
-    const texto = montarRelatorioDoDia({
+    const texto = montarRelatorioDoDia({ pagamentos: [],
       dia: "2026-11-09",
       vendas,
       aReceber: [],

@@ -81,7 +81,7 @@ describe("meta dos cartões", () => {
   });
 
   it("aparece no relatório do dia", () => {
-    const texto = montarRelatorioDoDia({
+    const texto = montarRelatorioDoDia({ pagamentos: [],
       dia: "2026-11-11",
       vendas,
       aReceber: [],
@@ -110,7 +110,7 @@ describe("meta dos cartões", () => {
     expect(p[0]).toMatchObject({ diasDeVenda: 2, noVencimentoCents: 792960, depoisDePagarCents: 563892 });
     expect(p[1]).toMatchObject({ diasDeVenda: 13, noVencimentoCents: 2036532, depoisDePagarCents: 886532 });
     expect(p[2]).toMatchObject({ diasDeVenda: 8, depoisDePagarCents: 1607456 });
-    const texto = montarRelatorioDoDia({ dia: "2026-11-11", vendas: reais, aReceber: [], meta: { hoje: "2026-11-11", partes: [], despesas: [], vendas: reais, entradas: [] } });
+    const texto = montarRelatorioDoDia({ pagamentos: [], dia: "2026-11-11", vendas: reais, aReceber: [], meta: { hoje: "2026-11-11", partes: [], despesas: [], vendas: reais, entradas: [] } });
     expect(texto).toContain("📊 *Projeção do caixa* (pagando tudo em dia, vendendo R$ 1.132,80 por dia)");
     expect(texto).toContain("• 02/12 às 20h: R$ 20.365,32 (+R$ 14.726,40 em 13 dias) · paga Santander R$ 11.500,00 → fica R$ 8.865,32");
   });

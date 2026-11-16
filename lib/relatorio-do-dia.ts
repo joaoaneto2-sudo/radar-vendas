@@ -2,7 +2,7 @@ import { formatCentsBRL, toCents, type Cents } from "./finance/money";
 import { addDaysISO } from "./finance/dates";
 import { valorBrutoDoAtacado, valorVendido, type VendaLinha } from "./dashboard";
 import { mesDe, nomeDoMes, type DadosDaMeta } from "./meta-mensal";
-import { metaDosCartoes, comissoesDasDespesas, CARTOES, INICIO_META_CARTOES, type ComissaoPaga } from "./meta-cartoes";
+import { metaDosCartoes, comissoesDasDespesas, CARTOES, INICIO_META_CARTOES, PAGAMENTOS_FEITOS, type ComissaoPaga, type PagamentoFeito } from "./meta-cartoes";
 
 // Relatório do fim do dia que o Roberto posta no grupo do WhatsApp.
 // Função pura: recebe os dados já lidos do banco e devolve o texto pronto.
@@ -150,18 +150,22 @@ function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
 }
 
 /** Meta dos cartões: plano 10%/90% e, como observação, a sugestão do caixa único para não pagar juros. */
-export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string, comissoes: ComissaoPaga[] = []): string[] {
-  const m = metaDosCartoes(vendas, dia, CARTOES, INICIO_META_CARTOES, comissoes);
+export function secaoDosCartoes(
+  vendas: VendaDoRelatorio[],
+  dia: string,
+  comissoes: ComissaoPaga[] = [],
+  pagamentos: PagamentoFeito[] = PAGAMENTOS_FEITOS
+): string[] {
+  const m = metaDosCartoes(vendas, dia, CARTOES, INICIO_META_CARTOES, comissoes, pagamentos);
   const reaisR = (c: Cents) => formatCentsBRL(c).replace(/\u00a0/g, " ");
   const dias = (n: number) => `${n} dia${n === 1 ? "" : "s"} de venda`;
   const linhas = [
     "💳 *Meta dos cartões*",
     `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.vendidoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
-    ...(m.comissoesCents > 0
-      ? [
-          `• Comissões pagas às funcionárias desde ${dataBR(m.inicio)}: −${reaisR(m.comissoesCents)}`,
-          `• Caixa para os cartões (vendas menos comissões): ${reaisR(m.acumuladoCents)}`,
-        ]
+    ...(m.comissoesCents > 0 ? [`• Comissões pagas às funcionárias desde ${dataBR(m.inicio)}: −${reaisR(m.comissoesCents)}`] : []),
+    ...m.pagamentos.map((p) => `• Pago em ${dataBR(p.date)}: ${p.descricao} −${reaisR(p.cents)}`),
+    ...(m.comissoesCents > 0 || m.pagamentosCents > 0
+      ? [`• Caixa para os cartões (vendas menos comissões e pagamentos já feitos): ${reaisR(m.acumuladoCents)}`]
       : []),
     `• Dias com venda desde ${dataBR(m.inicio)}: ${m.diasTrabalhados} · média de ${reaisR(m.mediaPorDiaCents)} por dia`,
   ];
@@ -178,7 +182,9 @@ export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string, comisso
   for (const c of m.cartoes) {
     linhas.push(`*${c.nome}* · ${reaisR(c.totalCents)} · vence ${dataBR(c.vence)} até as 20h · ${Math.round(c.parte * 100)}% de cada venda`);
     linhas.push(`• Guardado: ${reaisR(c.guardadoCents)} (${c.totalCents > 0 ? Math.min(999, Math.round((c.guardadoCents / c.totalCents) * 100)) : 0}%)`);
-    if (c.quitado) {
+    if (c.vencido && c.pagoCents > 0) {
+      linhas.push(`• Pago ${reaisR(c.pagoCents)} em ${dataBR(c.pagoEm ?? c.vence)} ✅`);
+    } else if (c.quitado) {
       linhas.push("• Fatura coberta ✅");
     } else if (c.vencido) {
       linhas.push(`• Venceu faltando ${reaisR(c.faltaGuardarCents)} 🔴`);
@@ -278,6 +284,7 @@ export interface DadosDoRelatorio {
   vendas: VendaDoRelatorio[]; // todas as vendas (o relatório filtra dia e mês)
   aReceber: ParcelaDoRelatorio[]; // parcelas previstas (ainda não recebidas), sem atacado
   meta: DadosDaMeta; // mesmos dados da tela Visão geral
+  pagamentos?: PagamentoFeito[]; // faturas já pagas com o caixa (padrão: PAGAMENTOS_FEITOS)
   clientes?: ClienteDoRelatorio[]; // cadastro de clientes (sem isso, a seção de clientes não aparece)
   geradoEm?: string; // ISO: quando o relatório foi montado
   ultimaVendaLida?: { postadaEm: string; cliente: string | null } | null; // última mensagem de venda que o Roberto lançou
@@ -427,7 +434,7 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   linhas.push("");
 
   // --- Meta dos cartões
-  linhas.push(...secaoDosCartoes(dados.vendas, dia, comissoes));
+  linhas.push(...secaoDosCartoes(dados.vendas, dia, comissoes, dados.pagamentos ?? PAGAMENTOS_FEITOS));
   linhas.push("");
 
   // --- Ritmo do mês

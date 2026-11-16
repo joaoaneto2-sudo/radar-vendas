@@ -17,7 +17,26 @@ export interface Cartao {
   parte: number; // fração de cada venda guardada para este cartão no plano principal
   vence: string; // AAAA-MM-DD
   desde?: string; // vendas que contam para esta fatura começam neste dia (padrão: INICIO_META_CARTOES)
+  // Fica com o caixa que sobra depois das outras faturas em aberto (vendas menos comissões menos
+  // pagamentos já feitos menos o guardado das outras). As vendas novas entram pela "parte".
+  resto?: boolean;
 }
+
+/** Pagamento de fatura já feito com o dinheiro das vendas (sai do caixa da meta). */
+export interface PagamentoFeito {
+  date: string; // AAAA-MM-DD
+  cartao: string; // nome do cartão em CARTOES, ou outra fatura
+  descricao: string;
+  cents: Cents;
+}
+
+// João, 16/11/2026: tirar do caixa o pagamento feito na Riachuelo e os R$ 500 que faltavam da
+// fatura Santander de 02/11. (Renner, Studio Z e Sam's foram pagos com dinheiro do pai da
+// Fernanda, não da empresa: NÃO entram.)
+export const PAGAMENTOS_FEITOS: PagamentoFeito[] = [
+  { date: "2026-11-02", cartao: "Santander (02/11)", descricao: "Resto da fatura Santander de 02/11", cents: toCents("500.00") },
+  { date: "2026-11-13", cartao: "Riachuelo", descricao: "Fatura Riachuelo de 13/11 (o resto foi parcelado)", cents: toCents("1290.00") },
+];
 
 export const INICIO_META_CARTOES = "2026-11-01";
 
@@ -34,7 +53,7 @@ export const CARTOES: Cartao[] = [
   // Valores da fatura da Riachuelo (cartão final 3108) de 13/11/2026: saldo R$ 2.290,68;
   // próxima fatura (13/12) R$ 1.853,16 = parcelas R$ 1.837,17 + anuidade R$ 15,99.
   { nome: "Riachuelo", totalCents: toCents("2290.68"), parte: 0.1, vence: "2026-11-13" },
-  { nome: "Santander", totalCents: toCents("11500.00"), parte: 0.9, vence: "2026-12-02" },
+  { nome: "Santander", totalCents: toCents("11500.00"), parte: 0.9, vence: "2026-12-02", resto: true },
   // A Riachuelo de dezembro junta os 10% das vendas feitas depois do vencimento de novembro.
   { nome: "Riachuelo (dez)", totalCents: toCents("1853.16"), parte: 0.1, vence: "2026-12-13", desde: "2026-11-14" },
 ];
@@ -74,6 +93,8 @@ export interface SituacaoDoCartao {
   precisaPorDiaCents: Cents;
   vencido: boolean;
   quitado: boolean;
+  pagoCents: Cents; // pagamentos já feitos para esta fatura (PAGAMENTOS_FEITOS)
+  pagoEm: string | null;
   // Previsão pela média diária: o guardado no vencimento se as vendas seguirem a média.
   previsaoGuardadoCents: Cents;
   previsaoSaldoCents: Cents; // positivo = sobra; negativo = falta
@@ -97,7 +118,9 @@ export interface MetaDosCartoes {
   inicio: string;
   vendidoCents: Cents; // valor vendido desde o início
   comissoesCents: Cents; // comissões pagas às funcionárias desde o início
-  acumuladoCents: Cents; // caixa da meta = vendido menos comissões
+  pagamentos: PagamentoFeito[]; // faturas já pagas com o caixa, até o dia
+  pagamentosCents: Cents;
+  acumuladoCents: Cents; // caixa da meta = vendido menos comissões menos pagamentos já feitos
   vendas: number;
   mediaPorDiaCents: Cents; // média vendida por dia trabalhado desde o início
   diasTrabalhados: number;
@@ -122,7 +145,8 @@ export function metaDosCartoes(
   dia: string,
   cartoes: Cartao[] = CARTOES,
   inicio: string = INICIO_META_CARTOES,
-  comissoes: ComissaoPaga[] = []
+  comissoes: ComissaoPaga[] = [],
+  pagamentosFeitos: PagamentoFeito[] = []
 ): MetaDosCartoes {
   const contam = vendas.filter((v) => {
     const d = String(v.sale_date).slice(0, 10);
@@ -132,7 +156,9 @@ export function metaDosCartoes(
   const comissoesDesde = (de: string) => pagas.filter((c) => c.date >= de).reduce((t, c) => t + c.cents, 0);
   const vendidoCents = contam.reduce((t, v) => t + valorVendido(v), 0);
   const comissoesCents = comissoesDesde(inicio);
-  const acumuladoCents = vendidoCents - comissoesCents;
+  const pagamentos = pagamentosFeitos.filter((p) => p.date >= inicio && p.date <= dia);
+  const pagamentosCents = pagamentos.reduce((t, p) => t + p.cents, 0);
+  const acumuladoCents = vendidoCents - comissoesCents - pagamentosCents;
   const diasComVenda = new Set(contam.map((v) => String(v.sale_date).slice(0, 10)));
   const diasTrabalhados = diasTrabalhadosDesde(inicio, dia, diasComVenda);
   const mediaPorDiaCents = diasTrabalhados > 0 ? Math.round(acumuladoCents / diasTrabalhados) : 0;
@@ -165,15 +191,34 @@ export function metaDosCartoes(
       precisaPorDiaCents: porDia(precisaVenderCents, diasDeVenda),
       vencido: dia > c.vence,
       quitado: faltaGuardarCents === 0,
+      pagoCents: pagamentos.filter((p) => p.cartao === c.nome).reduce((t, p) => t + p.cents, 0),
+      pagoEm: pagamentos.filter((p) => p.cartao === c.nome).map((p) => p.date).sort().pop() ?? null,
       previsaoGuardadoCents: Math.round(previstoNoVencimento * c.parte),
       previsaoSaldoCents: Math.round(previstoNoVencimento * c.parte) - c.totalCents,
     };
   });
 
+  // A fatura "resto" fica com o caixa que sobra depois do guardado das outras em aberto.
+  ordem.forEach((c, i) => {
+    if (!c.resto) return;
+    const s = situacoes[i];
+    if (s.vencido) return;
+    const dasOutras = situacoes.filter((o, j) => j !== i && !o.vencido).reduce((t, o) => t + o.guardadoCents, 0);
+    s.guardadoCents = Math.max(0, acumuladoCents - dasOutras);
+    s.faltaGuardarCents = Math.max(0, c.totalCents - s.guardadoCents);
+    s.precisaVenderCents = c.parte > 0 ? Math.ceil(s.faltaGuardarCents / c.parte) : 0;
+    s.precisaPorDiaCents = porDia(s.precisaVenderCents, s.diasDeVenda);
+    s.quitado = s.faltaGuardarCents === 0;
+    s.previsaoGuardadoCents = s.guardadoCents + Math.round(mediaPorDiaCents * s.diasDeVenda * c.parte);
+    s.previsaoSaldoCents = s.previsaoGuardadoCents - c.totalCents;
+  });
+
   // Projeção do caixa: tudo o que foi vendido é um caixa só; as faturas que já venceram são
   // consideradas pagas; as próximas são pagas inteiras no vencimento, vendendo na média.
   const projecaoDoCaixa: PassoDoCaixa[] = [];
-  let caixa = acumuladoCents - ordem.filter((c) => c.vence < dia).reduce((t, c) => t + c.totalCents, 0);
+  // Fatura vencida com pagamento lançado já saiu do caixa pelo pagamento; sem pagamento, conta a fatura inteira.
+  const pagaPorLancamento = (c: Cartao) => pagamentos.some((p) => p.cartao === c.nome);
+  let caixa = acumuladoCents - ordem.filter((c) => c.vence < dia && !pagaPorLancamento(c)).reduce((t, c) => t + c.totalCents, 0);
   let desdeODia = dia;
   for (const c of ordem.filter((x) => x.vence >= dia)) {
     const diasDeVenda = diasDeVendaAte(desdeODia, c.vence);
@@ -207,7 +252,7 @@ export function metaDosCartoes(
     };
   }
 
-  return { inicio, vendidoCents, comissoesCents, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao, projecaoDoCaixa };
+  return { inicio, vendidoCents, comissoesCents, pagamentos, pagamentosCents, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao, projecaoDoCaixa };
 }
 
 /** Comissões pagas às funcionárias, a partir das despesas (categoria comissao_funcionarias). */

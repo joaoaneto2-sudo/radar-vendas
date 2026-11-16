@@ -25,7 +25,7 @@ import {
 import { NAO_INFORMADA } from "@/lib/sale-finance";
 import { acumuladoDoMes, comparativoAteHoje, resumoMensal, ritmoDoMes, tendenciaDasVendas, type DadosDaMeta } from "@/lib/meta-mensal";
 import MetaDoMes from "@/app/meta-do-mes";
-import { metaDosCartoes, comissoesDasDespesas, CARTOES, INICIO_META_CARTOES } from "@/lib/meta-cartoes";
+import { metaDosCartoes, comissoesDasDespesas, CARTOES, INICIO_META_CARTOES, PAGAMENTOS_FEITOS } from "@/lib/meta-cartoes";
 import FaixaDoAcordo from "@/app/faixa-do-acordo";
 import { lerAcordo } from "@/lib/agreement-db";
 import { BarraDupla, BarrasHorizontais, BarrasVerticais, CORES, Progresso, Quadro, Rosca } from "@/app/charts";
@@ -101,7 +101,7 @@ export default async function VisaoGeralPage({ searchParams }: { searchParams: {
   ]);
 
   const todas = vendasRes.rows as VendaLinha[];
-  const cartoes = metaDosCartoes(todas, hoje, CARTOES, INICIO_META_CARTOES, comissoesDasDespesas(despesasRes.rows));
+  const cartoes = metaDosCartoes(todas, hoje, CARTOES, INICIO_META_CARTOES, comissoesDasDespesas(despesasRes.rows), PAGAMENTOS_FEITOS);
   const doPeriodo = vendasDoPeriodo(todas, intervalo);
   const vendas = doPeriodo.filter((v) => v.price_tier !== "atacado");
 
