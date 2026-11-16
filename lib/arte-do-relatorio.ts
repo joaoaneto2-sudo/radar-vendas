@@ -2,7 +2,7 @@ import { formatCentsBRL, type Cents } from "./finance/money";
 import { addDaysISO } from "./finance/dates";
 import { valorVendido, type VendaLinha } from "./dashboard";
 import { mesDe, nomeDoMes } from "./meta-mensal";
-import { metaDosCartoes } from "./meta-cartoes";
+import { metaDosCartoes, CARTOES, INICIO_META_CARTOES, type ComissaoPaga } from "./meta-cartoes";
 
 // Dados da arte que vai junto com o relatório do dia no grupo (função pura, sem banco).
 
@@ -50,13 +50,13 @@ export interface DadosDaArte {
   caixa: PontoDoCaixa[];
 }
 
-export function dadosDaArte(vendas: VendaLinha[], dia: string): DadosDaArte {
+export function dadosDaArte(vendas: VendaLinha[], dia: string, comissoes: ComissaoPaga[] = []): DadosDaArte {
   const ativa = (v: VendaLinha) => v.status !== "cancelada" && v.price_tier !== "atacado";
   const data = (v: VendaLinha) => String(v.sale_date).slice(0, 10);
   const doDia = vendas.filter((v) => ativa(v) && data(v) === dia);
   const mes = mesDe(dia);
   const doMes = vendas.filter((v) => ativa(v) && mesDe(data(v)) === mes && data(v) <= dia);
-  const m = metaDosCartoes(vendas, dia);
+  const m = metaDosCartoes(vendas, dia, CARTOES, INICIO_META_CARTOES, comissoes);
   const nome = nomeDoMes(mes);
 
   const porDia: BarraDoDia[] = [];

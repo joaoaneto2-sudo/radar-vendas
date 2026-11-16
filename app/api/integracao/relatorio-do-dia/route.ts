@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
           WHERE p.status = 'prevista' AND s.status = 'ativa' AND s.price_tier <> 'atacado'`
       ),
       db.query(
-        `SELECT to_char(expense_date, 'YYYY-MM-DD') AS expense_date, amount,
+        `SELECT to_char(expense_date, 'YYYY-MM-DD') AS expense_date, amount, category,
                 NOT EXISTS (SELECT 1 FROM card_invoice_parts cp WHERE cp.expense_id = expenses.id) AS avulsa
            FROM expenses`
       ),

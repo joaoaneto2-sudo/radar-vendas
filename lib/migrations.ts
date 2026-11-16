@@ -797,6 +797,24 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "023",
+    name: "comissoes pagas as funcionarias lancadas pelo Roberto a partir do grupo (uma linha por mensagem; vira despesa do dia)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS comissoes_whatsapp (
+        message_id TEXT PRIMARY KEY,
+        situacao TEXT NOT NULL CHECK (situacao IN ('gravada', 'recusada')),
+        expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL,
+        valor NUMERIC(12,2),
+        motivo TEXT,
+        texto TEXT NOT NULL,
+        origem TEXT,
+        enviada_em TIMESTAMPTZ,
+        dia DATE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+    ],
+  },
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

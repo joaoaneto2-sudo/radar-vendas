@@ -21,6 +21,15 @@ export interface Cartao {
 
 export const INICIO_META_CARTOES = "2026-11-01";
 
+/**
+ * Comissão paga às funcionárias num dia (despesa da categoria comissao_funcionarias).
+ * João, 16/11/2026: "subtraia diariamente os valores pagos de comissão" do caixa da meta.
+ */
+export interface ComissaoPaga {
+  date: string; // AAAA-MM-DD
+  cents: Cents;
+}
+
 export const CARTOES: Cartao[] = [
   // Valores da fatura da Riachuelo (cartão final 3108) de 13/11/2026: saldo R$ 2.290,68;
   // próxima fatura (13/12) R$ 1.853,16 = parcelas R$ 1.837,17 + anuidade R$ 15,99.
@@ -86,7 +95,9 @@ export interface SugestaoCaixaUnico {
 
 export interface MetaDosCartoes {
   inicio: string;
-  acumuladoCents: Cents;
+  vendidoCents: Cents; // valor vendido desde o início
+  comissoesCents: Cents; // comissões pagas às funcionárias desde o início
+  acumuladoCents: Cents; // caixa da meta = vendido menos comissões
   vendas: number;
   mediaPorDiaCents: Cents; // média vendida por dia trabalhado desde o início
   diasTrabalhados: number;
@@ -110,25 +121,32 @@ export function metaDosCartoes(
   vendas: VendaLinha[],
   dia: string,
   cartoes: Cartao[] = CARTOES,
-  inicio: string = INICIO_META_CARTOES
+  inicio: string = INICIO_META_CARTOES,
+  comissoes: ComissaoPaga[] = []
 ): MetaDosCartoes {
   const contam = vendas.filter((v) => {
     const d = String(v.sale_date).slice(0, 10);
     return v.status !== "cancelada" && v.price_tier !== "atacado" && d >= inicio && d <= dia;
   });
-  const acumuladoCents = contam.reduce((t, v) => t + valorVendido(v), 0);
+  const pagas = comissoes.filter((c) => c.date >= inicio && c.date <= dia);
+  const comissoesDesde = (de: string) => pagas.filter((c) => c.date >= de).reduce((t, c) => t + c.cents, 0);
+  const vendidoCents = contam.reduce((t, v) => t + valorVendido(v), 0);
+  const comissoesCents = comissoesDesde(inicio);
+  const acumuladoCents = vendidoCents - comissoesCents;
   const diasComVenda = new Set(contam.map((v) => String(v.sale_date).slice(0, 10)));
   const diasTrabalhados = diasTrabalhadosDesde(inicio, dia, diasComVenda);
   const mediaPorDiaCents = diasTrabalhados > 0 ? Math.round(acumuladoCents / diasTrabalhados) : 0;
   const previsto = (dias: number) => acumuladoCents + mediaPorDiaCents * dias;
   const ordem = [...cartoes].sort((a, b) => a.vence.localeCompare(b.vence));
 
+  // Caixa de cada fatura: vendido desde o "desde" dela menos as comissões pagas no mesmo período.
   const vendidoDesde = (de: string) =>
-    contam.filter((v) => String(v.sale_date).slice(0, 10) >= de).reduce((t, v) => t + valorVendido(v), 0);
+    contam.filter((v) => String(v.sale_date).slice(0, 10) >= de).reduce((t, v) => t + valorVendido(v), 0) -
+    comissoesDesde(de);
   const situacoes = ordem.map((c) => {
     const desde = c.desde ?? inicio;
     const acumuladoDoCartao = vendidoDesde(desde);
-    const guardadoCents = Math.round(acumuladoDoCartao * c.parte);
+    const guardadoCents = Math.max(0, Math.round(acumuladoDoCartao * c.parte));
     const faltaGuardarCents = Math.max(0, c.totalCents - guardadoCents);
     const precisaVenderCents = c.parte > 0 ? Math.ceil(faltaGuardarCents / c.parte) : 0;
     // Os dias de venda desta fatura começam no maior entre amanhã e o "desde" dela.
@@ -189,5 +207,14 @@ export function metaDosCartoes(
     };
   }
 
-  return { inicio, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao, projecaoDoCaixa };
+  return { inicio, vendidoCents, comissoesCents, acumuladoCents, vendas: contam.length, mediaPorDiaCents, diasTrabalhados, cartoes: situacoes, sugestao, projecaoDoCaixa };
+}
+
+/** Comissões pagas às funcionárias, a partir das despesas (categoria comissao_funcionarias). */
+export function comissoesDasDespesas(
+  despesas: { expense_date: string; amount: string | number; category?: string | null }[]
+): ComissaoPaga[] {
+  return despesas
+    .filter((d) => d.category === "comissao_funcionarias")
+    .map((d) => ({ date: String(d.expense_date).slice(0, 10), cents: toCents(d.amount) }));
 }

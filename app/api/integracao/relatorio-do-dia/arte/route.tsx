@@ -6,6 +6,7 @@ import { getPool, ensureSchema } from "@/lib/db";
 import { tokenDaIntegracaoValido } from "@/lib/auth/integration-token";
 import { todayBR } from "@/lib/finance/dates";
 import { dadosDaArte } from "@/lib/arte-do-relatorio";
+import { comissoesDasDespesas } from "@/lib/meta-cartoes";
 import { ArteDoFechamento } from "@/lib/arte-render";
 
 export const runtime = "nodejs";
@@ -37,7 +38,11 @@ export async function GET(req: NextRequest) {
   const vendas = await db.query(
     `SELECT to_char(sale_date, 'YYYY-MM-DD') AS sale_date, sale_value, price_tier, status FROM sales`
   );
-  const d = dadosDaArte(vendas.rows, dia);
+  const despesas = await db.query(
+    `SELECT to_char(expense_date, 'YYYY-MM-DD') AS expense_date, amount, category FROM expenses
+      WHERE category = 'comissao_funcionarias'`
+  );
+  const d = dadosDaArte(vendas.rows, dia, comissoesDasDespesas(despesas.rows));
 
   const [logo, couro, serif, sans, sansBold, display] = await Promise.all([
     comoDataUrl("logo-clara.png", "image/png"),

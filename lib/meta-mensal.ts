@@ -26,6 +26,7 @@ export interface DespesaLinha {
   expense_date: string;
   amount: number | string;
   avulsa: boolean; // false = já está dentro de uma fatura do cartão
+  category?: string | null;
 }
 
 export interface EntradaLinha {

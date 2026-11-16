@@ -2,7 +2,7 @@ import { formatCentsBRL, toCents, type Cents } from "./finance/money";
 import { addDaysISO } from "./finance/dates";
 import { valorBrutoDoAtacado, valorVendido, type VendaLinha } from "./dashboard";
 import { mesDe, nomeDoMes, type DadosDaMeta } from "./meta-mensal";
-import { metaDosCartoes } from "./meta-cartoes";
+import { metaDosCartoes, comissoesDasDespesas, CARTOES, INICIO_META_CARTOES, type ComissaoPaga } from "./meta-cartoes";
 
 // Relatório do fim do dia que o Roberto posta no grupo do WhatsApp.
 // Função pura: recebe os dados já lidos do banco e devolve o texto pronto.
@@ -150,13 +150,19 @@ function secaoDoRitmo(vendas: VendaDoRelatorio[], dia: string): string[] {
 }
 
 /** Meta dos cartões: plano 10%/90% e, como observação, a sugestão do caixa único para não pagar juros. */
-export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string): string[] {
-  const m = metaDosCartoes(vendas, dia);
+export function secaoDosCartoes(vendas: VendaDoRelatorio[], dia: string, comissoes: ComissaoPaga[] = []): string[] {
+  const m = metaDosCartoes(vendas, dia, CARTOES, INICIO_META_CARTOES, comissoes);
   const reaisR = (c: Cents) => formatCentsBRL(c).replace(/\u00a0/g, " ");
   const dias = (n: number) => `${n} dia${n === 1 ? "" : "s"} de venda`;
   const linhas = [
     "💳 *Meta dos cartões*",
-    `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.acumuladoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
+    `• Vendas desde ${dataBR(m.inicio)}: ${reaisR(m.vendidoCents)} (${m.vendas} venda${m.vendas === 1 ? "" : "s"})`,
+    ...(m.comissoesCents > 0
+      ? [
+          `• Comissões pagas às funcionárias desde ${dataBR(m.inicio)}: −${reaisR(m.comissoesCents)}`,
+          `• Caixa para os cartões (vendas menos comissões): ${reaisR(m.acumuladoCents)}`,
+        ]
+      : []),
     `• Dias com venda desde ${dataBR(m.inicio)}: ${m.diasTrabalhados} · média de ${reaisR(m.mediaPorDiaCents)} por dia`,
   ];
   const ultimo = m.cartoes[m.cartoes.length - 1];
@@ -383,6 +389,8 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   linhas.push("");
 
   // --- Hoje
+  const comissoes = comissoesDasDespesas(dados.meta.despesas);
+  const comissaoHoje = comissoes.filter((c) => c.date === dia).reduce((t, c) => t + c.cents, 0);
   const doDia = dados.vendas.filter((v) => ativa(v) && String(v.sale_date).slice(0, 10) === dia);
   const varejoHoje = doDia.filter((v) => v.price_tier !== "atacado");
   const atacadoHoje = doDia.filter((v) => v.price_tier === "atacado");
@@ -398,6 +406,10 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
       const bruto = atacadoHoje.reduce((t, v) => t + valorBrutoDoAtacado(v), 0);
       linhas.push(`• Atacado: ${atacadoHoje.length} pedido${atacadoHoje.length === 1 ? "" : "s"} · ${reais(bruto)} (pago ao fabricante)`);
     }
+  }
+  if (comissaoHoje > 0) {
+    linhas.push(`💸 Comissão paga às funcionárias hoje: −${reais(comissaoHoje)}`);
+    linhas.push(`• Vendido menos comissão: *${reais(totalHoje - comissaoHoje)}*`);
   }
   linhas.push("");
 
@@ -415,7 +427,7 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   linhas.push("");
 
   // --- Meta dos cartões
-  linhas.push(...secaoDosCartoes(dados.vendas, dia));
+  linhas.push(...secaoDosCartoes(dados.vendas, dia, comissoes));
   linhas.push("");
 
   // --- Ritmo do mês
