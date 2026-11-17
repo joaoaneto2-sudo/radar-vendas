@@ -2,6 +2,7 @@ import { formatCentsBRL, toCents, type Cents } from "./finance/money";
 import { addDaysISO } from "./finance/dates";
 import { valorBrutoDoAtacado, valorVendido, type VendaLinha } from "./dashboard";
 import { mesDe, nomeDoMes, type DadosDaMeta } from "./meta-mensal";
+import { dinheiroNaConta, secaoDoDinheiro, type SaldoDoBanco } from "./dinheiro-na-conta";
 import { metaDosCartoes, comissoesDasDespesas, CARTOES, INICIO_META_CARTOES, PAGAMENTOS_FEITOS, type ComissaoPaga, type PagamentoFeito } from "./meta-cartoes";
 
 // Relatório do fim do dia que o Roberto posta no grupo do WhatsApp.
@@ -285,6 +286,7 @@ export interface DadosDoRelatorio {
   aReceber: ParcelaDoRelatorio[]; // parcelas previstas (ainda não recebidas), sem atacado
   meta: DadosDaMeta; // mesmos dados da tela Visão geral
   pagamentos?: PagamentoFeito[]; // faturas já pagas com o caixa (padrão: PAGAMENTOS_FEITOS)
+  saldo?: SaldoDoBanco | null; // saldo do banco (padrão: SALDO_DO_BANCO); null = não mostrar
   clientes?: ClienteDoRelatorio[]; // cadastro de clientes (sem isso, a seção de clientes não aparece)
   geradoEm?: string; // ISO: quando o relatório foi montado
   ultimaVendaLida?: { postadaEm: string; cliente: string | null } | null; // última mensagem de venda que o Roberto lançou
@@ -436,6 +438,25 @@ export function montarRelatorioDoDia(dados: DadosDoRelatorio): string {
   // --- Meta dos cartões
   linhas.push(...secaoDosCartoes(dados.vendas, dia, comissoes, dados.pagamentos ?? PAGAMENTOS_FEITOS));
   linhas.push("");
+
+  // --- Dinheiro na conta (o que cai de verdade)
+  if (dados.saldo !== null) {
+    const media = metaDosCartoes(dados.vendas, dia, CARTOES, INICIO_META_CARTOES, comissoes, dados.pagamentos ?? PAGAMENTOS_FEITOS).mediaPorDiaCents;
+    const din = dinheiroNaConta({
+      dia,
+      saldo: dados.saldo,
+      vendas: dados.vendas,
+      parcelas: dados.aReceber,
+      comissoes,
+      cartoes: CARTOES,
+      mediaPorDiaCents: media,
+      inicio: INICIO_META_CARTOES,
+    });
+    if (dados.saldo || dia >= din.saldo.date) {
+      linhas.push(...secaoDoDinheiro(din, reais, dataBR));
+      linhas.push("");
+    }
+  }
 
   // --- Ritmo do mês
   linhas.push(...secaoDoRitmo(dados.vendas, dia));
