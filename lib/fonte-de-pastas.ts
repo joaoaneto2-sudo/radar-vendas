@@ -20,6 +20,8 @@ export interface DiretorioFonte {
 export interface RaizFonte {
   nome: string;
   diretorios(): Promise<DiretorioFonte[]>;
+  /** Pasta enviada como anexo (sem permissão de edição): dá para ler e subir, mas não renomear os arquivos. */
+  somenteLeitura?: boolean;
 }
 
 // Pastas dentro de "1 - Estoque Principal" que não são de fabricante.
@@ -86,6 +88,42 @@ export function raizDeHandle(raiz: any): RaizFonte {
       }
       return lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     },
+  };
+}
+
+// Pasta enviada pelo campo de arquivo comum (<input webkitdirectory>): o navegador só pede para ler, então funciona
+// mesmo quando a "Edição de arquivos" está bloqueada. Cada arquivo traz o caminho relativo à pasta escolhida:
+// "Zarpellon/foto.jpg" (escolheu a pasta do fabricante) ou "1 - Estoque Principal/Zarpellon/foto.jpg" (escolheu a raiz).
+// Subpastas mais fundas (Fotos Originais etc.) ficam de fora, como na leitura normal.
+export function raizDeArquivos(arquivos: File[]): RaizFonte {
+  const caminho = (f: File) => ((f as any).webkitRelativePath || f.name).split("/");
+  const imagens = arquivos.filter((f) => ehImagem(f.name));
+  const nomeDaRaiz = arquivos.length ? caminho(arquivos[0])[0] : "";
+  const naRaiz = imagens.filter((f) => caminho(f).length === 2);
+  const grupos = new Map<string, File[]>();
+  if (naRaiz.length) grupos.set(nomeDaRaiz, naRaiz);
+  else
+    for (const f of imagens) {
+      const partes = caminho(f);
+      if (partes.length !== 3 || PASTA_QUE_NAO_E_FABRICANTE.test(partes[1])) continue;
+      grupos.set(partes[1], [...(grupos.get(partes[1]) ?? []), f]);
+    }
+  const doArquivo = (f: File): ArquivoFonte => ({
+    nome: f.name,
+    tamanho: f.size,
+    modificadoEm: f.lastModified,
+    ler: async () => f,
+    renomear: async () => {
+      throw new Error("Pasta enviada como anexo: não dá para renomear os arquivos.");
+    },
+  });
+  return {
+    nome: nomeDaRaiz,
+    somenteLeitura: true,
+    diretorios: async () =>
+      [...grupos.entries()]
+        .map(([nome, lista]) => ({ nome, arquivos: async () => lista.map(doArquivo) }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
   };
 }
 

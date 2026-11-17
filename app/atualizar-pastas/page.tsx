@@ -5,7 +5,7 @@
 // peça, mostra o que vai fazer e, ao confirmar: renomeia os arquivos com o código, envia as fotos novas e grava as
 // peças. O que já subiu e não mudou é pulado.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatBRL, type Product } from "@/lib/format";
 import { fabricanteParecido } from "@/lib/importar-lote";
 import { semAcento } from "@/lib/catalogo-filtro";
@@ -25,6 +25,7 @@ import {
   garantirPermissao,
   lembrarPasta,
   pastaLembrada,
+  raizDeArquivos,
   raizDeHandle,
   raizDeMentira,
   temAcessoAPastas,
@@ -176,13 +177,23 @@ export default function AtualizarPastasPage() {
       // AbortError: fechou a janela de escolha OU recusou a pergunta do navegador ("Permitir que o site veja os arquivos?").
       if (e instanceof DOMException && e.name === "AbortError") {
         setErro(
-          'O navegador não liberou a pasta. Depois de clicar em "Selecionar pasta", o Chrome pergunta se o site pode ver e editar os arquivos: clique em "Ver arquivos" e depois em "Salvar alterações" (ou "Permitir").'
+          'O navegador não liberou a pasta para edição. Use o botão "Enviar a pasta sem renomear": ele só pede para ler os arquivos e funciona do mesmo jeito (só não coloca o código no nome das fotos).'
         );
         return;
       }
       const nome = e instanceof DOMException ? ` (${e.name}: ${e.message})` : e instanceof Error ? ` (${e.message})` : "";
       setErro(`Não foi possível abrir a pasta. Tente de novo.${nome}`);
     }
+  }
+
+  // Plano B: campo de arquivo comum com a pasta inteira (só leitura, sem a permissão de edição do navegador).
+  const campoDaPasta = useRef<HTMLInputElement>(null);
+  async function enviarPasta(lista: FileList | null) {
+    setErro("");
+    const arquivos = Array.from(lista ?? []);
+    if (campoDaPasta.current) campoDaPasta.current.value = "";
+    if (!arquivos.length) return;
+    await ler(raizDeArquivos(arquivos));
   }
 
   async function usarLembrada() {
@@ -220,8 +231,8 @@ export default function AtualizarPastasPage() {
         if (peca.situacao === "igual" && peca.renomear.length === 0) continue;
         setProgresso(`${plano.fabricante}: ${peca.nome}`);
         try {
-          // 1) renomear os arquivos para o padrão (com o código)
-          for (const r of peca.renomear) {
+          // 1) renomear os arquivos para o padrão (com o código); pasta enviada como anexo não pode ser renomeada
+          for (const r of raiz.somenteLeitura ? [] : peca.renomear) {
             const atual = plano.arquivos.get(r.de);
             if (!atual) continue;
             const novo = await atual.renomear(r.para);
@@ -328,7 +339,22 @@ export default function AtualizarPastasPage() {
             <button className={lembrada ? "btn btn-ghost" : "btn btn-primary"} onClick={escolher} disabled={!suporte || fase === "lendo"}>
               {lembrada ? "Escolher outra pasta" : "Escolher a pasta"}
             </button>
+            <button className="btn btn-ghost" onClick={() => campoDaPasta.current?.click()} disabled={fase === "lendo"}>
+              Enviar a pasta sem renomear
+            </button>
+            <input
+              ref={campoDaPasta}
+              type="file"
+              multiple
+              hidden
+              {...({ webkitdirectory: "", directory: "" } as any)}
+              onChange={(e) => enviarPasta(e.target.files)}
+            />
           </div>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Se o navegador recusar a pasta, use <strong>Enviar a pasta sem renomear</strong>: ele só pede para ler (o Chrome pergunta se pode
+            &quot;carregar&quot; os arquivos; clique em Carregar). As peças entram do mesmo jeito; só o nome das fotos no computador fica como está.
+          </p>
         </section>
       )}
 
