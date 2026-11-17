@@ -173,8 +173,15 @@ export default function AtualizarPastasPage() {
       setLembrada(handle);
       await ler(raizDeHandle(handle));
     } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return; // fechou a janela de escolha
-      setErro("Não foi possível abrir a pasta. Tente de novo.");
+      // AbortError: fechou a janela de escolha OU recusou a pergunta do navegador ("Permitir que o site veja os arquivos?").
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setErro(
+          'O navegador não liberou a pasta. Depois de clicar em "Selecionar pasta", o Chrome pergunta se o site pode ver e editar os arquivos: clique em "Ver arquivos" e depois em "Salvar alterações" (ou "Permitir").'
+        );
+        return;
+      }
+      const nome = e instanceof DOMException ? ` (${e.name}: ${e.message})` : e instanceof Error ? ` (${e.message})` : "";
+      setErro(`Não foi possível abrir a pasta. Tente de novo.${nome}`);
     }
   }
 
