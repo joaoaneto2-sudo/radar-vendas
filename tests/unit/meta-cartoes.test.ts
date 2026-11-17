@@ -35,19 +35,19 @@ describe("meta dos cartões", () => {
 
   it("plano principal: Santander 90% até as 20h de 02/12", () => {
     expect(santander.guardadoCents).toBe(509760);
-    expect(santander.faltaGuardarCents).toBe(640240);
-    expect(santander.precisaVenderCents).toBe(711378);
+    expect(santander.faltaGuardarCents).toBe(786740);
+    expect(santander.precisaVenderCents).toBe(874156);
     expect(santander.diasDeVenda).toBe(15); // 12-14, 17-21, 24-28/11, 01 e 02/12
-    expect(santander.precisaPorDiaCents).toBe(47426);
+    expect(santander.precisaPorDiaCents).toBe(58278);
   });
 
   it("sugestão: pagar a Riachuelo inteira com o caixa e vender o resto até 02/12", () => {
     expect(m.sugestao).not.toBeNull();
     expect(m.sugestao!.primeiroCoberto).toBe(true);
     expect(m.sugestao!.sobraDepoisDoPrimeiroCents).toBe(337332);
-    expect(m.sugestao!.precisaVenderCents).toBe(812668); // 2.290,68 + 11.500 - 5.664
+    expect(m.sugestao!.precisaVenderCents).toBe(959168); // 2.290,68 + 12.965 - 5.664
     expect(m.sugestao!.diasDeVenda).toBe(15);
-    expect(m.sugestao!.precisaPorDiaCents).toBe(54178);
+    expect(m.sugestao!.precisaPorDiaCents).toBe(63945);
   });
 
   it("previsão pela média diária até o vencimento", () => {
@@ -56,8 +56,8 @@ describe("meta dos cartões", () => {
     expect(riachuelo.previsaoGuardadoCents).toBe(113280); // 10% de (5.664 + 2 x 2.832)
     expect(riachuelo.previsaoSaldoCents).toBe(-115788);
     expect(santander.previsaoGuardadoCents).toBe(4332960); // 90% de (5.664 + 15 x 2.832)
-    expect(santander.previsaoSaldoCents).toBe(3182960);
-    expect(m.sugestao!.previsaoSaldoCents).toBe(3435332);
+    expect(santander.previsaoSaldoCents).toBe(3036460);
+    expect(m.sugestao!.previsaoSaldoCents).toBe(3288832);
   });
 
   it("Riachuelo de dezembro: 10% das vendas a partir de 14/11, vence 13/12", () => {
@@ -89,15 +89,15 @@ describe("meta dos cartões", () => {
     });
     expect(texto).toContain("*Riachuelo* · R$ 2.290,68 · vence 13/11 até as 20h · 10% de cada venda");
     expect(texto).toContain("• Meta: vender R$ 17.242,80 · R$ 8.621,40 por dia nos 2 dias de venda");
-    expect(texto).toContain("*Santander* · R$ 11.500,00 · vence 02/12 até as 20h · 90% de cada venda");
-    expect(texto).toContain("• Meta: vender R$ 7.113,78 · R$ 474,26 por dia nos 15 dias de venda");
+    expect(texto).toContain("*Santander* · R$ 12.965,00 · vence 02/12 até as 20h · 90% de cada venda");
+    expect(texto).toContain("• Meta: vender R$ 8.741,56 · R$ 582,78 por dia nos 15 dias de venda");
     expect(texto).toContain("• Dias com venda desde 01/11: 2 · média de R$ 2.832,00 por dia");
     expect(texto).toContain("• Pela média, até 13/11 às 20h: R$ 1.132,80 guardados · faltam R$ 1.157,88 ⚠️");
     expect(texto).toContain("• Faltam 2 dias de venda até 13/11 e 15 dias de venda até 02/12");
     expect(texto).toContain("não trabalhamos domingo nem segunda");
     expect(texto).toContain("💡 *Sugestão para não pagar juros*");
     expect(texto).toContain("• Pagar a Riachuelo inteira com o caixa (sobram R$ 3.373,32)");
-    expect(texto).toContain("• Meta: vender R$ 8.126,68 até 02/12 · R$ 541,78 por dia nos 15 dias de venda");
+    expect(texto).toContain("• Meta: vender R$ 9.591,68 até 02/12 · R$ 639,45 por dia nos 15 dias de venda");
   });
 
   it("projeção do caixa com os dados reais de 11/11 (5 dias com venda, média R$ 1.132,80)", () => {
@@ -108,10 +108,10 @@ describe("meta dos cartões", () => {
     const p = metaDosCartoes(reais, "2026-11-11").projecaoDoCaixa;
     expect(p.map((x) => x.nome)).toEqual(["Riachuelo", "Santander", "Riachuelo (dez)"]);
     expect(p[0]).toMatchObject({ diasDeVenda: 2, noVencimentoCents: 792960, depoisDePagarCents: 563892 });
-    expect(p[1]).toMatchObject({ diasDeVenda: 13, noVencimentoCents: 2036532, depoisDePagarCents: 886532 });
-    expect(p[2]).toMatchObject({ diasDeVenda: 8, depoisDePagarCents: 1607456 });
+    expect(p[1]).toMatchObject({ diasDeVenda: 13, noVencimentoCents: 2036532, depoisDePagarCents: 740032 });
+    expect(p[2]).toMatchObject({ diasDeVenda: 8, depoisDePagarCents: 1460956 });
     const texto = montarRelatorioDoDia({ pagamentos: [], dia: "2026-11-11", vendas: reais, aReceber: [], meta: { hoje: "2026-11-11", partes: [], despesas: [], vendas: reais, entradas: [] } });
     expect(texto).toContain("📊 *Projeção do caixa* (pagando tudo em dia, vendendo R$ 1.132,80 por dia)");
-    expect(texto).toContain("• 02/12 às 20h: R$ 20.365,32 (+R$ 14.726,40 em 13 dias) · paga Santander R$ 11.500,00 → fica R$ 8.865,32");
+    expect(texto).toContain("• 02/12 às 20h: R$ 20.365,32 (+R$ 14.726,40 em 13 dias) · paga Santander R$ 12.965,00 → fica R$ 7.400,32");
   });
 });

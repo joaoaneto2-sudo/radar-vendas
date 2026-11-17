@@ -53,7 +53,10 @@ export const CARTOES: Cartao[] = [
   // Valores da fatura da Riachuelo (cartão final 3108) de 13/11/2026: saldo R$ 2.290,68;
   // próxima fatura (13/12) R$ 1.853,16 = parcelas R$ 1.837,17 + anuidade R$ 15,99.
   { nome: "Riachuelo", totalCents: toCents("2290.68"), parte: 0.1, vence: "2026-11-13" },
-  { nome: "Santander", totalCents: toCents("11500.00"), parte: 0.9, vence: "2026-12-02", resto: true },
+  // Santander de 02/12: R$ 11.500 informados em 11/11 + R$ 1.465 da 1ª parcela das compras de 09/11
+  // (Zarpelon 956,50 + Gazin 309,17 + BM Expositores 199,33, 6x no Santander). João não sabe se os
+  // R$ 11.500 já incluíam essa parcela: por segurança conta as duas (R$ 12.965) até ver a fatura fechada.
+  { nome: "Santander", totalCents: toCents("12965.00"), parte: 0.9, vence: "2026-12-02", resto: true },
   // A Riachuelo de dezembro junta os 10% das vendas feitas depois do vencimento de novembro.
   { nome: "Riachuelo (dez)", totalCents: toCents("1853.16"), parte: 0.1, vence: "2026-12-13", desde: "2026-11-14" },
 ];
