@@ -62,23 +62,27 @@ async function arquivoDoHandle(dir: any, fh: any): Promise<ArquivoFonte> {
   };
 }
 
+async function imagensDe(dir: any): Promise<ArquivoFonte[]> {
+  const arquivos: ArquivoFonte[] = [];
+  for await (const e of dir.values()) {
+    if (e.kind === "file" && ehImagem(e.name)) arquivos.push(await arquivoDoHandle(dir, e));
+  }
+  return arquivos;
+}
+
 export function raizDeHandle(raiz: any): RaizFonte {
   return {
     nome: raiz.name,
     diretorios: async () => {
+      // Escolheu a pasta de um fabricante (ex.: "Zarpellon") em vez de "1 - Estoque Principal": as fotos estão
+      // direto nela, então ela mesma é a única pasta lida, com o nome dela como fabricante.
+      for await (const entrada of raiz.values()) {
+        if (entrada.kind === "file" && ehImagem(entrada.name)) return [{ nome: raiz.name, arquivos: () => imagensDe(raiz) }];
+      }
       const lista: DiretorioFonte[] = [];
       for await (const entrada of raiz.values()) {
         if (entrada.kind !== "directory" || PASTA_QUE_NAO_E_FABRICANTE.test(entrada.name)) continue;
-        lista.push({
-          nome: entrada.name,
-          arquivos: async () => {
-            const arquivos: ArquivoFonte[] = [];
-            for await (const e of entrada.values()) {
-              if (e.kind === "file" && ehImagem(e.name)) arquivos.push(await arquivoDoHandle(entrada, e));
-            }
-            return arquivos;
-          },
-        });
+        lista.push({ nome: entrada.name, arquivos: () => imagensDe(entrada) });
       }
       return lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     },

@@ -308,7 +308,8 @@ export default function AtualizarPastasPage() {
         <section className="card" style={{ marginBottom: 16 }}>
           <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", marginBottom: 8 }}>1. Escolha a pasta do estoque</h2>
           <p className="hint" style={{ marginBottom: 10 }}>
-            Escolha a pasta <strong>1 - Estoque Principal</strong>. O navegador vai pedir duas permissões (ver e editar os arquivos). A de editar serve para
+            Escolha a pasta <strong>1 - Estoque Principal</strong> para ler todos os fabricantes, ou só a pasta de um fabricante (ex.:{" "}
+            <strong>Zarpellon</strong>) para ler só ele. O navegador vai pedir duas permissões (ver e editar os arquivos). A de editar serve para
             colocar o código no nome das fotos. Só pergunta na primeira vez.
           </p>
           <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
