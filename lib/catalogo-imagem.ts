@@ -24,7 +24,7 @@ export const larguraDaImagem = (qualidade: QualidadeDoPdf, uso: UsoDaImagem, min
 export const LARGURA_MINIMA = 160;
 export const LARGURA_MAXIMA = 3000;
 
-/** Foto de close já montada na moldura (foto inteira com bordas suaves sobre o fundo borrado), numa imagem só. `proporcao` = largura / altura da moldura na página. */
+/** Foto de close já montada na moldura (foto inteira sobre a cor do fundo dela), numa imagem só. `proporcao` = largura / altura da moldura na página. */
 export function urlDaMoldura(url: string | null | undefined, opcoes: { largura: number; proporcao: number; qualidade: QualidadeDoPdf }): string {
   if (!url) return "";
   const parametros = new URLSearchParams({
@@ -32,6 +32,7 @@ export function urlDaMoldura(url: string | null | undefined, opcoes: { largura: 
     w: String(Math.round(opcoes.largura)),
     q: String(QUALIDADES_DO_PDF[opcoes.qualidade].jpeg),
     modo: "moldura",
+    v: "2", // muda quando o desenho da moldura muda: o navegador guarda as fotos por um dia e mostraria a moldura antiga
     p: String(Math.round(opcoes.proporcao * 100) / 100),
   });
   return `/api/catalogo-imagem?${parametros.toString()}`;
