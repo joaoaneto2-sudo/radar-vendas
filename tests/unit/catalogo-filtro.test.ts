@@ -169,3 +169,20 @@ describe("filtro por coleção especial", () => {
     expect(temFiltro({ ...SEM_FILTRO, colecoes: ["X"] })).toBe(true);
   });
 });
+
+describe("filtro Cadastradas a partir de", () => {
+  const pecas = [
+    { id: 1, name: "Antiga", created_at: "2026-10-19T22:00:00Z" },
+    { id: 2, name: "Nova cedo", created_at: "2026-11-17T12:00:00Z" },
+    { id: 3, name: "Noite do dia 16 em Brasília", created_at: "2026-11-17T01:30:00Z" },
+    { id: 4, name: "Sem data" },
+  ];
+  it("mostra só as peças cadastradas a partir do dia escolhido, pelo horário de Brasília", () => {
+    const r = filtrarPecas(pecas, { ...SEM_FILTRO, desde: "2026-11-17" }, new Set());
+    expect(r.map((p) => p.id)).toEqual([2]);
+  });
+  it("sem data escolhida não filtra", () => {
+    expect(filtrarPecas(pecas, SEM_FILTRO, new Set())).toHaveLength(4);
+    expect(temFiltro({ ...SEM_FILTRO, desde: "2026-11-17" })).toBe(true);
+  });
+});

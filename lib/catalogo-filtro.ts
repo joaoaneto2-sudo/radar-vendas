@@ -16,6 +16,7 @@ export type FiltroCatalogo = {
   soComEstoque: boolean;
   soComFoto: boolean;
   soDoCatalogo: boolean; // só as peças com o botão "Catálogo" ligado no cadastro de produtos
+  desde?: string; // "AAAA-MM-DD": só as peças cadastradas a partir deste dia (ex.: as que entraram na última compra)
 };
 
 export const SEM_FILTRO: FiltroCatalogo = {
@@ -30,6 +31,7 @@ export const SEM_FILTRO: FiltroCatalogo = {
   soComEstoque: false,
   soComFoto: false,
   soDoCatalogo: false,
+  desde: "",
 };
 
 type PecaFiltravel = {
@@ -42,6 +44,7 @@ type PecaFiltravel = {
   stock_qty?: number | null;
   photo_url?: string | null;
   show_catalog?: boolean | null;
+  created_at?: string | null;
   colecoes?: string[] | null;
 };
 
@@ -68,7 +71,8 @@ export function temFiltro(f: FiltroCatalogo): boolean {
     lerValor(f.precoMax) !== null ||
     f.soComEstoque ||
     f.soComFoto ||
-    f.soDoCatalogo
+    f.soDoCatalogo ||
+    !!f.desde
   );
 }
 
@@ -97,10 +101,19 @@ export function filtrarPecas<T extends PecaFiltravel>(
     if (filtro.soComEstoque && (p.stock_qty ?? 0) <= 0) return false;
     if (filtro.soComFoto && !p.photo_url) return false;
     if (filtro.soDoCatalogo && !p.show_catalog) return false;
+    // Compara pelo dia no horário de Brasília (a peça cadastrada às 22h do dia 17 ainda é do dia 17).
+    if (filtro.desde && (!p.created_at || diaEmBrasilia(p.created_at) < filtro.desde)) return false;
     if (filtro.situacao === "marcadas" && !selecionados.has(p.id)) return false;
     if (filtro.situacao === "desmarcadas" && selecionados.has(p.id)) return false;
     return true;
   });
+}
+
+/** "2026-11-17T01:30:00Z" vira "2026-11-16" (dia em Brasília, UTC-3). */
+export function diaEmBrasilia(quando: string): string {
+  const t = new Date(quando).getTime();
+  if (!Number.isFinite(t)) return "";
+  return new Date(t - 3 * 3600_000).toISOString().slice(0, 10);
 }
 
 /** Sorteia até `quantidade` peças diferentes (embaralhamento de Fisher-Yates). `acaso` devolve [0,1). */

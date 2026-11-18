@@ -532,6 +532,10 @@ export default function CriarCatalogoPage() {
                   onChange={(e) => mudarFiltro({ precoMax: e.target.value })}
                 />
               </label>
+              <label className="field" style={{ width: 190 }}>
+                <span className="hint">Cadastradas a partir de</span>
+                <input type="date" value={filtro.desde ?? ""} onChange={(e) => mudarFiltro({ desde: e.target.value })} />
+              </label>
               <label className="field" style={{ minWidth: 240, flex: 1 }}>
                 <span className="hint">Buscar no nome (ex.: zircônia, pérola, ródio)</span>
                 <input
