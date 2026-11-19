@@ -22,6 +22,12 @@ describe("validarLote", () => {
     expect(validarLote({ itens: [item()] }).ok).toBe(true);
   });
 
+  it("aceita as fotos guardadas no banco (/api/foto/<id>) e recusa outros caminhos de /api", () => {
+    expect(validarLote({ itens: [item({ fotoPrincipal: "/api/foto/12", fotoModelo: "/api/foto/13" })] }).ok).toBe(true);
+    expect(validarLote({ itens: [item({ fotoPrincipal: "/api/products" })] }).ok).toBe(false);
+    expect(validarLote({ itens: [item({ fotoPrincipal: "/api/foto/12/../x" })] }).ok).toBe(false);
+  });
+
   it("recusa lista vazia, custo ruim, categoria ruim, foto ruim e peça repetida", () => {
     expect(validarLote({ itens: [] }).ok).toBe(false);
     expect(validarLote({}).ok).toBe(false);

@@ -66,7 +66,7 @@ export function validarLote(corpo: unknown): { ok: true; itens: ItemDoLote[] } |
     if (custo !== null && (!Number.isFinite(custo) || custo <= 0)) return { ok: false, message: `Peça ${n} (${nome}): custo inválido.` };
     const categoria = typeof it.categoria === "string" ? it.categoria : "";
     if (!CATEGORIAS.includes(categoria)) return { ok: false, message: `Peça ${n} (${nome}): categoria inválida.` };
-    const urlOk = (v: string) => /^(\/estoque\/|https?:\/\/)/i.test(v);
+    const urlOk = (v: string) => /^(\/estoque\/|\/api\/foto\/\d+$|https?:\/\/)/i.test(v); // /api/foto/<id> = foto guardada no banco
     let principal: string | undefined;
     if (it.fotoPrincipal !== undefined && it.fotoPrincipal !== null && it.fotoPrincipal !== "") {
       principal = typeof it.fotoPrincipal === "string" ? it.fotoPrincipal.trim() : "";
