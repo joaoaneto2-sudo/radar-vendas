@@ -71,7 +71,7 @@ async function enviarFoto(arquivo: ArquivoFonte): Promise<string> {
   const res = await fetch("/api/upload", { method: "POST", body: fd });
   if (!res.ok) {
     const d = await res.json().catch(() => ({}));
-    throw new Error(d.error === "blob_not_configured" ? "O armazenamento de fotos (Vercel Blob) não está configurado." : `Não foi possível enviar "${arquivo.nome}".`);
+    throw new Error(d.error === "blob_not_configured" ? "O banco do Radar não está configurado." : `Não foi possível enviar "${arquivo.nome}".`);
   }
   return (await res.json()).url as string;
 }
@@ -96,6 +96,8 @@ export default function AtualizarPastasPage() {
   const [progresso, setProgresso] = useState("");
   const [relatorio, setRelatorio] = useState<{ criadas: number; atualizadas: number; fotos: number; renomeados: number; avisos: string[]; falhas: string[]; registro: { pasta: string; de: string; para: string }[] } | null>(null);
   const [suporte, setSuporte] = useState(true);
+  // Manda de novo as fotos de todas as peças que estão na pasta (para quando as fotos do Radar se perdem).
+  const [reenviarTudo, setReenviarTudo] = useState(false);
 
   const ler = useCallback(async (fonte: RaizFonte) => {
     setFase("lendo");
@@ -211,7 +213,8 @@ export default function AtualizarPastasPage() {
 
   const todos = useMemo(() => planos.flatMap((p) => p.pecas.map((peca) => ({ pasta: p.fabricante, peca }))), [planos]);
   const resumo = useMemo(() => resumoDoPlano(planos), [planos]);
-  const trabalho = todos.filter((x) => x.peca.situacao !== "igual" || x.peca.renomear.length > 0);
+  const trabalho = todos.filter((x) => reenviarTudo ? !!(x.peca.close || x.peca.modelo) : x.peca.situacao !== "igual" || x.peca.renomear.length > 0);
+  const fotosParaReenviar = todos.reduce((n, x) => n + (x.peca.close ? 1 : 0) + (x.peca.modelo ? 1 : 0), 0);
 
   async function atualizar() {
     if (!raiz) return;
@@ -228,7 +231,7 @@ export default function AtualizarPastasPage() {
 
     for (const plano of planos) {
       for (const peca of plano.pecas) {
-        if (peca.situacao === "igual" && peca.renomear.length === 0) continue;
+        if (!reenviarTudo && peca.situacao === "igual" && peca.renomear.length === 0) continue;
         setProgresso(`${plano.fabricante}: ${peca.nome}`);
         try {
           // 1) renomear os arquivos para o padrão (com o código); pasta enviada como anexo não pode ser renomeada
@@ -249,13 +252,13 @@ export default function AtualizarPastasPage() {
             item.colecao = plano.fabricante; // nome da pasta especial
             item.semEstoque = true; // peça escolhida, ainda não temos: sem estoque e sob encomenda
           }
-          if (peca.subir.close && peca.close) {
+          if ((peca.subir.close || reenviarTudo) && peca.close) {
             item.fotoPrincipal = await enviarFoto(plano.arquivos.get(peca.close.nome)!);
             item.fotoOrigem = assinatura(peca.close);
             item.catalogo = { kind: peca.catalogoKind, fx: 50, fy: 50, zoom: 1 };
             fotos++;
           }
-          if (peca.subir.modelo && peca.modelo) {
+          if ((peca.subir.modelo || reenviarTudo) && peca.modelo) {
             item.fotoModelo = await enviarFoto(plano.arquivos.get(peca.modelo.nome)!);
             item.modeloOrigem = assinatura(peca.modelo);
             // Com close + modelo a página é o par (foto limpa à esquerda, modelo à direita), mesmo que antes a peça fosse só foto de modelo.
@@ -457,9 +460,18 @@ export default function AtualizarPastasPage() {
               Vai renomear os arquivos listados, enviar as fotos e gravar as peças. Peça que já existe não perde estoque, custo nem preço: se o custo do arquivo
               for diferente do cadastro, a peça fica com o alerta "Custo diverge da pasta" para você decidir.
             </p>
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 12 }}>
+              <input id="reenviar-tudo" type="checkbox" checked={reenviarTudo} onChange={(e) => setReenviarTudo(e.target.checked)} style={{ marginTop: 3 }} />
+              <span>
+                <strong>Mandar de novo as fotos de todas as peças</strong>
+                <span className="hint" style={{ display: "block" }}>Use quando as fotos sumiram do Radar. Não mexe em estoque, custo nem preço.</span>
+              </span>
+            </label>
             <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
               <button className="btn btn-primary" onClick={atualizar} disabled={trabalho.length === 0}>
-                Atualizar ({resumo.novas + resumo.atualizar} peças, {resumo.fotosParaSubir} fotos)
+                {reenviarTudo
+                  ? `Mandar as fotos de novo (${trabalho.length} peças, ${fotosParaReenviar} fotos)`
+                  : `Atualizar (${resumo.novas + resumo.atualizar} peças, ${resumo.fotosParaSubir} fotos)`}
               </button>
               <button className="btn btn-ghost" onClick={() => raiz && ler(raiz)}>
                 Ler as pastas de novo

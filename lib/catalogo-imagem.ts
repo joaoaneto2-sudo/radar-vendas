@@ -46,7 +46,7 @@ export function urlDaImagem(url: string | null | undefined, opcoes: { largura: n
   return `/api/catalogo-imagem?${parametros.toString()}`;
 }
 
-const CAMINHOS_DO_SITE = ["/catalogo/", "/estoque/", "/uploads-dev/", "/marca/"];
+const CAMINHOS_DO_SITE = ["/catalogo/", "/estoque/", "/uploads-dev/", "/marca/", "/api/foto/"];
 const FINAL_DO_ARMAZENAMENTO = ".public.blob.vercel-storage.com";
 
 /**

@@ -824,6 +824,20 @@ export const MIGRATIONS: Migration[] = [
       `ALTER TABLE products ADD COLUMN IF NOT EXISTS validacao_antes JSONB`,
     ],
   },
+  {
+    id: "025",
+    name: "fotos guardadas no proprio banco (o deposito de fotos da Vercel foi bloqueado em 19/11/2026)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS fotos_guardadas (
+        id BIGSERIAL PRIMARY KEY,
+        conteudo BYTEA NOT NULL,
+        tipo TEXT NOT NULL DEFAULT 'image/jpeg',
+        tamanho INTEGER NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+    ],
+  },
+
 
 ];
 

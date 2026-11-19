@@ -177,7 +177,8 @@ export async function importarLote(db: Pick<Pool, "connect">, itens: ItemDoLote[
       if (existente) {
         id = existente.id;
         await client.query(
-          `UPDATE products SET photo_url = COALESCE($1, photo_url), catalog_photo = COALESCE($2::jsonb, catalog_photo), show_catalog = true,
+          `UPDATE products SET photo_url = COALESCE($1, photo_url), catalog_photo = COALESCE($2::jsonb, catalog_photo),
+                 show_catalog = CASE WHEN validacao = 'saiu' THEN show_catalog ELSE true END, -- peça marcada com X na Validação de Estoque não volta ao catálogo
                  foto_origem = COALESCE($3, foto_origem) WHERE id = $4`,
           [it.fotoPrincipal ?? null, foto, it.fotoOrigem ?? null, id]
         );
