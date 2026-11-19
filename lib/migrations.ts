@@ -815,6 +815,16 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "024",
+    name: "validacao de estoque pela Fernanda: tem ou saiu, quando, e o estado de antes para o voltar",
+    statements: [
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS validacao TEXT CHECK (validacao IN ('tem', 'saiu'))`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS validado_em TIMESTAMPTZ`,
+      `ALTER TABLE products ADD COLUMN IF NOT EXISTS validacao_antes JSONB`,
+    ],
+  },
+
 ];
 
 // Número qualquer, só para "reservar a vez" quando duas cópias do site ligarem

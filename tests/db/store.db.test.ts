@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { LEGACY_BASELINE_STATEMENTS, runMigrations } from "../../lib/migrations";
+import { LEGACY_BASELINE_STATEMENTS, MIGRATIONS, runMigrations } from "../../lib/migrations";
 import { bancoDeTesteDisponivel, criarBancoDescartavel } from "./helpers";
 
 // Loja online: colunas novas, regras do banco, ajustes em chave e valor, visões e o usuário somente leitura.
@@ -143,7 +143,7 @@ describe.skipIf(!disponivel)("loja online no banco", () => {
         await banco.pool.query(
           `UPDATE store_settings SET delivery_salvador = 15, shipping_correios = 25.5, installment_fee = 12.5, max_installments = 10`
         );
-        expect(await runMigrations(banco.pool)).toEqual(["011", "012", "013", "014", "015", "016", "017", "018", "019", "020", "021"]);
+        expect(await runMigrations(banco.pool)).toEqual(MIGRATIONS.map((m) => m.id).filter((id) => id > "010"));
 
         const { rows } = await banco.pool.query(`SELECT key, value FROM store_settings ORDER BY key`);
         expect(rows).toEqual([

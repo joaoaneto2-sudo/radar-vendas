@@ -129,7 +129,8 @@ export default function CriarCatalogoPage() {
     fetch("/api/products")
       .then((r) => r.json())
       .then((p) => {
-        const todasAtivas: Product[] = (p.items || []).filter((it: Product) => it.active !== false);
+        // Peça marcada com X na Validação de Estoque não existe mais: nunca entra no catálogo.
+        const todasAtivas: Product[] = (p.items || []).filter((it: Product) => it.active !== false && (it as { validacao?: string | null }).validacao !== "saiu");
         const ativas = todasAtivas.filter(temPreco);
         setSemPreco(todasAtivas.length - ativas.length);
         setItems(ativas);

@@ -26,6 +26,7 @@ const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Ic
     itens: [
       { href: "/cadastros", rotulo: "Produtos e cadastros", icone: "cadastros" },
       { href: "/atualizar-pastas", rotulo: "Atualizar pelas pastas", icone: "cadastros" },
+      { href: "/validar-estoque", rotulo: "Validação de Estoque", icone: "cadastros" },
     ],
   },
   {
@@ -63,6 +64,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/importar-catalogo": ["Cadastros", "Importar catálogo"],
   "/importar-pecas": ["Cadastros", "Importar peças"],
   "/atualizar-pastas": ["Cadastros", "Atualizar pelas pastas"],
+  "/validar-estoque": ["Cadastros", "Validação de Estoque"],
   "/importar-lote": ["Cadastros", "Subir peças das pastas"],
   "/cadastros/catalogo": ["Catálogo", "Criar catálogo"],
   "/catalogo-pdf": ["Catálogo", "Baixar o PDF"],
@@ -88,6 +90,7 @@ const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
 const MAIS = [
   { href: "/cadastros/catalogo", rotulo: "Criar catálogo" },
   { href: "/atualizar-pastas", rotulo: "Atualizar pelas pastas" },
+  { href: "/validar-estoque", rotulo: "Validação de Estoque" },
   { href: "/importar-vendas", rotulo: "Importar vendas" },
   { href: "/financeiro", rotulo: "Painel financeiro" },
   { href: "/financeiro/recebimentos", rotulo: "Recebimentos" },
@@ -213,6 +216,9 @@ export default function NavBar() {
       : href === "/cadastros/catalogo"
         ? pathname === href || pathname === "/catalogo-pdf"
         : pathname === href;
+
+  // Tela da Fernanda: só a foto e os botões, sem menu.
+  if (pathname === "/validar-estoque") return null;
 
   if (naEntrada) {
     return (
