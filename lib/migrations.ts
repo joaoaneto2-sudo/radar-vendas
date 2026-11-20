@@ -837,6 +837,23 @@ export const MIGRATIONS: Migration[] = [
       )`,
     ],
   },
+  {
+    id: "026",
+    name: "catalogos montados pela Fernanda na tela Montar Catalogo (capa, pecas na ordem), para o Criar catalogo abrir pronto",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS modelos_catalogo (
+        id SERIAL PRIMARY KEY,
+        nome TEXT NOT NULL,
+        capa TEXT NOT NULL,
+        pecas JSONB NOT NULL,
+        tipos JSONB NOT NULL DEFAULT '[]'::jsonb,
+        fabricantes JSONB NOT NULL DEFAULT '[]'::jsonb,
+        criado_por TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`,
+    ],
+  },
+
 
 
 ];

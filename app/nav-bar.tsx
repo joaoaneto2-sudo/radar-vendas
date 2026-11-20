@@ -11,7 +11,10 @@ type Icone = "inicio" | "venda" | "relatorio" | "cadastros" | "financeiro" | "re
 const GRUPOS: { titulo: string; itens: { href: string; rotulo: string; icone: Icone }[] }[] = [
   {
     titulo: "Catálogo",
-    itens: [{ href: "/cadastros/catalogo", rotulo: "Criar catálogo", icone: "catalogo" }],
+    itens: [
+      { href: "/cadastros/catalogo", rotulo: "Criar catálogo", icone: "catalogo" },
+      { href: "/montar-catalogo", rotulo: "Montar Catálogo (Fernanda)", icone: "catalogo" },
+    ],
   },
   {
     titulo: "Vendas",
@@ -67,6 +70,7 @@ const CAMINHOS: Record<string, [string, string]> = {
   "/validar-estoque": ["Cadastros", "Validação de Estoque"],
   "/importar-lote": ["Cadastros", "Subir peças das pastas"],
   "/cadastros/catalogo": ["Catálogo", "Criar catálogo"],
+  "/montar-catalogo": ["Catálogo", "Montar Catálogo (Fernanda)"],
   "/catalogo-pdf": ["Catálogo", "Baixar o PDF"],
   "/financeiro": ["Financeiro", "Painel"],
   "/financeiro/recebimentos": ["Financeiro", "Recebimentos"],
@@ -89,6 +93,7 @@ const BARRA_DE_BAIXO: { href: string; rotulo: string; icone: Icone }[] = [
 
 const MAIS = [
   { href: "/cadastros/catalogo", rotulo: "Criar catálogo" },
+  { href: "/montar-catalogo", rotulo: "Montar Catálogo (Fernanda)" },
   { href: "/atualizar-pastas", rotulo: "Atualizar pelas pastas" },
   { href: "/validar-estoque", rotulo: "Validação de Estoque" },
   { href: "/importar-vendas", rotulo: "Importar vendas" },
@@ -218,7 +223,7 @@ export default function NavBar() {
         : pathname === href;
 
   // Tela da Fernanda: só a foto e os botões, sem menu.
-  if (pathname === "/validar-estoque") return null;
+  if (pathname === "/validar-estoque" || pathname === "/montar-catalogo") return null;
 
   if (naEntrada) {
     return (

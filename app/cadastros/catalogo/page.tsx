@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { Product, formatBRL } from "@/lib/format";
 import { CAPAS, CAPAS_COM_TEXTO_A_ESQUERDA, CatalogoFoto, POR_PAGINA_MAX, POR_PAGINA_PADRAO } from "@/lib/catalogo-layout";
 import { MARCA_TAMANHO, NOME_TAMANHO, capaLayoutValido, limitarPonto, marcaTamanhoPadrao, posicaoPadrao, semPosicao, type CapaLayout, type ElementoDaCapa, type Ponto } from "@/lib/catalogo-capa";
+import type { ModeloDeCatalogo } from "@/lib/modelos-catalogo-db";
 import { CRITERIOS_DE_ORDEM, moverPara, moverUmaCasa, ordenarPor, pecasNaOrdem, type CriterioDeOrdem } from "@/lib/catalogo-ordem";
 import {
   BLOCO_NOVO,
@@ -118,6 +119,8 @@ export default function CriarCatalogoPage() {
   const [qualidadePdf, setQualidadePdf] = useState<QualidadeDoPdf>("leve");
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [soltarSobre, setSoltarSobre] = useState<number | null>(null);
+  const [modelos, setModelos] = useState<ModeloDeCatalogo[]>([]);
+  const [modeloEmUso, setModeloEmUso] = useState<number | null>(null);
 
   useEffect(() => {
     try {
@@ -126,6 +129,10 @@ export default function CriarCatalogoPage() {
     } catch {
       // sem armazenamento local: o foco vale só nesta tela
     }
+    fetch("/api/modelos-catalogo")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setModelos(d.items || []))
+      .catch(() => setModelos([]));
     fetch("/api/products")
       .then((r) => r.json())
       .then((p) => {
@@ -189,6 +196,23 @@ export default function CriarCatalogoPage() {
   const filtroAtivo = temFiltro(filtro);
   const exibidasMarcadas = exibidas.filter((p) => selecionados.has(p.id)).length;
   const pecasSelecionadas = useMemo(() => pecasNaOrdem(items.filter((p) => selecionados.has(p.id)), ordem), [items, selecionados, ordem]);
+
+  // Catálogo montado pela Fernanda (tela Montar Catálogo): marca as peças dela, na ordem dela, com a capa dela.
+  function usarModelo(m: ModeloDeCatalogo) {
+    const existentes = new Set(items.map((p) => p.id));
+    const ids = m.pecas.filter((id) => existentes.has(id));
+    setSelecionados(new Set(ids));
+    setOrdem(ids);
+    if (CAPAS.includes(m.capa)) setCapa(m.capa);
+    setNomeCatalogo(m.nome);
+    setFiltro(SEM_FILTRO);
+    setModeloEmUso(m.id);
+  }
+
+  async function apagarModelo(m: ModeloDeCatalogo) {
+    const r = await fetch(`/api/modelos-catalogo?id=${m.id}`, { method: "DELETE" }).catch(() => null);
+    if (r?.ok) setModelos((lista) => lista.filter((x) => x.id !== m.id));
+  }
 
   function mudarFiltro(parte: Partial<FiltroCatalogo>) {
     setFiltro((f) => ({ ...f, ...parte }));
@@ -392,6 +416,39 @@ export default function CriarCatalogoPage() {
         <div className="empty-state">Ainda não há peças cadastradas. Cadastre em Produtos e cadastros.</div>
       ) : (
         <>
+          {modelos.length > 0 && (
+            <section className="card" style={{ marginBottom: 16 }}>
+              <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", marginBottom: 4 }}>Catálogos montados pela Fernanda</h2>
+              <p className="hint" style={{ marginBottom: 10 }}>
+                Ela escolhe a capa, as peças e a ordem na tela Montar Catálogo. Toque em Usar para carregar tudo aqui e depois baixe o PDF.
+              </p>
+              <div style={{ display: "grid", gap: 8 }}>
+                {modelos.map((m) => {
+                  const faltam = m.pecas.filter((id) => !items.some((p) => p.id === id)).length;
+                  return (
+                    <div key={m.id} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <img src={m.capa} alt="" style={{ width: 72, aspectRatio: "297 / 210", objectFit: "cover", borderRadius: 6 }} />
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <strong>{m.nome}</strong>
+                        <div className="hint">
+                          {m.pecas.length} peças · {new Date(m.criadoEm).toLocaleDateString("pt-BR")}
+                          {m.criadoPor ? ` · ${m.criadoPor}` : ""}
+                          {faltam > 0 ? ` · ${faltam} já não estão disponíveis` : ""}
+                        </div>
+                      </div>
+                      <button type="button" className={modeloEmUso === m.id ? "btn btn-ghost btn-small" : "btn btn-primary btn-small"} onClick={() => usarModelo(m)}>
+                        {modeloEmUso === m.id ? "Carregado" : "Usar"}
+                      </button>
+                      <button type="button" className="btn btn-ghost btn-small" onClick={() => apagarModelo(m)} aria-label={`Apagar o modelo ${m.nome}`}>
+                        Apagar
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* BLOCO 1: escolher as peças */}
           <section className="card" style={{ marginBottom: 16 }}>
             <h2 style={{ fontFamily: "var(--font-display)", fontSize: "1.15rem", marginBottom: 4 }}>
