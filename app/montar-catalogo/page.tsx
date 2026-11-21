@@ -34,6 +34,7 @@ export default function MontarCatalogo() {
   const [erro, setErro] = useState("");
   const [e, setE] = useState<Estado>(INICIAL);
   const [enviando, setEnviando] = useState(false);
+  const [movendo, setMovendo] = useState<number | null>(null); // peça tocada na tela da ordem, esperando o lugar novo
 
   useEffect(() => {
     try {
@@ -97,6 +98,19 @@ export default function MontarCatalogo() {
   function responder(entra: boolean) {
     if (!proxima) return;
     mudar({ vistas: [...e.vistas, proxima.id], escolhidas: entra ? [...e.escolhidas, proxima.id] : e.escolhidas });
+  }
+
+  // Ordem: toca numa peça e depois no lugar onde ela deve ficar (tocar de novo na mesma cancela).
+  function tocarNaLinha(id: number, indice: number) {
+    if (movendo === null) return setMovendo(id);
+    if (movendo !== id) mudar({ escolhidas: moverPara(e.escolhidas, movendo, indice) });
+    setMovendo(null);
+  }
+
+  // Tira a peça do catálogo; ela continua como "vista", para não aparecer de novo na escolha.
+  function tirar(id: number) {
+    if (movendo === id) setMovendo(null);
+    mudar({ escolhidas: e.escolhidas.filter((x) => x !== id) });
   }
 
   function voltarUma() {
@@ -173,8 +187,12 @@ export default function MontarCatalogo() {
         .montar .volta svg{width:24px;height:24px}
         .montar .volta:disabled{opacity:.3}
         .montar .linha{display:flex;align-items:center;gap:10px;background:#fff;border-radius:10px;padding:8px;margin-bottom:8px}
+        .montar .linha .tocar{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;text-align:left;font:inherit;color:inherit;cursor:pointer}
         .montar .linha img{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:6px;flex:none}
         .montar .linha .n{flex:1;min-width:0;font-size:.9rem}
+        .montar .linha.movendo{outline:3px solid #22A33A;background:#E9F7EC}
+        .montar .linha.alvo{outline:1px dashed #22A33A}
+        .montar .seta.tirar{color:#E0261B;border-color:#F0C4C0}
         .montar .linha .n span{color:#7A6152;font-size:.8rem;display:block}
         .montar .seta{width:44px;height:44px;border-radius:10px;border:1px solid #D9C7B5;background:#fff;font-size:1.2rem;cursor:pointer;flex:none}
         .montar .seta:disabled{opacity:.3}
@@ -192,7 +210,7 @@ export default function MontarCatalogo() {
         )}
         {e.passo === "tipos" && <div className="sub">Toque para marcar. Sem marcar nenhum, entram todos.</div>}
         {e.passo === "fornecedores" && <div className="sub">Toque para marcar. Sem marcar nenhum, entram todos.</div>}
-        {e.passo === "ordem" && <div className="sub">A primeira da lista abre o catálogo.</div>}
+        {e.passo === "ordem" && <div className="sub">Toque numa peça e depois no lugar onde ela deve ficar. O ✕ tira a peça. A primeira abre o catálogo.</div>}
       </div>
 
       <div className="corpo">
@@ -271,20 +289,27 @@ export default function MontarCatalogo() {
         {!carregando && e.passo === "ordem" && (
           <div>
             {escolhidas.map((p, i) => (
-              <div className="linha" key={p.id}>
-                <img src={mini(p.photo_url, 200)} alt="" />
-                <div className="n">
-                  {i + 1}. {p.name}
-                  <span>{p.category}</span>
-                </div>
+              <div className={"linha" + (movendo === p.id ? " movendo" : "") + (movendo !== null && movendo !== p.id ? " alvo" : "")} key={p.id}>
+                <button
+                  type="button"
+                  className="tocar"
+                  onClick={() => tocarNaLinha(p.id, i)}
+                  aria-label={movendo === null ? `Mover ${p.name}` : movendo === p.id ? "Cancelar" : `Colocar aqui, na posição ${i + 1}`}
+                >
+                  <img src={mini(p.photo_url, 200)} alt="" />
+                  <span className="n">
+                    {i + 1}. {p.name}
+                    <span>{movendo === p.id ? "Agora toque no lugar onde ela deve ficar" : p.category}</span>
+                  </span>
+                </button>
                 <button type="button" className="seta" aria-label={`Subir ${p.name}`} disabled={i === 0} onClick={() => mudar({ escolhidas: moverUmaCasa(e.escolhidas, p.id, -1) })}>
                   ▲
                 </button>
                 <button type="button" className="seta" aria-label={`Descer ${p.name}`} disabled={i === escolhidas.length - 1} onClick={() => mudar({ escolhidas: moverUmaCasa(e.escolhidas, p.id, 1) })}>
                   ▼
                 </button>
-                <button type="button" className="seta" aria-label={`Colocar ${p.name} em primeiro`} disabled={i === 0} onClick={() => mudar({ escolhidas: moverPara(e.escolhidas, p.id, 0) })}>
-                  ⤒
+                <button type="button" className="seta tirar" aria-label={`Tirar ${p.name} do catálogo`} onClick={() => tirar(p.id)}>
+                  ✕
                 </button>
               </div>
             ))}
@@ -338,14 +363,14 @@ export default function MontarCatalogo() {
             <>
               <button type="button" className="bt leve" onClick={() => mudar({ passo: "fornecedores" })}>Voltar</button>
               <button type="button" className="bt ir" disabled={e.escolhidas.length === 0} onClick={() => mudar({ passo: "ordem" })}>
-                Próximo ({e.escolhidas.length})
+                Terminar a seleção ({e.escolhidas.length})
               </button>
             </>
           )}
           {e.passo === "ordem" && (
             <>
               <button type="button" className="bt leve" onClick={() => mudar({ passo: "pecas" })}>Voltar</button>
-              <button type="button" className="bt ir" onClick={() => mudar({ passo: "enviar" })}>Próximo</button>
+              <button type="button" className="bt ir" disabled={e.escolhidas.length === 0} onClick={() => { setMovendo(null); mudar({ passo: "enviar" }); }}>Próximo</button>
             </>
           )}
           {e.passo === "enviar" && (
